@@ -1,0 +1,8 @@
+node_modules/ 
+.expo/ 
+dist/ 
+build/ 
+.env 
+*.log 
+TurfUserApp/node_modules/ 
+TurfVendorApp/node_modules/ 

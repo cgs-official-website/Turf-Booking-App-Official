@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "12588437860",
+    "project_id": "turf-booking-app-d341c",
+    "storage_bucket": "turf-booking-app-d341c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:12588437860:android:fea374cbd6d19bdb902a71",
+        "android_client_info": {
+          "package_name": "com.turfuserapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "12588437860-69hqge3neu6lpva6n6901m5hh2r5131r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhQWAk5LnNaalgfW-9HMDICvcomOCLMBQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "12588437860-69hqge3neu6lpva6n6901m5hh2r5131r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
