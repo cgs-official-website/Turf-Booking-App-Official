@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // Users Collection
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid) || isAdmin();
+    }
+
+    // Vendors Collection
+    match /vendors/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid) || isAdmin();
+    }
+
+    // Turfs Collection (Publicly readable if active, writeable by owner or admin)
+    match /turfs/{turfId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || isAdmin();
+
+      // Subcollection for slot overrides
+      match /slotOverrides/{date} {
+        allow read: if true;
+        allow write: if isAuthenticated() || isAdmin();
+      }
+    }
+
+    // Bookings Collection
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Matches Collection (Real-time live cricket score sync)
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Reviews Collection
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Subscriptions Collection
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() || isAdmin();
+    }
+
+    // Reports Collection
+    match /reports/{reportId} {
+      allow create: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // OTPs (Strictly backend server access only)
+    match /otps/{otpId} {
+      allow read, write: if false;
+    }
+  }
+}

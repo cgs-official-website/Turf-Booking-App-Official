@@ -36,10 +36,14 @@ export const googleLogin = createAsyncThunk('auth/googleLogin', async (profile, 
   } catch (e) { return rejectWithValue(e.message); }
 });
 
-// ── Register (profile only — no auto sign-in, user logs in afterwards) ─────
+// ── Register (profile + token login) ─────
 export const registerUser = createAsyncThunk('auth/register', async (data, { rejectWithValue }) => {
   try {
-    return await authApi.register(data);
+    const res = await authApi.register(data);
+    if (res?.token) {
+      await AsyncStorage.setItem('token', res.token);
+    }
+    return res;
   } catch (e) { return rejectWithValue(e.message); }
 });
 
@@ -135,9 +139,15 @@ const authSlice = createSlice({
       .addCase(googleLogin.pending,    (s)    => { s.status = 'loading'; s.error = null; })
       .addCase(googleLogin.fulfilled,  (s, a) => { s.status = 'succeeded'; s.token = a.payload.token; s.user = a.payload.user; })
       .addCase(googleLogin.rejected,   (s, a) => { s.status = 'failed'; s.error = a.payload; })
-      // Register (no token set — user goes to Login next)
+      // Register
       .addCase(registerUser.pending,   (s)    => { s.status = 'loading'; s.error = null; })
-      .addCase(registerUser.fulfilled, (s)    => { s.status = 'idle'; })
+      .addCase(registerUser.fulfilled, (s, a) => {
+        s.status = 'succeeded';
+        if (a.payload?.token) {
+          s.token = a.payload.token;
+          s.user  = a.payload.user || a.payload.profile;
+        }
+      })
       .addCase(registerUser.rejected,  (s, a) => { s.status = 'failed'; s.error = a.payload; })
       // Bootstrap
       .addCase(bootstrapAuth.fulfilled, (s, a) => {

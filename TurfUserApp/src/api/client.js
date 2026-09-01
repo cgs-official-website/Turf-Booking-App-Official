@@ -4,11 +4,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ── Change this to your machine's IP when testing on a real device ─────────
-// Android emulator   → http://10.0.2.2:5000/api
-// iOS simulator      → http://localhost:5000/api
-// Real device        → http://<YOUR_LAN_IP>:5000/api
-export const BASE_URL = 'http://10.153.201.246:5000/api';
+// LAN IP for Real Device testing over Wi-Fi
+export const BASE_URL = 'http://192.168.0.124:5000/api/v1';
 
 class ApiClient {
   async getToken() {

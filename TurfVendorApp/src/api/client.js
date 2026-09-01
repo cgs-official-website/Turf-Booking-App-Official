@@ -1,11 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Change this to your machine's local IP when testing on a real device
-// export const BASE_URL = 'http://10.172.52.246:8081/api'; // Android emulator
-
-// export const BASE_URL = 'http://localhost:5000/api'; // iOS simulator
-
-export const BASE_URL = 'http://10.153.201.246:5000/api';
+// LAN IP for Real Device testing over Wi-Fi
+export const BASE_URL = 'http://192.168.0.124:5000/api/v1';
 
 // Same host as BASE_URL but without the '/api' suffix — uploaded files
 // (turf logo/images, KYC docs) are served as static files from here,

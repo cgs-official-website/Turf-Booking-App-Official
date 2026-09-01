@@ -36,11 +36,7 @@ export default function RegisterScreen({ navigation }) {
       Alert.alert('Registration Failed', res.payload || 'Please try again');
       return;
     }
-
-    // Flow: Register → Login (email + password) → Location → Home
-    Alert.alert('Account created 🎉', 'Please sign in to continue', [
-      { text: 'OK', onPress: () => navigation.replace('Login2') },
-    ]);
+    // Automatically navigates into app via RootNavigator watching token
   };
 
   return (
