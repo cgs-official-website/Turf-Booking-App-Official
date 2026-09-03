@@ -1,17 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BASE_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
-export const FALLBACK_URL = 'http://localhost:5000/api/v1';
+const CANDIDATE_URLS = [
+  'https://turf-booking-app-official-production.up.railway.app/api/v1',
+  'http://localhost:5000/api/v1',
+  'http://10.0.2.2:5000/api/v1',
+  'http://192.168.0.50:5000/api/v1',
+];
 
+export const BASE_URL = CANDIDATE_URLS[0];
+export const FALLBACK_URL = CANDIDATE_URLS[1];
 export const SERVER_ORIGIN = 'https://turf-booking-app-official-production.up.railway.app';
 
-// Turf.images / Turf.logo / vendor & turf KYC doc paths are stored in the DB
-// as paths relative to the server's 'uploads' folder (e.g.
-// "uploads/kyc/xxx.jpg"), NOT full URLs — pass them through this before
-// giving them to <Image source={{ uri }} />, otherwise RN can't load them.
-// Already-absolute URLs (http/https) and local device URIs (file://,
-// content://) are returned unchanged so it's safe to call this on both
-// freshly-picked images and images that came back from the API.
 export const getImageUrl = (path) => {
   if (!path) return null;
   if (/^(https?:|file:|content:|data:)/i.test(path)) return path;
@@ -21,14 +20,7 @@ export const getImageUrl = (path) => {
 export const apiRequest = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('vendorToken');
 
-  // FormData (file uploads — Aadhaar/PAN/GST/EB Bill/turf images) must NOT
-  // get a manual 'Content-Type: application/json' header — fetch needs to
-  // set 'multipart/form-data; boundary=...' itself. Forcing JSON here would
-  // silently break every onboarding upload (Vendor KYC, Turf draft, Turf KYC).
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   const config = {
     headers: {
@@ -36,28 +28,32 @@ export const apiRequest = async (endpoint, options = {}) => {
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
-    signal: controller.signal,
     ...options,
   };
 
-  let response;
-  try {
-    response = await fetch(`${BASE_URL}${endpoint}`, config);
-  } catch (err) {
-    if (err.name !== 'AbortError' && FALLBACK_URL) {
-      try {
-        response = await fetch(`${FALLBACK_URL}${endpoint}`, config);
-      } catch (fallbackErr) {
-        clearTimeout(timeoutId);
-        throw err;
-      }
-    } else {
+  let response = null;
+  let lastError = null;
+
+  for (const host of CANDIDATE_URLS) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    try {
+      response = await fetch(`${host}${endpoint}`, {
+        ...config,
+        signal: controller.signal,
+      });
       clearTimeout(timeoutId);
-      if (err.name === 'AbortError') {
-        throw new Error('Request timed out. Please verify your backend server is reachable.');
+      if (response && (response.ok || response.status < 500)) {
+        break;
       }
-      throw err;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err;
     }
+  }
+
+  if (!response) {
+    throw lastError || new Error('Cannot reach server. Please check your internet connection.');
   }
 
   try {
