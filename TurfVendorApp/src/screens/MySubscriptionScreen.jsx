@@ -6,67 +6,73 @@ import { fetchMySubscription, fetchSubscriptionHistory } from '../redux/vendorSl
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
-
-// ---- helpers ----------------------------------------------------------------
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const formatDate = (d) =>
   d
     ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : '—';
 
-// ---- small building blocks ---------------------------------------------------
-
-const HistoryCard = ({ invoice, onViewInvoice, styles, colors }) => {
-  const planName = invoice.plan?.name || 'Plan';
-  const duration = invoice.plan?.durationLabel || invoice.plan?.duration || '12 Months';
+const HistoryCard = ({ invoice, onViewInvoice, colors }) => {
+  const planName = invoice.plan?.name || invoice.name || 'Vendor Pro Membership';
+  const duration = invoice.plan?.durationLabel || invoice.duration || 'Monthly Plan';
   const nextRenewal = invoice.renewalDate || invoice.expiryDate || invoice.nextRenewal;
-  const amount = invoice.amount ?? invoice.plan?.price;
+  const amount = invoice.amount ?? invoice.plan?.price ?? '999';
+  const status = invoice.status || 'PAID';
 
   return (
-    <View style={[styles.card, SHADOWS.sm]}>
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+      {/* Top Header Row */}
       <View style={styles.cardTopRow}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Feather name="award" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-          <Text style={styles.planName}>{planName}</Text>
+        <View style={styles.planTitleBox}>
+          <View style={[styles.awardBadge, { backgroundColor: colors.primaryLight }]}>
+            <Feather name="zap" size={16} color={colors.primary} />
+          </View>
+          <View>
+            <Text style={[styles.planName, { color: colors.text }]}>{planName}</Text>
+            <Text style={[styles.durationLabel, { color: colors.textSecondary }]}>{duration}</Text>
+          </View>
         </View>
-        <TouchableOpacity onPress={() => onViewInvoice(invoice)} activeOpacity={0.7} style={styles.viewInvoiceBtn}>
-          <Text style={styles.viewInvoiceLink}>View invoice</Text>
-          <Feather name="chevron-right" size={16} color={colors.success || colors.primary} />
-        </TouchableOpacity>
+
+        <View style={styles.statusPill}>
+          <Text style={styles.statusPillText}>{status.toUpperCase()}</Text>
+        </View>
       </View>
 
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-      <View style={styles.row}>
-        <Text style={styles.rowLabel}>Duration</Text>
-        <Text style={styles.rowValue}>{duration}</Text>
+      {/* Invoice Details Grid */}
+      <View style={styles.detailsRow}>
+        <View style={styles.detailCol}>
+          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>RENEWAL DATE</Text>
+          <Text style={[styles.detailValue, { color: colors.text }]}>{formatDate(nextRenewal)}</Text>
+        </View>
+        <View style={styles.detailCol}>
+          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>BILLED AMOUNT</Text>
+          <Text style={[styles.detailAmount, { color: colors.primary }]}>₹{amount}</Text>
+        </View>
       </View>
-      <View style={styles.row}>
-        <Text style={styles.rowLabel}>Next Renewal</Text>
-        <Text style={styles.rowValue}>{formatDate(nextRenewal)}</Text>
-      </View>
-      <View style={[styles.row, { marginBottom: 0 }]}>
-        <Text style={styles.rowLabel}>Billed amount</Text>
-        <Text style={styles.rowAmount}>₹ {amount}</Text>
-      </View>
+
+      {/* Bottom Actions */}
+      <TouchableOpacity
+        style={[styles.viewReceiptBtn, { backgroundColor: colors.inputBg }]}
+        onPress={() => onViewInvoice(invoice)}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.viewReceiptText, { color: colors.primary }]}>View Tax Invoice & Receipt</Text>
+        <Feather name="arrow-up-right" size={15} color={colors.primary} />
+      </TouchableOpacity>
     </View>
   );
 };
 
-// ---- screen -------------------------------------------------------------------
-
 const MySubscriptionScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const { mySubscription, subscriptionHistory, loading } = useSelector((s) => s.vendor);
-
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors);
 
-  // Hide default navigation header to remove white space above custom header
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   useEffect(() => {
@@ -78,38 +84,64 @@ const MySubscriptionScreen = ({ navigation }) => {
     navigation.navigate('SubscriptionDetail', { invoice });
   };
 
-  if (loading && !subscriptionHistory?.length) {
-    return <ActivityIndicator color={colors.primary} style={{ flex: 1, marginTop: 40, backgroundColor: colors.background }} />;
-  }
+  const safeHistory = Array.isArray(subscriptionHistory) ? subscriptionHistory : [];
 
   return (
-    <View style={styles.container}>
-      {/* Custom Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
-          <Feather name="arrow-left" size={24} color={colors.text} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Navbar */}
+      <View style={styles.navBar}>
+        <TouchableOpacity
+          style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Subscription history</Text>
-        <View style={{ width: 30 }} />
+        <Text style={[styles.navTitle, { color: colors.text }]}>Subscription History</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {subscriptionHistory?.length > 0 ? (
-          subscriptionHistory.map((inv) => (
-            <HistoryCard key={inv._id} invoice={inv} onViewInvoice={handleViewInvoice} styles={styles} colors={colors} />
+        {/* Banner */}
+        <View style={[styles.heroBanner, SHADOWS.md]}>
+          <View style={styles.heroTextWrap}>
+            <Text style={styles.heroTitle}>Partner Subscriptions</Text>
+            <Text style={styles.heroSubtitle}>Access invoices, GST receipts & auto-renewal settings</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.browsePlansBtn}
+            onPress={() => navigation.navigate('SubscriptionPlans')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.browsePlansText}>View Plans</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.sectionHeading, { color: colors.text }]}>Billing History & Invoices</Text>
+
+        {loading && !safeHistory.length && !mySubscription ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        ) : safeHistory.length > 0 ? (
+          safeHistory.map((inv) => (
+            <HistoryCard key={inv._id} invoice={inv} onViewInvoice={handleViewInvoice} colors={colors} />
           ))
         ) : mySubscription ? (
-          <HistoryCard invoice={mySubscription} onViewInvoice={handleViewInvoice} styles={styles} colors={colors} />
+          <HistoryCard invoice={mySubscription} onViewInvoice={handleViewInvoice} colors={colors} />
         ) : (
           <View style={styles.emptyState}>
-            <View style={styles.iconContainer}>
-              <Feather name="unlock" size={48} color={colors.primary} />
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
+              <Feather name="credit-card" size={36} color={colors.primary} />
             </View>
-            <Text style={styles.emptyTitle}>No Subscription History</Text>
-            <Text style={styles.emptySubtitle}>Your past and current plans will show up here</Text>
-            <TouchableOpacity style={styles.subscribeBtn} onPress={() => navigation.navigate('SubscriptionPlans')}>
-              <Feather name="layers" size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
-              <Text style={styles.subscribeBtnText}>View Plans</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Past Invoices</Text>
+            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+              You currently do not have any active or past subscription invoices recorded.
+            </Text>
+            <TouchableOpacity
+              style={[styles.subscribeCta, { backgroundColor: colors.primary }]}
+              onPress={() => navigation.navigate('SubscriptionPlans')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.subscribeCtaText}>Explore Vendor Plans</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -118,79 +150,195 @@ const MySubscriptionScreen = ({ navigation }) => {
   );
 };
 
-const getStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-
-  header: {
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SIZES.padding,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  backBtn: { padding: 4 },
-  headerTitle: { fontSize: SIZES.xl, fontWeight: '800', color: colors.text },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  navTitle: {
+    fontSize: SIZES.base,
+    fontWeight: '700',
+  },
+  content: {
+    paddingHorizontal: SIZES.padding,
+    paddingBottom: 40,
+  },
 
-  content: { paddingHorizontal: SIZES.padding, paddingBottom: 40 },
-
-  card: {
-    backgroundColor: colors.card || colors.background,
+  heroBanner: {
+    backgroundColor: '#0F172A',
     borderRadius: SIZES.radiusLg,
     padding: 18,
-    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  heroTextWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: SIZES.base + 1,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    color: '#94A3B8',
+    fontSize: SIZES.xs,
+    lineHeight: 16,
+  },
+  browsePlansBtn: {
+    backgroundColor: '#00C566',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  browsePlansText: {
+    color: '#FFFFFF',
+    fontSize: SIZES.xs,
+    fontWeight: '800',
+  },
+
+  sectionHeading: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+
+  card: {
+    borderRadius: SIZES.radiusLg,
+    padding: 18,
     borderWidth: 1,
-    borderColor: colors.border,
+    marginBottom: 14,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  planName: { fontSize: SIZES.lg, fontWeight: '800', color: colors.text },
-  viewInvoiceBtn: {
+  planTitleBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    flex: 1,
   },
-  viewInvoiceLink: { fontSize: SIZES.sm, fontWeight: '600', color: colors.success || colors.primary, marginRight: 2 },
+  awardBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planName: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+  },
+  durationLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  statusPill: {
+    backgroundColor: 'rgba(0, 197, 102, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusPillText: {
+    color: '#00C566',
+    fontSize: 9,
+    fontWeight: '800',
+  },
 
   divider: {
     height: 1,
-    backgroundColor: colors.border,
-    marginBottom: 14,
+    marginVertical: 14,
   },
 
-  row: {
+  detailsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  rowLabel: { fontSize: SIZES.sm, color: colors.textSecondary },
-  rowValue: { fontSize: SIZES.sm, fontWeight: '700', color: colors.text },
-  rowAmount: { fontSize: SIZES.lg, fontWeight: '800', color: colors.success || colors.primary },
+  detailCol: {
+    flex: 1,
+  },
+  detailLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
+  detailAmount: {
+    fontSize: SIZES.lg,
+    fontWeight: '900',
+  },
 
-  emptyState: { alignItems: 'center', paddingVertical: 60 },
-  iconContainer: {
-    backgroundColor: colors.primary + '15',
-    padding: 24,
-    borderRadius: 60,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  emptyTitle: { fontSize: SIZES.xl, fontWeight: '700', color: colors.text, marginBottom: 8 },
-  emptySubtitle: { fontSize: SIZES.sm, color: colors.textSecondary, textAlign: 'center', marginBottom: 28 },
-  subscribeBtn: { 
+  viewReceiptBtn: {
     flexDirection: 'row',
-    backgroundColor: colors.primary, 
-    borderRadius: SIZES.radius, 
-    paddingHorizontal: 32, 
-    paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
   },
-  subscribeBtnText: { color: colors.onAccent, fontWeight: '700', fontSize: SIZES.base },
+  viewReceiptText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
+
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: SIZES.lg,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  emptySub: {
+    fontSize: SIZES.xs,
+    textAlign: 'center',
+    paddingHorizontal: 30,
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  subscribeCta: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  subscribeCtaText: {
+    color: '#FFFFFF',
+    fontSize: SIZES.xs,
+    fontWeight: '800',
+  },
 });
 
 export default MySubscriptionScreen;

@@ -4,11 +4,12 @@ import {
   ScrollView, ActivityIndicator, Alert, Modal,
   Dimensions, Image,
 } from 'react-native';
-import { turfsApi }    from '../api/turfs';
-import { bookingsApi } from '../api/bookings';
-import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
-import Icon from 'react-native-vector-icons/Ionicons';
-import useTheme from '../hooks/useTheme'; // <-- Dark mode custom hook proper ah import panniyachu
+import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { turfsApi } from '../api/turfs';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
+import useTheme from '../hooks/useTheme';
+import PrimaryButton from '../components/PrimaryButton';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -40,11 +41,6 @@ const to12h = (time24) => {
   return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
 };
 
-// FIX: vendor "Slot Template" la 06:00-10:00 mari oru periya range ah
-// single slot ah than DB save pandrudhu. Idha backend split panna maatengudhu
-// (turfController.js athukku venumnu vera reason irukalam), so front-end
-// thaan andha ஒரே slot oda start→end range ku ulla, ஒவ்வொரு mani ah
-// end-time option ah generate panna vendiyathu (1hr, 2hr, 3hr... booking).
 const timeToMins = (t) => {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -58,8 +54,6 @@ const minsToTime = (mins) => {
 
 export default function SlotPickerScreen({ route, navigation }) {
   const { turf } = route.params;
-
-  // ── Fix: support both _id and id ──
   const turfId = turf._id || turf.id;
 
   const days = useMemo(() => nextDays(7), []);
@@ -69,11 +63,10 @@ export default function SlotPickerScreen({ route, navigation }) {
   const [selectedSlot,  setSelectedSlot]  = useState(null);
   const [endSlot,       setEndSlot]       = useState(null);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [sport,         setSport]         = useState(turf.sports?.[0] || '');
+  const [sport,         setSport]         = useState(turf.sports?.[0] || turf.sportTypes?.[0] || 'Football');
   const [loading,       setLoading]       = useState(true);
-  const [submitting,    setSubmitting]    = useState(false);
-  
-  const { C, dark } = useTheme(); // <-- Dynamic custom theme extract panniyachu
+
+  const { C, dark } = useTheme();
 
   useEffect(() => {
     setLoading(true);
@@ -89,13 +82,11 @@ export default function SlotPickerScreen({ route, navigation }) {
         { start: '09:00', end: '10:00', available: true },
         { start: '10:00', end: '11:00', available: true },
         { start: '11:00', end: '12:00', available: true },
-        { start: '12:00', end: '13:00', available: true },
-        { start: '13:00', end: '14:00', available: true },
         { start: '14:00', end: '15:00', available: true },
         { start: '15:00', end: '16:00', available: true },
         { start: '16:00', end: '17:00', available: false },
         { start: '17:00', end: '18:00', available: true },
-        { start: '18:00', my: '19:00', end: '19:00', available: true },
+        { start: '18:00', end: '19:00', available: true },
         { start: '19:00', end: '20:00', available: true },
         { start: '20:00', end: '21:00', available: true },
         { start: '21:00', end: '22:00', available: true },
@@ -108,17 +99,21 @@ export default function SlotPickerScreen({ route, navigation }) {
     const startMin = timeToMins(selectedSlot.start);
     const endMin   = timeToMins(selectedSlot.end);
     const options  = [];
-    // 1hr, 2hr, 3hr... varaikkum, andha slot oda end time varaikkum than
     for (let t = startMin + 60; t <= endMin; t += 60) {
       options.push({
         end:      minsToTime(t),
         duration: (t - startMin) / 60,
       });
     }
+    // Fallback 1hr if slot template is 1hr
+    if (options.length === 0) {
+      options.push({ end: selectedSlot.end, duration: 1 });
+    }
     return options;
   }, [selectedSlot]);
 
   const handleSlotSelect = (slot) => {
+    if (!slot.available) return;
     setSelectedSlot(slot);
     setEndSlot(null);
     setShowEndPicker(true);
@@ -126,11 +121,11 @@ export default function SlotPickerScreen({ route, navigation }) {
 
   const handleConfirm = () => {
     if (!selectedSlot) {
-      Alert.alert('Pick a slot', 'Please select a start time');
+      Alert.alert('Pick a Slot', 'Please select a start time');
       return;
     }
     if (!endSlot) {
-      Alert.alert('Pick end time', 'Please select an end time');
+      Alert.alert('Pick Duration', 'Please select duration / end time');
       return;
     }
     navigation.navigate('BookingConfirm', {
@@ -146,67 +141,48 @@ export default function SlotPickerScreen({ route, navigation }) {
 
   return (
     <View style={[styles.root, { backgroundColor: C.bg }]}>
-
-      {/* Turf hero image */}
+      {/* Turf Hero Background */}
       <Image
         source={{ uri: turf.images?.[0] || PLACEHOLDER }}
         style={styles.heroBg}
         resizeMode="cover"
       />
+      <View style={styles.heroOverlay} />
 
-      {/* Hero overlay */}
-      <View style={styles.heroOverlay}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Icon name="arrow-back" size={20} color="#fff" />
+      {/* Hero Header Info */}
+      <View style={styles.heroTop}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+          activeOpacity={0.8}
+        >
+          <Feather name="arrow-left" size={20} color="#FFFFFF" />
         </TouchableOpacity>
+
         <View style={styles.heroInfo}>
-          <Text style={styles.heroName}>{turf.name}</Text>
+          <Text style={styles.heroName} numberOfLines={1}>{turf.name}</Text>
           <View style={styles.heroLocRow}>
-            <Icon name="location-outline" size={13} color="rgba(255,255,255,0.8)" />
-            <Text style={styles.heroLoc}>{turf.location?.address}</Text>
+            <Feather name="map-pin" size={13} color="rgba(255,255,255,0.8)" style={{ marginRight: 4 }} />
+            <Text style={styles.heroLoc} numberOfLines={1}>
+              {turf.location?.address || turf.location?.city || 'Local Stadium'}
+            </Text>
           </View>
-          <Text style={styles.heroPrice}>
-            ₹{turf.pricePerHour}
-            <Text style={styles.heroPriceUnit}>/hour</Text>
-          </Text>
         </View>
       </View>
 
-      {/* Bottom Sheet */}
-      <View style={[styles.sheet, { backgroundColor: C.card }]}>
+      {/* Main Bottom Slot Selection Sheet */}
+      <View style={[styles.sheet, { backgroundColor: dark ? '#131E2F' : '#FFFFFF' }, SHADOW.floating]}>
         <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
 
         <View style={styles.sheetHeader}>
-          <Icon name="calendar-outline" size={20} color={C.primary} />
-          <Text style={[styles.sheetTitle, { color: C.text }]}>Select your slot</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="close" size={20} color={C.text} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Feather name="calendar" size={18} color={C.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.sheetTitle, { color: C.text }]}>Select Date & Time</Text>
+          </View>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
-        >
-
-          {/* Sport selector */}
-          {turf.sports?.length > 1 && (
-            <View style={styles.sportRow}>
-              {turf.sports.map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.sportPill, { borderColor: C.border }, sport === s && [styles.sportPillActive, { backgroundColor: C.primary, borderColor: C.primary }]]}
-                  onPress={() => setSport(s)}
-                >
-                  <Text style={[styles.sportPillText, { color: C.text }, sport === s && styles.sportPillTextActive]}>
-                    {s}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Date selector */}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
+          {/* 7-Day Date Calendar Bar */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -215,187 +191,365 @@ export default function SlotPickerScreen({ route, navigation }) {
             {days.map((d) => {
               const ds     = fmtDate(d);
               const active = ds === selectedDate;
-              const parts  = fmtDisplay(d).split(' ');
+              const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+              const monthName = d.toLocaleDateString('en-US', { month: 'short' });
+
               return (
                 <TouchableOpacity
                   key={ds}
-                  style={[styles.dateBox, { borderColor: C.border }, active && [styles.dateBoxActive, { backgroundColor: C.primary, borderColor: C.primary }]]}
+                  style={[
+                    styles.dateBox,
+                    {
+                      borderColor: active ? C.primary : C.border,
+                      backgroundColor: active ? C.primary : (dark ? '#18273D' : '#F8FAFC'),
+                    },
+                    active && SHADOW.glow,
+                  ]}
                   onPress={() => setSelectedDate(ds)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={[styles.dateMonth, { color: C.subtext }, active && styles.dateTextActive]}>
-                    {parts[0]}
+                  <Text style={[styles.dateMonth, { color: active ? 'rgba(255,255,255,0.85)' : C.subtext }]}>
+                    {monthName}
                   </Text>
-                  <Text style={[styles.dateNum, { color: C.text }, active && styles.dateTextActive]}>
+                  <Text style={[styles.dateNum, { color: active ? '#FFFFFF' : C.text }]}>
                     {d.getDate()}
                   </Text>
-                  <Text style={[styles.dateDay, { color: C.subtext }, active && styles.dateTextActive]}>
-                    {parts[2]}
+                  <Text style={[styles.dateDay, { color: active ? '#FFFFFF' : C.subtext }]}>
+                    {dayName}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
 
-          {/* Selected slot display */}
+          {/* Selected Slot Banner */}
           {selectedSlot && endSlot && (
-            <View style={[styles.selectedDisplay, { backgroundColor: C.greenSoft }]}>
-              <Icon name="time-outline" size={16} color={C.primary} />
-              <Text style={[styles.selectedText, { color: C.primary }]}>
-                {to12h(selectedSlot.start)} → {to12h(endSlot.end)}
-              </Text>
+            <View style={[styles.selectedBanner, { backgroundColor: C.primaryLight, borderColor: C.primary }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather name="clock" size={16} color={C.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.selectedTimeText, { color: C.primaryDark || C.primary }]}>
+                  {to12h(selectedSlot.start)} → {to12h(endSlot.end)} ({endSlot.duration} Hour)
+                </Text>
+              </View>
               <TouchableOpacity onPress={() => { setSelectedSlot(null); setEndSlot(null); }}>
-                <Icon name="close-circle" size={18} color={C.subtext} />
+                <Feather name="x-circle" size={18} color={C.primary} />
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Available slots */}
-          <Text style={[styles.sectionLabel, { color: C.text }]}>Available slots</Text>
+          {/* Time Slots Grid */}
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Available Game Slots</Text>
+
           {loading ? (
-            <ActivityIndicator color={C.primary} style={{ marginTop: SPACING.lg }} />
+            <View style={styles.loadingSlots}>
+              <ActivityIndicator color={C.primary} />
+              <Text style={[styles.loadingText, { color: C.subtext }]}>Checking real-time court availability...</Text>
+            </View>
+          ) : slots.length === 0 ? (
+            <View style={styles.noSlotsWrap}>
+              <Text style={[styles.noSlotsText, { color: C.subtext }]}>No slots available for this date.</Text>
+            </View>
           ) : (
-            <View style={styles.slotGrid}>
-              {slots.map((s) => {
-                const isSelected = selectedSlot?.start === s.start;
+            <View style={styles.slotsGrid}>
+              {slots.map((slot, idx) => {
+                const isSelected = selectedSlot?.start === slot.start;
+                const isAvail = slot.available;
+
                 return (
                   <TouchableOpacity
-                    key={s.start}
-                    disabled={!s.available}
+                    key={idx}
+                    disabled={!isAvail}
                     style={[
-                      styles.slotBox,
-                      { borderColor: C.primary + '40', backgroundColor: C.greenSoft },
-                      isSelected   && [styles.slotBoxActive, { backgroundColor: C.primary, borderColor: C.primary }],
-                      !s.available && [styles.slotBoxDisabled, { backgroundColor: C.bgSoft, borderColor: C.border }],
+                      styles.slotCard,
+                      {
+                        borderColor: isSelected
+                          ? C.primary
+                          : (isAvail ? C.border : C.borderSubtle),
+                        backgroundColor: isSelected
+                          ? C.primary
+                          : (isAvail ? (dark ? '#18273D' : '#FFFFFF') : (dark ? '#121B29' : '#F1F5F9')),
+                        opacity: isAvail ? 1 : 0.45,
+                      },
+                      isSelected && SHADOW.glow,
                     ]}
-                    onPress={() => handleSlotSelect(s)}
+                    onPress={() => handleSlotSelect(slot)}
+                    activeOpacity={0.8}
                   >
-                    <Text style={[
-                      styles.slotText,
-                      { color: C.primary },
-                      isSelected   && styles.slotTextActive,
-                      !s.available && [styles.slotTextDisabled, { color: C.subtext }],
-                    ]}>
-                      {to12h(s.start)}
+                    <Text
+                      style={[
+                        styles.slotTime,
+                        {
+                          color: isSelected
+                            ? '#FFFFFF'
+                            : (isAvail ? C.text : C.caption),
+                        },
+                      ]}
+                    >
+                      {to12h(slot.start)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.slotStatus,
+                        {
+                          color: isSelected
+                            ? '#FFFFFF'
+                            : (isAvail ? '#10B981' : C.caption),
+                        },
+                      ]}
+                    >
+                      {isSelected ? 'SELECTED' : isAvail ? 'Available' : 'Booked'}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
-              {slots.length === 0 && (
-                <Text style={[styles.noSlots, { color: C.subtext }]}>No slots available</Text>
-              )}
             </View>
           )}
-
         </ScrollView>
+
+        {/* Floating Confirm Footer */}
+        <View style={[styles.footer, { backgroundColor: dark ? '#131E2F' : '#FFFFFF', borderTopColor: C.border }]}>
+          <View>
+            <Text style={[styles.footerLabel, { color: C.subtext }]}>Total Amount</Text>
+            <Text style={[styles.footerPrice, { color: C.primary }]}>
+              ₹{(turf.pricePerHour || 800) * (endSlot?.duration || 1)}
+            </Text>
+          </View>
+
+          <PrimaryButton
+            title="Continue to Confirm →"
+            onPress={handleConfirm}
+            disabled={!selectedSlot || !endSlot}
+            style={{ minWidth: 200, height: 50 }}
+          />
+        </View>
       </View>
 
-      {/* End Time Picker Modal */}
-      <Modal visible={showEndPicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: C.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: C.text }]}>Select End Time</Text>
-              <TouchableOpacity onPress={() => setShowEndPicker(false)}>
-                <Icon name="close" size={22} color={C.text} />
-              </TouchableOpacity>
+      {/* Duration Picker Modal */}
+      <Modal visible={showEndPicker} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalBox, { backgroundColor: dark ? '#131E2F' : '#FFFFFF' }, SHADOW.floating]}>
+            <Text style={[styles.modalTitle, { color: C.text }]}>Select Duration</Text>
+            <Text style={[styles.modalSub, { color: C.subtext }]}>
+              Start time: {selectedSlot ? to12h(selectedSlot.start) : ''}
+            </Text>
+
+            <View style={styles.durationOptions}>
+              {endSlots.map((opt) => (
+                <TouchableOpacity
+                  key={opt.end}
+                  style={[
+                    styles.durationItem,
+                    {
+                      borderColor: endSlot?.end === opt.end ? C.primary : C.border,
+                      backgroundColor: endSlot?.end === opt.end ? C.primaryLight : C.card,
+                    },
+                  ]}
+                  onPress={() => {
+                    setEndSlot(opt);
+                    setShowEndPicker(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View>
+                    <Text style={[styles.durationHours, { color: C.text }]}>{opt.duration} Hour Play</Text>
+                    <Text style={[styles.durationEnd, { color: C.subtext }]}>Until {to12h(opt.end)}</Text>
+                  </View>
+                  <Text style={[styles.durationPrice, { color: C.primary }]}>
+                    ₹{(turf.pricePerHour || 800) * opt.duration}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            <View style={styles.slotGrid}>
-              {endSlots.map((s) => {
-                const isSelected = endSlot?.end === s.end;
-                return (
-                  <TouchableOpacity
-                    key={s.end}
-                    style={[styles.slotBox, { borderColor: C.primary + '40', backgroundColor: C.greenSoft }, isSelected && [styles.slotBoxActive, { backgroundColor: C.primary, borderColor: C.primary }]]}
-                    onPress={() => { setEndSlot(s); setShowEndPicker(false); }}
-                  >
-                    <Text style={[styles.slotText, { color: C.primary }, isSelected && styles.slotTextActive]}>
-                      {to12h(s.end)}
-                    </Text>
-                    <Text style={[styles.slotDurationText, { color: C.primary }, isSelected && styles.slotTextActive]}>
-                      {s.duration} hr{s.duration > 1 ? 's' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              {endSlots.length === 0 && (
-                <Text style={[styles.noSlots, { color: C.subtext }]}>No end times available</Text>
-              )}
-            </View>
+
+            <TouchableOpacity
+              style={[styles.modalCancelBtn, { borderColor: C.border }]}
+              onPress={() => setShowEndPicker(false)}
+            >
+              <Text style={{ color: C.subtext, fontWeight: '700' }}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-
-      {/* Footer */}
-      <View style={[styles.footer, { backgroundColor: C.card, borderTopColor: C.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.confirmBtn,
-            { backgroundColor: C.primary },
-            (!selectedSlot || !endSlot) && [styles.confirmBtnDisabled, { backgroundColor: C.subtext }],
-          ]}
-          onPress={handleConfirm}
-          disabled={submitting || !selectedSlot || !endSlot}
-        >
-          {submitting
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.confirmBtnText}>
-                {selectedSlot && endSlot
-                  ? `Book ${to12h(selectedSlot.start)} - ${to12h(endSlot.end)}`
-                  : 'Select a slot to continue'
-                }
-              </Text>
-          }
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root:                { flex: 1 },
-  heroBg:              { position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.42 },
-  heroOverlay:         { position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.42, backgroundColor: 'rgba(0,0,0,0.35)', padding: SPACING.lg, paddingTop: 50, justifyContent: 'space-between' },
-  backBtn:             { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  heroInfo:            { paddingBottom: SPACING.lg },
-  heroName:            { color: '#fff', fontSize: 22, fontWeight: '800' },
-  heroLocRow:          { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  heroLoc:             { color: 'rgba(255,255,255,0.8)', fontSize: 13 },
-  heroPrice:           { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 8 },
-  heroPriceUnit:       { fontSize: 14, fontWeight: '400', color: 'rgba(255,255,255,0.8)' },
-  sheet:               { position: 'absolute', bottom: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.65, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
-  sheetHandle:         { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: SPACING.md },
-  sheetHeader:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.lg },
-  sheetTitle:          { fontSize: 18, fontWeight: '700', flex: 1, marginLeft: SPACING.sm },
-  sportRow:            { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
-  sportPill:           { paddingHorizontal: SPACING.lg, paddingVertical: 8, borderRadius: RADIUS.round, borderWidth: 1 },
-  sportPillActive:     { },
-  sportPillText:       { fontWeight: '600', fontSize: 13 },
-  sportPillTextActive: { color: '#fff' },
-  dateScroll:          { gap: SPACING.sm, paddingBottom: SPACING.md },
-  dateBox:             { width: 58, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1 },
-  dateBoxActive:       { },
-  dateMonth:           { fontSize: 10, fontWeight: '600' },
-  dateNum:             { fontSize: 20, fontWeight: '800' },
-  dateDay:             { fontSize: 10 },
-  dateTextActive:      { color: '#fff' },
-  selectedDisplay:     { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md },
-  selectedText:        { flex: 1, fontWeight: '700', fontSize: 14 },
-  sectionLabel:        { fontSize: 15, fontWeight: '700', marginBottom: SPACING.md },
-  slotGrid:            { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  slotBox:             { paddingHorizontal: SPACING.md, paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1, minWidth: 95, alignItems: 'center' },
-  slotBoxActive:       { },
-  slotBoxDisabled:     { },
-  slotText:            { fontWeight: '600', fontSize: 13 },
-  slotDurationText:    { fontWeight: '500', fontSize: 11, marginTop: 2, opacity: 0.7 },
-  slotTextActive:      { color: '#fff' },
-  slotTextDisabled:    { },
-  noSlots:             { fontSize: 13, padding: SPACING.md },
-  modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard:           { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.xl, paddingBottom: 40 },
-  modalHeader:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  modalTitle:          { fontSize: 18, fontWeight: '700' },
-  footer:              { position: 'absolute', bottom: 0, left: 0, right: 0, padding: SPACING.lg, borderTopWidth: 1 },
-  confirmBtn:          { paddingVertical: 16, borderRadius: RADIUS.lg, alignItems: 'center' },
-  confirmBtnDisabled:  { },
-  confirmBtnText:      { color: '#fff', fontSize: 15, fontWeight: '700' },
+  root: { flex: 1 },
+  heroBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 260 },
+  heroOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 260,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+  },
+  heroTop: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  heroInfo: { flex: 1 },
+  heroName: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  heroLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
+  heroLoc: { color: 'rgba(255,255,255,0.85)', fontSize: 12 },
+
+  sheet: {
+    flex: 1,
+    marginTop: 150,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 10,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    ...FONT.h2,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  dateScroll: {
+    gap: 10,
+    paddingBottom: 16,
+  },
+  dateBox: {
+    width: 64,
+    height: 80,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  dateMonth: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  dateNum: { fontSize: 20, fontWeight: '900' },
+  dateDay: { fontSize: 11, fontWeight: '600' },
+
+  selectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    marginBottom: 14,
+  },
+  selectedTimeText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  sectionTitle: {
+    ...FONT.h3,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  slotsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  slotCard: {
+    width: '31%',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotTime: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  slotStatus: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  loadingSlots: {
+    paddingVertical: 30,
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
+  },
+  noSlotsWrap: {
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  noSlotsText: {
+    fontSize: 13,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 12,
+    paddingBottom: 28,
+    borderTopWidth: 1,
+  },
+  footerLabel: { fontSize: 11, fontWeight: '600' },
+  footerPrice: { fontSize: 22, fontWeight: '900' },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    width: '100%',
+    borderRadius: RADIUS.xxl,
+    padding: 20,
+  },
+  modalTitle: { ...FONT.h2, fontSize: 18, fontWeight: '800' },
+  modalSub: { fontSize: 13, marginTop: 2, marginBottom: 16 },
+  durationOptions: { gap: 10, marginBottom: 16 },
+  durationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+  },
+  durationHours: { fontSize: 14, fontWeight: '800' },
+  durationEnd: { fontSize: 12, marginTop: 2 },
+  durationPrice: { fontSize: 16, fontWeight: '900' },
+  modalCancelBtn: {
+    paddingVertical: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
 });

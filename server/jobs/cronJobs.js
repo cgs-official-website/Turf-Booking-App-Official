@@ -17,7 +17,6 @@ const initCronJobs = () => {
       const confirmedResult = await firestoreService.queryWithCursor('bookings', {
         filters: [
           ['status', '==', 'confirmed'],
-          ['date', '<=', todayStr],
         ],
         limit: 50,
       });

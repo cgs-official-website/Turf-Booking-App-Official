@@ -21,7 +21,7 @@ const BookingDetailScreen = ({ route, navigation }) => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
 
-  const { bookingId } = route.params;
+  const bookingId = route?.params?.bookingId || route?.params?.id || '';
   const dispatch = useDispatch();
   const { selectedBooking: booking, loading, successMessage } = useSelector((s) => s.vendor);
   const [rejectModal, setRejectModal] = useState(false);
@@ -118,9 +118,17 @@ const BookingDetailScreen = ({ route, navigation }) => {
           <Feather name="credit-card" size={20} color={colors.primary} />
           <Text style={styles.cardTitle}>Payment</Text>
         </View>
-        <Row label="Amount" value={`₹${booking.totalAmount}`} valueColor={colors.success || colors.primary} styles={styles} />
-        <Row label="Payment Status" value={booking.paymentStatus || 'Paid'} styles={styles} />
-        <Row label="Booking ID" value={booking._id?.slice(-8).toUpperCase()} styles={styles} />
+        <Row label="Amount" value={`₹${booking.totalAmount || booking.amount || 800}`} valueColor={colors.success || colors.primary} styles={styles} />
+        <Row
+          label="Payment Mode"
+          value={
+            booking.paymentMethod === 'cash' || booking.paymentMode === 'hand_cash'
+              ? '💵 Hand Cash (Collect at Ground)'
+              : '💳 Online Payment (Paid)'
+          }
+          styles={styles}
+        />
+        <Row label="Booking ID" value={(booking.id || booking._id || '').slice(-8).toUpperCase()} styles={styles} />
       </View>
 
       {/* Actions */}

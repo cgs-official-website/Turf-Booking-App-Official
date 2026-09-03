@@ -174,6 +174,33 @@ const firestoreService = {
 
         return { items, nextCursor, count: items.length };
       } catch (err) {
+        // If Firestore throws FAILED_PRECONDITION because a compound query requires a composite index,
+        // execute query without orderBy and sort results in memory so the application never breaks.
+        if (err.message && err.message.includes('FAILED_PRECONDITION') && orderByField) {
+          try {
+            let fallbackQuery = db.collection(collectionName);
+            for (const [field, op, value] of filters) {
+              if (value !== undefined && value !== null && value !== '') {
+                fallbackQuery = fallbackQuery.where(field, op, value);
+              }
+            }
+            const snap = await fallbackQuery.limit(Math.max(Number(limit) * 2, 100)).get();
+            let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            items.sort((a, b) => {
+              const valA = a[orderByField] ? (a[orderByField]._seconds || a[orderByField]) : '';
+              const valB = b[orderByField] ? (b[orderByField]._seconds || b[orderByField]) : '';
+              return orderDirection === 'desc' ? (valA < valB ? 1 : -1) : (valA > valB ? 1 : -1);
+            });
+            const resultDocs = items.slice(0, limit);
+            return {
+              items: resultDocs,
+              nextCursor: items.length > limit ? resultDocs[resultDocs.length - 1]?.id : null,
+              count: resultDocs.length,
+            };
+          } catch (retryErr) {
+            console.warn('⚠️ Firestore retry fallback:', retryErr.message);
+          }
+        }
         console.warn('⚠️ Firestore query fallback:', err.message);
       }
     }

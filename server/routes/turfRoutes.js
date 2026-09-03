@@ -4,6 +4,8 @@ const turfController = require('../controllers/turfController');
 const verifySessionToken = require('../middleware/verifySessionToken');
 
 // Public Turf Discovery Endpoints
+router.get('/meta/locations', turfController.getTurfLocations);
+router.get('/meta/filters', turfController.getTurfLocations);
 router.get('/', turfController.getTurfs);
 router.get('/:turfId', turfController.getTurfById);
 router.get('/:turfId/slots', turfController.getAvailableSlots);

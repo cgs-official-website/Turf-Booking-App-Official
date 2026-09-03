@@ -272,7 +272,8 @@ const authSlice = createSlice({
       .addCase(updateVendorProfile.pending, (state) => { state.loading = true; })
       .addCase(updateVendorProfile.fulfilled, (state, action) => {
         state.loading = false;
-        state.vendor = action.payload.vendor;
+        const updated = action.payload?.vendor || action.payload?.profile || action.payload || {};
+        state.vendor = { ...state.vendor, ...updated };
       })
       .addCase(updateVendorProfile.rejected, (state, action) => {
         state.loading = false;
@@ -282,23 +283,49 @@ const authSlice = createSlice({
     // Turf review status (drives Under Review / Approved / Home routing)
     builder
       .addCase(fetchTurfStatus.fulfilled, (state, action) => {
-        const turf = action.payload?.turf || null;
-        // No turf on record yet shouldn't happen once onboarding is marked
-        // complete, but fall back to 'pending' rather than leaving it null
-        // forever (null would make RootNavigator re-fetch in a loop).
-        state.turfStatus = turf?.status || 'pending';
-        state.turfInfo = turf;
-        // Mirror what the thunk already cleared in AsyncStorage, so a
-        // mid-session refetch (e.g. TurfUnderReviewScreen's polling) stays
-        // consistent without needing a full app restart to pick it up.
+        const payload = action.payload || {};
+        const turf = payload.turf || null;
+        const vendor = payload.vendor || state.vendor || {};
+
+        const isApproved =
+          payload.status === 'active' ||
+          payload.turfStatus === 'active' ||
+          turf?.status === 'active' ||
+          payload.kycStatus === 'approved' ||
+          vendor.kycStatus === 'approved';
+
+        const isPending =
+          !isApproved &&
+          (payload.status === 'pending' ||
+            payload.turfStatus === 'pending' ||
+            turf?.status === 'pending' ||
+            payload.kycStatus === 'pending' ||
+            vendor.kycStatus === 'pending');
+
+        if (isApproved) {
+          state.turfStatus = 'active';
+        } else if (isPending) {
+          state.turfStatus = 'pending';
+        } else {
+          state.turfStatus = payload.turfStatus || turf?.status || 'pending';
+        }
+
+        state.turfInfo = turf || { name: vendor.turfName || vendor.businessName || vendor.name };
+
+        if (state.vendor) {
+          state.vendor.hasCompletedTurfOnboarding = true;
+          state.vendor.turfOnboardingComplete = true;
+          if (isApproved) {
+            state.vendor.kycStatus = 'approved';
+          }
+        }
+
         if (state.turfStatus === 'pending') {
           state.turfApprovalAcknowledged = false;
         }
       })
       .addCase(fetchTurfStatus.rejected, (state) => {
-        // Leave turfStatus as-is (null on first failure) so the Under Review
-        // screen keeps showing and retries on its next poll, instead of
-        // accidentally falling through to Home on a network hiccup.
+        // Leave turfStatus as-is
       });
 
     // Logout

@@ -39,9 +39,27 @@ router.post('/approval-ack', vendorController.acknowledgeApproval);
 // Vendor Dashboard & Slot Management
 router.get('/dashboard', vendorController.getDashboard);
 router.get('/bookings', vendorController.getVendorBookings);
+router.get('/bookings/:id', vendorController.getBookingDetail);
 router.post('/bookings/:id/accept', vendorController.updateBookingStatus);
+router.put('/bookings/:id/accept', vendorController.updateBookingStatus);
+router.post('/bookings/:id/reject', vendorController.updateBookingStatus);
+router.put('/bookings/:id/reject', vendorController.updateBookingStatus);
 router.patch('/turf/:turfId/slots', vendorController.updateSlotOverrides);
 router.get('/reviews', vendorController.getVendorReviews);
+router.delete('/reviews/:id', vendorController.deleteReview);
+router.patch('/reviews/:id/hide', vendorController.toggleReviewVisibility);
 router.post('/report-issue', vendorController.reportIssue);
+
+// Vendor Turf Management & Slots
+router.get('/turfs', vendorController.getMyTurfs);
+router.post('/turfs', vendorController.addTurf);
+router.get('/turfs/:turfId', vendorController.getTurfById);
+router.put('/turfs/:turfId', vendorController.updateTurf);
+router.delete('/turfs/:turfId', vendorController.deleteTurf);
+
+router.get('/turfs/:turfId/slots/calendar', vendorController.getSlotCalendar);
+router.post('/turfs/:turfId/slots/freeze', vendorController.freezeSlot);
+router.post('/turfs/:turfId/slots', vendorController.addSlot);
+router.delete('/turfs/:turfId/slots/:slotId', vendorController.deleteSlot);
 
 module.exports = router;

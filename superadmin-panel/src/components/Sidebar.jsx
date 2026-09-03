@@ -39,6 +39,7 @@ export const Sidebar = ({
         { id: 'kyc', label: 'KYC & Approvals', icon: ShieldCheck, badge: pendingKycCount },
         { id: 'turfs', label: 'All Turfs', icon: Building2 },
         { id: 'vendors', label: 'Turf Partners', icon: UserCheck },
+        { id: 'subscriptions', label: 'Partner Plans', icon: Trophy },
       ],
     },
     {

@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { Search, Phone, Mail, Loader2 } from 'lucide-react';
+import { VendorInspectionModal } from '../components/VendorInspectionModal';
+import { Search, Phone, Mail, Loader2, FileSearch, CheckCircle2 } from 'lucide-react';
+
+import { useModal } from '../context/ModalContext';
 
 export const VendorsView = () => {
+  const { showAlert, showConfirm } = useModal();
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [inspectVendor, setInspectVendor] = useState(null);
 
   const loadVendors = async () => {
     setLoading(true);
@@ -22,6 +27,64 @@ export const VendorsView = () => {
   useEffect(() => {
     loadVendors();
   }, []);
+
+  const handleApprove = async (uid) => {
+    const confirmed = await showConfirm({
+      title: 'Approve Partner Facility',
+      message: 'Approve this partner and activate their turf facility on the platform?',
+      type: 'success',
+      confirmText: 'Approve Partner',
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await api.approveVendor(uid);
+      if (res.success) {
+        await showAlert({
+          title: 'Partner Approved!',
+          message: 'Partner and turf facility approved successfully!',
+          type: 'success',
+        });
+        setInspectVendor(null);
+        loadVendors();
+      }
+    } catch (err) {
+      showAlert({
+        title: 'Approval Error',
+        message: err.message || 'Could not approve partner.',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleReject = async (uid) => {
+    const confirmed = await showConfirm({
+      title: 'Reject Partner KYC',
+      message: 'Reject this vendor application? The vendor will be notified to re-upload documents.',
+      type: 'danger',
+      confirmText: 'Confirm Rejection',
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await api.rejectVendor(uid, 'Documents are unclear or invalid.');
+      if (res.success) {
+        await showAlert({
+          title: 'KYC Rejected',
+          message: 'Partner KYC rejected.',
+          type: 'info',
+        });
+        setInspectVendor(null);
+        loadVendors();
+      }
+    } catch (err) {
+      showAlert({
+        title: 'Rejection Error',
+        message: err.message || 'Could not reject partner.',
+        type: 'error',
+      });
+    }
+  };
 
   const filteredVendors = vendors.filter((v) => {
     const q = search.toLowerCase();
@@ -56,7 +119,7 @@ export const VendorsView = () => {
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
-        <table className="w-full text-left text-xs min-w-[700px]">
+        <table className="w-full text-left text-xs min-w-[750px]">
           <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold tracking-wider border-b border-slate-200">
             <tr>
               <th className="p-3.5">Partner Name</th>
@@ -65,19 +128,20 @@ export const VendorsView = () => {
               <th className="p-3.5">Linked Turf</th>
               <th className="p-3.5">KYC Status</th>
               <th className="p-3.5">Subscription</th>
+              <th className="p-3.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <tr>
-                <td colSpan="6" className="p-8 text-center text-slate-400">
+                <td colSpan="7" className="p-8 text-center text-slate-400">
                   <Loader2 size={20} className="animate-spin mx-auto text-emerald-600 mb-2" />
                   <span>Loading partners...</span>
                 </td>
               </tr>
             ) : filteredVendors.length === 0 ? (
               <tr>
-                <td colSpan="6" className="p-8 text-center text-slate-400">
+                <td colSpan="7" className="p-8 text-center text-slate-400">
                   No partners found matching your search.
                 </td>
               </tr>
@@ -90,7 +154,7 @@ export const VendorsView = () => {
                     <p className="flex items-center"><Phone size={11} className="mr-1 text-slate-400" />{v.phone || 'N/A'}</p>
                     <p className="flex items-center text-[11px] text-slate-500 mt-0.5"><Mail size={11} className="mr-1 text-slate-400" />{v.email || 'N/A'}</p>
                   </td>
-                  <td className="p-3.5 text-emerald-700 font-semibold">{v.turfName || 'No Turf Linked'}</td>
+                  <td className="p-3.5 text-emerald-700 font-semibold">{v.turfName || v.turf?.name || 'No Turf Linked'}</td>
                   <td className="p-3.5">
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
@@ -103,13 +167,23 @@ export const VendorsView = () => {
                     </span>
                   </td>
                   <td className="p-3.5">
-                    {v.subscription?.active ? (
+                    {v.hasPaidSubscription || v.subscription?.active ? (
                       <span className="text-emerald-700 font-bold text-xs bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Active ({v.subscription.planId || 'Plan'})
+                        Paid ({v.subscription?.planName || v.subscription?.planId || 'Plan'})
                       </span>
                     ) : (
                       <span className="text-slate-400 text-xs font-medium">Inactive</span>
                     )}
+                  </td>
+                  <td className="p-3.5 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setInspectVendor(v)}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition inline-flex items-center space-x-1"
+                    >
+                      <FileSearch size={13} />
+                      <span>Inspect</span>
+                    </button>
                   </td>
                 </tr>
               ))
@@ -117,6 +191,15 @@ export const VendorsView = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Full Partner Profile & Attachment Inspection Modal */}
+      <VendorInspectionModal
+        isOpen={!!inspectVendor}
+        vendor={inspectVendor}
+        onClose={() => setInspectVendor(null)}
+        onApprove={(uid) => handleApprove(uid)}
+        onReject={(uid) => handleReject(uid)}
+      />
     </div>
   );
 };

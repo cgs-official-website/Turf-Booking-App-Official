@@ -1,8 +1,11 @@
 import React from 'react';
 import { KpiCards } from '../components/KpiCards';
 import { Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { dedupe } from '../utils/dedupe';
 
 export const OverviewView = ({ stats = {}, recentBookings = [], recentVendors = [], onNavigateTab }) => {
+  const uniqueBookings = dedupe(recentBookings);
+  const uniqueVendors = dedupe(recentVendors);
   return (
     <div className="space-y-6">
       {/* Metric Cards Grid */}

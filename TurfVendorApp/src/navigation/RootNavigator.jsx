@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSelector, useDispatch } from 'react-redux';
-import { fetchTurfStatus } from '../redux/authSlice';
+import { fetchTurfStatus, bootstrapAuth } from '../redux/authSlice';
 import { fetchMySubscription } from '../redux/vendorSlice';
 
 import SplashScreen from '../screens/SplashScreen';
@@ -46,92 +46,47 @@ const RootNavigator = () => {
   const { colors } = useTheme(); // ✅ theme-aware colors
   const dispatch = useDispatch();
 
-  // Splash must play its full 5-frame animation at least once, regardless of
-  // how fast bootstrapAuth/turfStatus/subscription checks resolve. Only
-  // SplashScreen's onFinish (fired after its own animation completes) flips
-  // this — bootstrapping/checkingReviewStatus/checkingSubscription becoming
-  // false is NOT allowed to unmount SplashScreen early anymore. ✅
   const [splashDone, setSplashDone] = useState(false);
   const { isAuthenticated, bootstrapping, vendor, turfStatus, turfApprovalAcknowledged } = useSelector((s) => s.auth);
   const { mySubscription, subscriptionChecked } = useSelector((s) => s.vendor);
 
-  // Vendor must complete turf registration (all 5 onboarding screens) before
-  // they can reach Home. Backend should return this flag as part of the
-  // vendor object on login/getMe response, e.g. vendor.hasCompletedTurfOnboarding.
-  const needsOnboarding = isAuthenticated && !vendor?.hasCompletedTurfOnboarding;
-
-  // Fetch the turf's review status once, right when the vendor lands past
-  // onboarding, so we know whether to show Under Review / Approved / Home
-  // instead of flashing the wrong screen. TurfUnderReviewScreen re-polls
-  // this on its own afterwards to auto-advance once the admin approves.
-  // NOTE: this hook must run unconditionally on every render (Rules of
-  // Hooks), so it's declared before the bootstrapping/checkingReviewStatus
-  // early returns below. Guarded with `!bootstrapping` so it doesn't fire
-  // on a stale/undefined `vendor` object during the initial auth check. ✅
+  // Bootstrap authentication once on app mount
   useEffect(() => {
-    if (!bootstrapping && isAuthenticated && !needsOnboarding && turfStatus === null) {
+    dispatch(bootstrapAuth());
+  }, [dispatch]);
+
+  // Determine vendor application & review status
+  const isApproved = turfStatus === 'active' || vendor?.kycStatus === 'approved';
+  const isPending = turfStatus === 'pending' || vendor?.kycStatus === 'pending';
+  const hasPaid = !!vendor?.hasPaidSubscription || !!vendor?.hasPaidOnboarding || !!vendor?.subscription?.active || !!mySubscription?.active;
+
+  // Vendor has finished onboarding only if approved OR (KYC submitted AND paid)
+  const hasSubmittedOnboarding =
+    isApproved ||
+    (isPending && hasPaid) ||
+    (!!vendor?.turfOnboardingComplete && hasPaid);
+
+  const needsOnboarding = isAuthenticated && !hasSubmittedOnboarding;
+
+  useEffect(() => {
+    if (!bootstrapping && isAuthenticated && turfStatus === null) {
       dispatch(fetchTurfStatus());
     }
-  }, [bootstrapping, isAuthenticated, needsOnboarding, turfStatus, dispatch]);
+  }, [bootstrapping, isAuthenticated, turfStatus, dispatch]);
 
-  // Once the turf is approved and acknowledged, the vendor still needs an
-  // active subscription before Home — check that here, once per session,
-  // the same way turf review status is checked above. This hook must also
-  // run unconditionally on every render (Rules of Hooks), so it stays
-  // above the bootstrapping/checkingReviewStatus early returns. Same
-  // `!bootstrapping` guard applied here. ✅
-  const isPastApproval =
-    isAuthenticated && !needsOnboarding && turfStatus === 'active' && turfApprovalAcknowledged;
-
-  useEffect(() => {
-    if (!bootstrapping && isPastApproval && !subscriptionChecked) {
-      dispatch(fetchMySubscription());
-    }
-  }, [bootstrapping, isPastApproval, subscriptionChecked, dispatch]);
-
-  if (bootstrapping || !splashDone) {
+  if (!splashDone) {
     return <SplashScreen onFinish={() => setSplashDone(true)} />;
   }
 
-  // Also show the splash while we check turf review status for the first
-  // time this session, so we don't briefly flash "Under Review" for a
-  // vendor whose turf was actually approved ages ago.
-  const checkingReviewStatus =
-    isAuthenticated && !!vendor?.hasCompletedTurfOnboarding && turfStatus === null;
-  if (checkingReviewStatus || !splashDone) {
-    return <SplashScreen onFinish={() => setSplashDone(true)} />;
-  }
-
-  // Once onboarding is done, the turf still needs the super admin's OK before
-  // the vendor is allowed into Home. `turfStatus` is fetched in
-  // TurfUnderReviewScreen/TurfApprovedScreen (and re-checked on every login
-  // via bootstrapAuth + the polling inside those screens).
-  //   turfStatus === null              -> not fetched yet, show under-review screen
-  //                                        (it fetches on mount) rather than flashing Home
-  //   turfStatus === 'pending'/'rejected' -> keep showing the Under Review screen
-  //   turfStatus === 'active' && !turfApprovalAcknowledged -> show the Approved screen once
-  //   turfStatus === 'active' && turfApprovalAcknowledged  -> go to Home
+  // Under review screen — shown after KYC & Payment while waiting for super admin approval
   const needsReview =
     isAuthenticated &&
     !needsOnboarding &&
-    (turfStatus === null || turfStatus === 'pending' || turfStatus === 'rejected');
+    !isApproved &&
+    (isPending || turfStatus === 'pending' || turfStatus === null || turfStatus === 'rejected');
 
   const needsApprovalAck =
-    isAuthenticated && !needsOnboarding && turfStatus === 'active' && !turfApprovalAcknowledged;
-
-  // Show the splash while we check subscription status for the first time
-  // this session, so we don't briefly flash Home for a vendor who actually
-  // has no active plan yet.
-  const checkingSubscription = isPastApproval && !subscriptionChecked;
-  if (checkingSubscription || !splashDone) {
-    return <SplashScreen onFinish={() => setSplashDone(true)} />;
-  }
-
-  // Vendor is approved but has no active subscription — must pick a plan
-  // and pay before reaching Home. This is a hard gate, same pattern as
-  // needsReview/needsApprovalAck above: no "skip" path exists in the stack
-  // below, so there's no way to swipe/back into Home without subscribing.
-  const needsSubscription = isPastApproval && subscriptionChecked && !mySubscription;
+    isAuthenticated && !needsOnboarding && isApproved && !turfApprovalAcknowledged;
 
   return (
     <NavigationContainer>
@@ -151,10 +106,7 @@ const RootNavigator = () => {
             <Stack.Screen name="Terms" component={TermsScreen} options={{ headerShown: false }} />
           </>
         ) : needsOnboarding ? (
-          // Onboarding Stack — turf+vendor setup, vendor KYC, turf KYC.
-          // gestureEnabled: false on step 1 so the vendor can't swipe-back out
-          // of the flow entirely; steps 2 & 3 use an in-screen Back button
-          // that navigates normally within the stack.
+          // Onboarding & Registration Payment Stack — turf setup, vendor KYC, turf KYC, Plan selection & payment
           <>
             <Stack.Screen
               name="TurfSetup"
@@ -171,40 +123,26 @@ const RootNavigator = () => {
               component={TurfVerificationScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="SubscriptionPlans"
+              component={SubscriptionPlansScreen}
+              options={{ title: 'Choose Partner Plan' }}
+            />
+            <Stack.Screen
+              name="Subscribe"
+              component={SubscribeScreen}
+              options={{ title: 'Complete Registration Payment' }}
+            />
           </>
         ) : needsReview ? (
-          // Review Stack — waiting for / just received super admin approval
+          // Review Stack — waiting for super admin approval (Home screen is inaccessible)
           <Stack.Screen
             name="TurfUnderReview"
             component={TurfUnderReviewScreen}
             options={{ headerShown: false, gestureEnabled: false }}
           />
-        ) : needsApprovalAck ? (
-          <Stack.Screen
-            name="TurfApproved"
-            component={TurfApprovedScreen}
-            options={{ headerShown: false, gestureEnabled: false }}
-          />
-        ) : needsSubscription ? (
-          // Subscription paywall — shown once right after turf approval,
-          // before Home. gestureEnabled: false on the plans screen so the
-          // vendor can't swipe back out of it; there's no Main/BookingDetail/
-          // etc. screen registered in this branch, so there is no way to
-          // reach Home without completing a real Razorpay payment.
-          <>
-            <Stack.Screen
-              name="SubscriptionPlans"
-              component={SubscriptionPlansScreen}
-              options={{ title: 'Choose a Plan', gestureEnabled: false, headerBackVisible: false }}
-            />
-            <Stack.Screen
-              name="Subscribe"
-              component={SubscribeScreen}
-              options={{ title: 'Subscribe' }}
-            />
-          </>
         ) : (
-          // Main App Stack
+          // Main App Stack (Active status -> Vendor Dashboard)
           <>
             <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: 'Booking Details' }} />

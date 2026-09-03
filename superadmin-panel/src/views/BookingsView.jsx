@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Search, Loader2 } from 'lucide-react';
+import { dedupe } from '../utils/dedupe';
 
 export const BookingsView = () => {
   const [bookings, setBookings] = useState([]);
@@ -13,7 +14,7 @@ export const BookingsView = () => {
     setLoading(true);
     try {
       const res = await api.getAllBookings(statusFilter, dateFilter);
-      setBookings(res.data?.items || []);
+      setBookings(dedupe(res.data?.items || []));
     } catch (err) {
       console.error('Failed to load bookings:', err);
     } finally {

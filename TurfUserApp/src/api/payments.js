@@ -2,8 +2,9 @@
 import { client } from './client';
 
 export const paymentsApi = {
-  // POST /api/payments/create-order  →  { bookingId }
-  createOrder: (bookingId) => client.post('/payments/create-order', { bookingId }),
-  // POST /api/payments/verify
+  // POST /api/v1/payments/verify
+  verifyPayment: (data) => client.post('/payments/verify', data),
+
+  // Alias
   verify: (data) => client.post('/payments/verify', data),
 };

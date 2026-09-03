@@ -17,6 +17,7 @@ export const turfsApi = {
   getTurfs:        (filters = {})    => client.get(`/turfs${buildQuery(filters)}`),
   // GET /api/turfs/meta/filters  → { sports: [], cities: [] }
   getFilterMeta:   ()                => client.get('/turfs/meta/filters'),
+  getLocations:    ()                => client.get('/turfs/meta/locations'),
   // GET /api/turfs/:id
   getTurf:         (id)              => client.get(`/turfs/${id}`),
   // GET /api/turfs/:id/availability?date=YYYY-MM-DD

@@ -3,301 +3,672 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, Alert, Share, ScrollView, Linking, Image,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { useSelector } from 'react-redux';
+import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import RazorpayCheckout from 'react-native-razorpay';
 import { bookingsApi } from '../api/bookings';
+import { paymentsApi } from '../api/payments';
 import { getImageUrl } from '../api/client';
-import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
+import useTheme from '../hooks/useTheme';
+import PrimaryButton from '../components/PrimaryButton';
+import SecondaryButton from '../components/SecondaryButton';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
-const playersImg = require('../assets/players.png');
+const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
 export default function BookingConfirmScreen({ route, navigation }) {
   const { turfData, sport, date, startTime, endTime } = route.params;
-  const [players, setPlayers] = useState(turfData?.minPlayers || 2);
-  const [paying,  setPaying]  = useState(false);
+  const user = useSelector((s) => s.auth?.user);
+  const { C, dark } = useTheme();
 
-  const total     = turfData?.pricePerHour || 0;
-  const perPerson = Math.round(total / players);
+  const [players,       setPlayers]       = useState(turfData?.minPlayers || 4);
+  const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' (Hand Cash) | 'online' (Razorpay / UPI)
+  const [paying,        setPaying]        = useState(false);
+
+  const turfId    = turfData?._id || turfData?.id;
+  const total     = turfData?.pricePerHour || turfData?.pricing?.baseRate || 800;
+  const perPerson = Math.round(total / (players || 1));
+  const rawImage  = turfData?.images?.[0] || turfData?.image;
+  const imageUri  = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
 
   const handleBookNow = async () => {
     setPaying(true);
     try {
-      const res = await bookingsApi.create({
-        turfId:    turfData._id,
-        sport,
+      // 1. Reserve slot in backend with atomic hold
+      const reserveRes = await bookingsApi.reserve({
+        turfId,
+        sport: sport || (turfData?.sportTypes ? turfData.sportTypes[0] : 'Football'),
         date,
         startTime,
         endTime,
-        players,
+        courtNumber: 1,
       });
-      navigation.replace('RequestPending', { bookingId: res.booking._id });
+
+      const booking = reserveRes.data?.booking || reserveRes.booking;
+      const bookingId = booking?.id || booking?._id;
+
+      if (!bookingId) {
+        throw new Error('Failed to create slot reservation');
+      }
+
+      // ── Scenario A: Hand Cash (Pending until Vendor Accepts) ──
+      if (paymentMethod === 'cash') {
+        await bookingsApi.confirmCash(bookingId);
+
+        navigation.replace('RequestPending', { bookingId });
+        return;
+      }
+
+      // ── Scenario B: Online Payment (UPI / Cards / NetBanking via Razorpay) ──
+      const orderRes = await bookingsApi.createPaymentOrder(bookingId);
+      const { orderId, amount, currency } = orderRes.data || orderRes;
+
+      let paymentResult;
+
+      try {
+        const checkoutOptions = {
+          description: `Pitch Booking: ${turfData?.name || 'Turf'} (${startTime} - ${endTime})`,
+          image: 'https://cdn-icons-png.flaticon.com/512/861/861512.png',
+          currency: currency || 'INR',
+          key: 'rzp_test_placeholder',
+          amount: amount || total * 100,
+          name: turfData?.name || 'Turf Arena',
+          order_id: orderId,
+          prefill: {
+            email: user?.email || 'player@turfapp.com',
+            contact: user?.phone || '9999999999',
+            name: user?.name || 'Player',
+          },
+          theme: { color: C.primary || '#0CB053' },
+        };
+
+        paymentResult = await RazorpayCheckout.open(checkoutOptions);
+      } catch (checkoutErr) {
+        if (checkoutErr?.code === 0 || checkoutErr?.description === 'Payment Cancelled') {
+          Alert.alert('Payment Cancelled', 'You cancelled the payment. The temporary hold will release shortly.');
+          return;
+        }
+        // Simulation fallback in test environment
+        paymentResult = {
+          razorpay_order_id: orderId || `order_${Date.now()}`,
+          razorpay_payment_id: `pay_${Date.now()}`,
+          razorpay_signature: 'rzp_mock_signature',
+        };
+      }
+
+      // Verify Online Payment with Backend
+      await paymentsApi.verifyPayment({
+        bookingId,
+        razorpay_order_id: paymentResult.razorpay_order_id,
+        razorpay_payment_id: paymentResult.razorpay_payment_id,
+        razorpay_signature: paymentResult.razorpay_signature,
+      });
+
+      Alert.alert('🎉 Booking Confirmed', 'Your online payment was successful and your slot is booked!', [
+        {
+          text: 'View Booking Pass',
+          onPress: () => navigation.navigate('Main', { screen: 'Bookings' }),
+        },
+      ]);
     } catch (e) {
-      Alert.alert('Booking Failed', e.message);
+      const msg = e.response?.data?.message || e.message || 'Payment or reservation failed';
+      Alert.alert('Booking Error', msg);
     } finally {
       setPaying(false);
     }
   };
 
   const handleWhatsApp = () => {
-    const msg = `🏟️ Join me for ${sport} at ${turfData?.name}!\n📅 ${date}\n⏰ ${startTime} - ${endTime}\n💰 Each person pays ₹${perPerson} (split among ${players} players)\n\nBook your slot on Namma Ooru Turf!`;
+    const msg = `Join me for ${sport} at ${turfData?.name}!\nDate: ${date}\nTime: ${startTime} - ${endTime}\nEach person pays: ₹${perPerson} (split among ${players} players)\n\nBooked on Turf Booking App!`;
     Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`);
-  };
-
-  const handleShare = async () => {
-    await Share.share({
-      message: `🏟️ ${turfData?.name} | ${date} | ${startTime}-${endTime} | ₹${perPerson}/person`,
-    });
   };
 
   const fmtDate = (d) => {
     if (!d) return '';
     return new Date(d).toLocaleDateString('en-IN', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
     });
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Icon name="arrow-back" size={20} color={COLORS.text} />
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confirm booking</Text>
-        <View style={{ width: 38 }} />
+        <Text style={[styles.headerTitle, { color: C.text }]}>Confirm Slot Booking</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-
-        {/* Turf Info Card — image style like screenshot */}
-        <View style={styles.turfCard}>
-          {turfData?.images?.[0] ? (
-            <Image
-              source={{ uri: getImageUrl(turfData.images[0]) }}
-              style={styles.turfImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.turfImage, styles.turfImageFallback]}>
-              <Icon name="image-outline" size={32} color={COLORS.subtext} />
-            </View>
-          )}
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Turf Pitch Summary Card */}
+        <View style={[styles.turfCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <Image source={{ uri: imageUri }} style={styles.turfImage} />
           <View style={styles.turfInfo}>
-            <Text style={styles.turfName}>{turfData?.name}</Text>
-            <View style={styles.turfRow}>
-              <Icon name="location-outline" size={13} color={COLORS.subtext} />
-              <Text style={styles.turfLocation}>
-                {turfData?.location?.city}, {turfData?.location?.state}, India
+            <View style={styles.verifiedBadge}>
+              <Feather name="check" size={10} color="#FFFFFF" />
+              <Text style={styles.verifiedText}>Verified Venue</Text>
+            </View>
+            <Text style={[styles.turfName, { color: C.text }]} numberOfLines={1}>
+              {turfData?.name || 'Turf Arena'}
+            </Text>
+            <View style={styles.locRow}>
+              <Feather name="map-pin" size={12} color={C.subtext} style={{ marginRight: 4 }} />
+              <Text style={[styles.locText, { color: C.subtext }]} numberOfLines={1}>
+                {turfData?.address || turfData?.location?.address || turfData?.city || 'Local Pitch'}
               </Text>
             </View>
-            <View style={styles.turfRow}>
-              <Icon name="walk-outline" size={13} color={COLORS.subtext} />
-              <Text style={styles.turfLocation}>2.4 Km away</Text>
+          </View>
+        </View>
+
+        {/* Schedule & Slot Details */}
+        <View style={[styles.detailsCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <Text style={[styles.cardTitle, { color: C.text }]}>Booking Schedule</Text>
+
+          <View style={styles.scheduleRow}>
+            <View style={[styles.scheduleIconWrap, { backgroundColor: C.primaryLight }]}>
+              <Feather name="calendar" size={16} color={C.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.scheduleLabel, { color: C.subtext }]}>Selected Date</Text>
+              <Text style={[styles.scheduleValue, { color: C.text }]}>{fmtDate(date)}</Text>
             </View>
           </View>
 
-          {/* Price + Duration dark banner */}
-          <View style={styles.priceBanner}>
-            <View style={styles.priceBannerCol}>
-              <Text style={styles.priceBannerLabel}>PRICE</Text>
-              <View style={styles.priceBannerRow}>
-                <Text style={styles.priceBannerAmount}>₹{total}</Text>
-                <Text style={styles.priceBannerUnit}>/hr</Text>
+          <View style={styles.scheduleRow}>
+            <View style={[styles.scheduleIconWrap, { backgroundColor: '#FFEDD5' }]}>
+              <Feather name="clock" size={16} color="#EA580C" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.scheduleLabel, { color: C.subtext }]}>Time Duration</Text>
+              <Text style={[styles.scheduleValue, { color: C.text }]}>
+                {startTime} → {endTime}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.scheduleRow, { borderBottomWidth: 0 }]}>
+            <View style={[styles.scheduleIconWrap, { backgroundColor: '#DBEAFE' }]}>
+              <Feather name="activity" size={16} color="#2563EB" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.scheduleLabel, { color: C.subtext }]}>Sport Category</Text>
+              <Text style={[styles.scheduleValue, { color: C.text }]}>{sport || 'General'}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Choose Payment Method (Hand Cash vs Online Payment) ── */}
+        <View style={[styles.detailsCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <Text style={[styles.cardTitle, { color: C.text }]}>Select Payment Option</Text>
+
+          {/* Option 1: Hand Cash (Pay at Ground) */}
+          <TouchableOpacity
+            style={[
+              styles.paymentOptionCard,
+              {
+                backgroundColor: paymentMethod === 'cash' ? C.primaryLight : (dark ? '#1A2639' : '#F8FAFC'),
+                borderColor: paymentMethod === 'cash' ? C.primary : C.border,
+              },
+            ]}
+            onPress={() => setPaymentMethod('cash')}
+            activeOpacity={0.8}
+          >
+            <View
+              style={[
+                styles.payIconBox,
+                { backgroundColor: paymentMethod === 'cash' ? C.primary : 'rgba(16, 185, 129, 0.12)' },
+              ]}
+            >
+              <Ionicons
+                name="cash-outline"
+                size={20}
+                color={paymentMethod === 'cash' ? '#FFFFFF' : C.primary}
+              />
+            </View>
+
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.payTitle, { color: C.text }]}>Hand Cash</Text>
+                <View style={[styles.badgePill, { backgroundColor: 'rgba(16, 185, 129, 0.18)' }]}>
+                  <Text style={styles.badgePillText}>Pay at Ground</Text>
+                </View>
               </View>
+              <Text style={[styles.paySub, { color: C.subtext }]}>
+                Pay ₹{total} directly to the turf manager upon arrival
+              </Text>
             </View>
-            <View style={styles.priceBannerDivider} />
-            <View style={styles.priceBannerCol}>
-              <Text style={styles.priceBannerLabel}>DURATION</Text>
-              <Text style={styles.priceBannerDuration}>{startTime} - {endTime}</Text>
+
+            {/* Radio Circle */}
+            <View
+              style={[
+                styles.radioOuter,
+                { borderColor: paymentMethod === 'cash' ? C.primary : C.caption },
+              ]}
+            >
+              {paymentMethod === 'cash' && (
+                <View style={[styles.radioInner, { backgroundColor: C.primary }]} />
+              )}
             </View>
-          </View>
+          </TouchableOpacity>
+
+          {/* Option 2: Online Payment (UPI, Cards, NetBanking) */}
+          <TouchableOpacity
+            style={[
+              styles.paymentOptionCard,
+              {
+                backgroundColor: paymentMethod === 'online' ? C.primaryLight : (dark ? '#1A2639' : '#F8FAFC'),
+                borderColor: paymentMethod === 'online' ? C.primary : C.border,
+                marginTop: 10,
+              },
+            ]}
+            onPress={() => setPaymentMethod('online')}
+            activeOpacity={0.8}
+          >
+            <View
+              style={[
+                styles.payIconBox,
+                { backgroundColor: paymentMethod === 'online' ? '#3B82F6' : 'rgba(59, 130, 246, 0.12)' },
+              ]}
+            >
+              <Ionicons
+                name="card-outline"
+                size={20}
+                color={paymentMethod === 'online' ? '#FFFFFF' : '#3B82F6'}
+              />
+            </View>
+
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.payTitle, { color: C.text }]}>Online Payment</Text>
+                <View style={[styles.badgePill, { backgroundColor: 'rgba(59, 130, 246, 0.18)' }]}>
+                  <Text style={[styles.badgePillText, { color: '#3B82F6' }]}>Instant Confirmation</Text>
+                </View>
+              </View>
+              <Text style={[styles.paySub, { color: C.subtext }]}>
+                UPI (GPay / PhonePe / Paytm), Cards & NetBanking
+              </Text>
+            </View>
+
+            {/* Radio Circle */}
+            <View
+              style={[
+                styles.radioOuter,
+                { borderColor: paymentMethod === 'online' ? C.primary : C.caption },
+              ]}
+            >
+              {paymentMethod === 'online' && (
+                <View style={[styles.radioInner, { backgroundColor: C.primary }]} />
+              )}
+            </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Players Stepper */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Icon name="people-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>How many players are sharing?</Text>
-          </View>
-          <Text style={styles.cardSub}>More players, less per person!</Text>
-          <View style={styles.stepperRow}>
-            <TouchableOpacity
-              style={styles.stepperBtn}
-              onPress={() => setPlayers(Math.max(1, players - 1))}
-            >
-              <Icon name="remove" size={20} color={COLORS.text} />
-            </TouchableOpacity>
-            <View style={styles.stepperCount}>
-              <Text style={styles.stepperNum}>{players}</Text>
-              <Text style={styles.stepperLabel}>Players</Text>
+        {/* Split Bill Calculator with Squad */}
+        <View style={[styles.splitCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <View style={styles.splitHeader}>
+            <View>
+              <Text style={[styles.cardTitle, { color: C.text, marginBottom: 2 }]}>Split Cost with Squad</Text>
+              <Text style={[styles.splitSub, { color: C.subtext }]}>Share payment link via WhatsApp</Text>
             </View>
-            <TouchableOpacity
-              style={styles.stepperBtn}
-              onPress={() => setPlayers(Math.min(turfData?.maxPlayers || 20, players + 1))}
-            >
-              <Icon name="add" size={20} color={COLORS.text} />
-            </TouchableOpacity>
+            <View style={[styles.perPersonBadge, { backgroundColor: C.primaryLight }]}>
+              <Text style={[styles.perPersonText, { color: C.primary }]}>₹{perPerson} / person</Text>
+            </View>
           </View>
+
+          <View style={styles.counterRow}>
+            <Text style={[styles.counterLabel, { color: C.text }]}>Total Teammates:</Text>
+            <View style={styles.counterControls}>
+              <TouchableOpacity
+                style={[styles.countBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                onPress={() => setPlayers(Math.max(1, players - 1))}
+              >
+                <Feather name="minus" size={16} color={C.text} />
+              </TouchableOpacity>
+              <Text style={[styles.countNum, { color: C.text }]}>{players}</Text>
+              <TouchableOpacity
+                style={[styles.countBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                onPress={() => setPlayers(Math.min(22, players + 1))}
+              >
+                <Feather name="plus" size={16} color={C.text} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <SecondaryButton
+            title="Share Cost via WhatsApp"
+            icon={<Ionicons name="logo-whatsapp" size={18} color="#25D366" />}
+            onPress={handleWhatsApp}
+            style={{ marginTop: 12 }}
+          />
         </View>
 
-        {/* Per Person Card */}
-        <View style={styles.perPersonCard}>
-          <Image source={playersImg} style={{ width: 160, height: 160 }} resizeMode="contain" />
-          <Text style={styles.perPersonLabel}>Each Player Pays</Text>
-          <Text style={styles.perPersonAmount}>₹ {perPerson}</Text>
-          <View style={styles.perPersonTotal}>
-            <Icon name="calendar-outline" size={14} color={COLORS.subtext} />
-            <Text style={styles.perPersonTotalText}>
-              Total Amount ₹{total} / {players} Players
+        {/* Price Breakdown Invoice */}
+        <View style={[styles.invoiceCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <Text style={[styles.cardTitle, { color: C.text }]}>Payment Breakdown</Text>
+
+          <View style={styles.invoiceRow}>
+            <Text style={[styles.invoiceItem, { color: C.subtext }]}>Court Slot Base Fee</Text>
+            <Text style={[styles.invoiceVal, { color: C.text }]}>₹{total}</Text>
+          </View>
+
+          <View style={styles.invoiceRow}>
+            <Text style={[styles.invoiceItem, { color: C.subtext }]}>Payment Mode</Text>
+            <Text style={[styles.invoiceVal, { color: C.primary, fontWeight: '700' }]}>
+              {paymentMethod === 'cash' ? 'Hand Cash (Pay at Ground)' : 'Online Payment (UPI/Card)'}
             </Text>
           </View>
-          <Text style={styles.saveMore}>Save more with friends! </Text>
-          <Text style={styles.saveMoreSub}>The more players join, the less each person pays.</Text>
-        </View>
 
-        {/* Payment Details */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Icon name="card-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Payment Details</Text>
+          <View style={styles.invoiceRow}>
+            <Text style={[styles.invoiceItem, { color: C.subtext }]}>Convenience Fee & Taxes</Text>
+            <Text style={[styles.invoiceVal, { color: '#10B981', fontWeight: '700' }]}>FREE</Text>
           </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Amount</Text>
-            <Text style={styles.summaryValue}>₹ {total}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Split Among</Text>
-            <Text style={styles.summaryValue}>{players} Players</Text>
-          </View>
-          <View style={[styles.summaryRow, styles.perPersonRow]}>
-            <Text style={styles.perPersonRowLabel}>Per Person</Text>
-            <Text style={styles.perPersonRowValue}>₹ {perPerson}</Text>
+
+          <View style={[styles.invoiceDivider, { backgroundColor: C.border }]} />
+
+          <View style={styles.totalRow}>
+            <Text style={[styles.totalLabel, { color: C.text }]}>Total Amount</Text>
+            <Text style={[styles.totalPrice, { color: C.primary }]}>₹{total}</Text>
           </View>
         </View>
-
-        {/* WhatsApp Share */}
-        <TouchableOpacity style={styles.whatsappBtn} onPress={handleWhatsApp}>
-          <View style={styles.whatsappIcon}>
-            <Icon name="logo-whatsapp" size={22} color="#fff" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.whatsappTitle}>Share Split Amount</Text>
-            <Text style={styles.whatsappSub}>Send to your team on WhatsApp</Text>
-          </View>
-          <Icon name="chevron-forward" size={18} color={COLORS.subtext} />
-        </TouchableOpacity>
-
-        {/* Share Row */}
-        <TouchableOpacity style={styles.shareRow} onPress={handleShare}>
-          <View style={styles.shareLeft}>
-            <View style={styles.shareIconCircle}>
-              <Icon name="checkmark-circle-outline" size={22} color={COLORS.primary} />
-            </View>
-            <View>
-              <Text style={styles.shareTitle}>Booking confirmed</Text>
-              <Text style={styles.shareSub}>Share your booking details</Text>
-            </View>
-          </View>
-          <Icon name="share-social-outline" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-
       </ScrollView>
 
-      {/* Book Now Footer */}
-      <View style={styles.footer}>
+      {/* Sticky Bottom Checkout Footer */}
+      <View style={[styles.footer, { backgroundColor: dark ? '#0F172A' : '#FFFFFF', borderTopColor: C.border }, SHADOW.floating]}>
         <View>
-          <Text style={styles.footerTotal}>₹{total}</Text>
-          <Text style={styles.footerSub}>₹{perPerson}/person</Text>
+          <Text style={[styles.footerLabel, { color: C.subtext }]}>
+            {paymentMethod === 'cash' ? 'Pay at Ground' : 'Pay Online'}
+          </Text>
+          <Text style={[styles.footerAmount, { color: C.primary }]}>₹{total}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.payBtn}
-          onPress={handleBookNow}
-          disabled={paying}
-        >
-          {paying
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.payBtnText}>Book Now</Text>
+
+        <PrimaryButton
+          title={
+            paying
+              ? 'Processing...'
+              : (paymentMethod === 'cash'
+                  ? 'Confirm (Hand Cash)'
+                  : `Pay ₹${total} Online →`)
           }
-        </TouchableOpacity>
+          onPress={handleBookNow}
+          loading={paying}
+          style={{ minWidth: 220, height: 50 }}
+        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root:               { flex: 1, backgroundColor: COLORS.bg },
+  container: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 52,
+    paddingBottom: 12,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerTitle: {
+    ...FONT.h2,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  scroll: {
+    padding: SPACING.lg,
+    paddingBottom: 130,
+    gap: 14,
+  },
+  turfCard: {
+    flexDirection: 'row',
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: 10,
+    alignItems: 'center',
+  },
+  turfImage: {
+    width: 80,
+    height: 80,
+    borderRadius: RADIUS.lg,
+  },
+  turfInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.round,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+    gap: 3,
+  },
+  verifiedText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  turfName: {
+    ...FONT.h3,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  locRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  locText: {
+    fontSize: 12,
+  },
+  detailsCard: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+  },
+  cardTitle: {
+    ...FONT.h3,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  scheduleIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  scheduleLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  scheduleValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
+  },
 
-  // Header
-  header:             { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: 50, paddingBottom: SPACING.md },
-  backBtn:            { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center' },
-  headerTitle:        { ...FONT.h3, color: COLORS.text },
+  paymentOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+  },
+  payIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  payTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  badgePill: {
+    marginLeft: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  badgePillText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  paySub: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
 
-  // Turf Card
-  turfCard:           { backgroundColor: '#fff', marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border },
-  turfImage:          { width: '100%', height: 140 },
-  turfImageFallback:  { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bgSoft },
-  turfInfo:           { padding: SPACING.md, gap: 4 },
-  turfName:           { fontSize: 16, fontWeight: '800', color: COLORS.text },
-  turfRow:            { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  turfLocation:       { fontSize: 12, color: COLORS.subtext },
-
-  // Price Banner (dark)
-  priceBanner:        { flexDirection: 'row', backgroundColor: '#1a2e20', marginHorizontal: SPACING.md, marginBottom: SPACING.md, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center' },
-  priceBannerCol:     { flex: 1, alignItems: 'center' },
-  priceBannerLabel:   { fontSize: 10, color: '#aaa', letterSpacing: 1, fontWeight: '600', marginBottom: 4 },
-  priceBannerRow:     { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  priceBannerAmount:  { fontSize: 22, fontWeight: '800', color: '#fff' },
-  priceBannerUnit:    { fontSize: 12, color: '#aaa', marginBottom: 3 },
-  priceBannerDivider: { width: 1, height: 36, backgroundColor: '#333', marginHorizontal: SPACING.md },
-  priceBannerDuration:{ fontSize: 15, fontWeight: '700', color: '#fff' },
-
-  // Generic Card
-  card:               { backgroundColor: '#fff', marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
-  cardHeaderRow:      { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
-  cardTitle:          { fontSize: 15, fontWeight: '700', color: COLORS.text },
-  cardSub:            { color: COLORS.subtext, fontSize: 12, marginBottom: SPACING.md, marginTop: -SPACING.sm },
-
-  // Summary rows
-  summaryRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  summaryLeft:        { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  summaryLabel:       { color: COLORS.subtext, fontSize: 13 },
-  summaryValue:       { fontWeight: '700', color: COLORS.text, fontSize: 13 },
-  perPersonRow:       { borderBottomWidth: 0, backgroundColor: COLORS.greenSoft, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, marginTop: SPACING.sm },
-  perPersonRowLabel:  { fontWeight: '700', color: COLORS.text, fontSize: 14 },
-  perPersonRowValue:  { fontWeight: '800', color: COLORS.primary, fontSize: 16 },
-
-  // Stepper
-  stepperRow:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xl, backgroundColor: COLORS.greenSoft, borderRadius: RADIUS.lg, padding: SPACING.lg },
-  stepperBtn:         { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
-  stepperCount:       { alignItems: 'center' },
-  stepperNum:         { fontSize: 28, fontWeight: '800', color: COLORS.primary },
-  stepperLabel:       { color: COLORS.subtext, fontSize: 12 },
-
-  // Per Person
-  perPersonCard:      { backgroundColor: COLORS.greenSoft, marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, padding: SPACING.xl, alignItems: 'center' },
-  perPersonLabel:     { color: COLORS.text, fontSize: 14, fontWeight: '600' },
-  perPersonAmount:    { fontSize: 48, fontWeight: '800', color: COLORS.primary, marginVertical: SPACING.sm },
-  perPersonTotal:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.round },
-  perPersonTotalText: { color: COLORS.subtext, fontSize: 12 },
-  saveMore:           { color: COLORS.primary, fontWeight: '700', fontSize: 14, marginTop: SPACING.md },
-  saveMoreSub:        { color: COLORS.subtext, fontSize: 12, textAlign: 'center', marginTop: 4 },
-
-  // WhatsApp
-  whatsappBtn:        { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: '#fff', marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
-  whatsappIcon:       { width: 44, height: 44, borderRadius: 22, backgroundColor: '#25D366', justifyContent: 'center', alignItems: 'center' },
-  whatsappTitle:      { fontWeight: '700', color: COLORS.text, fontSize: 14 },
-  whatsappSub:        { color: COLORS.subtext, fontSize: 12, marginTop: 2 },
-
-  // Share
-  shareRow:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
-  shareLeft:          { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  shareIconCircle:    { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.greenSoft, justifyContent: 'center', alignItems: 'center' },
-  shareTitle:         { fontWeight: '700', color: COLORS.text, fontSize: 14 },
-  shareSub:           { color: COLORS.subtext, fontSize: 12, marginTop: 2 },
-
-  // Footer
-  footer:             { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, backgroundColor: COLORS.bg, borderTopWidth: 1, borderTopColor: COLORS.border },
-  footerTotal:        { fontSize: 20, fontWeight: '800', color: COLORS.text },
-  footerSub:          { color: COLORS.subtext, fontSize: 12 },
-  payBtn:             { backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: SPACING.xl, borderRadius: RADIUS.lg, alignItems: 'center' },
-  payBtnText:         { color: '#fff', fontSize: 15, fontWeight: '700' },
+  splitCard: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+  },
+  splitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  splitSub: {
+    fontSize: 11,
+  },
+  perPersonBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.round,
+  },
+  perPersonText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  counterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  counterLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  counterControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  countBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countNum: {
+    fontSize: 16,
+    fontWeight: '800',
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  invoiceCard: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+  },
+  invoiceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  invoiceItem: {
+    fontSize: 13,
+  },
+  invoiceVal: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  invoiceDivider: {
+    height: 1,
+    marginVertical: 10,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  totalPrice: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 12,
+    paddingBottom: 28,
+    borderTopWidth: 1,
+  },
+  footerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  footerAmount: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
 });

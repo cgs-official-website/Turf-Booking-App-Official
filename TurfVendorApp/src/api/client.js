@@ -1,12 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// LAN IP for Real Device testing over Wi-Fi
-export const BASE_URL = 'http://192.168.0.124:5000/api/v1';
+export const BASE_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
+export const FALLBACK_URL = 'http://localhost:5000/api/v1';
 
-// Same host as BASE_URL but without the '/api' suffix — uploaded files
-// (turf logo/images, KYC docs) are served as static files from here,
-// e.g. SERVER_ORIGIN + '/uploads/kyc/xxx.jpg'.
-export const SERVER_ORIGIN = BASE_URL.replace(/\/api\/?$/, '');
+export const SERVER_ORIGIN = 'https://turf-booking-app-official-production.up.railway.app';
 
 // Turf.images / Turf.logo / vendor & turf KYC doc paths are stored in the DB
 // as paths relative to the server's 'uploads' folder (e.g.
@@ -30,36 +27,81 @@ export const apiRequest = async (endpoint, options = {}) => {
   // silently break every onboarding upload (Vendor KYC, Turf draft, Turf KYC).
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
+
   const config = {
     headers: {
       ...(!isFormData && { 'Content-Type': 'application/json' }),
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
+    signal: controller.signal,
     ...options,
   };
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, config);
-
-  // The server can return non-JSON (HTML error/404 pages, plain text, empty
-  // bodies) when a route is missing, the server crashed, or a proxy/dev
-  // server intercepted the request. Calling response.json() directly on
-  // those throws an opaque "Unexpected character: <" that hides what
-  // actually went wrong, so read as text first and parse defensively.
-  const raw = await response.text();
-  let data;
+  let response;
   try {
-    data = raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    throw new Error(
-      `Server returned a non-JSON response (status ${response.status}) for ${endpoint}. ` +
-      `This usually means the route isn't registered on the backend or the server crashed.`
-    );
+    response = await fetch(`${BASE_URL}${endpoint}`, config);
+  } catch (err) {
+    if (err.name !== 'AbortError' && FALLBACK_URL) {
+      try {
+        response = await fetch(`${FALLBACK_URL}${endpoint}`, config);
+      } catch (fallbackErr) {
+        clearTimeout(timeoutId);
+        throw err;
+      }
+    } else {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out. Please verify your backend server is reachable.');
+      }
+      throw err;
+    }
   }
 
-  if (!response.ok) {
-    throw new Error(data.message || 'Something went wrong');
-  }
+  try {
+    clearTimeout(timeoutId);
 
-  return data;
+    // The server can return non-JSON (HTML error/404 pages, plain text, empty
+    // bodies) when a route is missing, the server crashed, or a proxy/dev
+    // server intercepted the request. Calling response.json() directly on
+    // those throws an opaque "Unexpected character: <" that hides what
+    // actually went wrong, so read as text first and parse defensively.
+    const raw = await response.text();
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      throw new Error(
+        `Server returned a non-JSON response (status ${response.status}) for ${endpoint}. ` +
+        `This usually means the route isn't registered on the backend or the server crashed.`
+      );
+    }
+
+    if (!response.ok) {
+      const errorMessage =
+        data?.error?.message ||
+        data?.message ||
+        (typeof data?.error === 'string' ? data.error : null) ||
+        `Request failed with status ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    // Backend wraps response in { success: true, data: { ... } }
+    const payload = data.data !== undefined ? data.data : data;
+    if (payload && typeof payload === 'object') {
+      if ((payload.profile || payload.user) && !payload.vendor) {
+        payload.vendor = payload.profile || payload.user;
+      }
+    }
+
+    return payload;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out. Please verify your backend server is reachable.');
+    }
+    throw err;
+  }
 };

@@ -37,6 +37,8 @@ const path = require('path');
 
 // ── Static Files (Super Admin Web Portal & Uploads) ────────────────────────
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Mount Master V1 API Router ─────────────────────────────────────────────
@@ -61,7 +63,7 @@ initCronJobs();
 
 // ── Start Server ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Turf Booking Backend running on http://localhost:${PORT}`);
-  console.log(`📡 API V1 Base URL: http://localhost:${PORT}/api/v1`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Turf Booking Backend running on port ${PORT}`);
+  console.log(`📡 API V1 Base URL: http://0.0.0.0:${PORT}/api/v1`);
 });

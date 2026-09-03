@@ -71,16 +71,18 @@ export const fetchWishlist = createAsyncThunk('wishlist/fetch', async (_, { reje
   }
 });
 
-export const toggleWishlist = createAsyncThunk('wishlist/toggle', async (turf, { getState, rejectWithValue }) => {
+export const toggleWishlist = createAsyncThunk('wishlist/toggle', async (target, { getState, rejectWithValue }) => {
   try {
+    const turfId = typeof target === 'string' ? target : (target._id || target.id);
+    const turfObj = typeof target === 'object' ? target : { _id: turfId, id: turfId };
     const { wishlist } = getState().wishlist;
-    const exists = wishlist.some((t) => t._id === turf._id);
+    const exists = wishlist.some((t) => (t._id || t.id) === turfId);
     if (exists) {
-      await wishlistApi.remove(turf._id);
-      return { turf, added: false };
+      await wishlistApi.remove(turfId);
+      return { turf: turfObj, turfId, added: false };
     } else {
-      await wishlistApi.add(turf._id);
-      return { turf, added: true };
+      await wishlistApi.add(turfId);
+      return { turf: turfObj, turfId, added: true };
     }
   } catch (e) {
     return rejectWithValue(e.message);
@@ -94,14 +96,17 @@ const wishlistSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchWishlist.fulfilled, (state, a) => {
-        state.wishlist = a.payload;
+        state.wishlist = a.payload || [];
         state.status = 'succeeded';
       })
       .addCase(toggleWishlist.fulfilled, (state, a) => {
+        const id = a.payload.turfId || a.payload.turf?._id || a.payload.turf?.id;
         if (a.payload.added) {
-          state.wishlist.push(a.payload.turf);
+          if (!state.wishlist.some((t) => (t._id || t.id) === id)) {
+            state.wishlist.push(a.payload.turf);
+          }
         } else {
-          state.wishlist = state.wishlist.filter((t) => t._id !== a.payload.turf._id);
+          state.wishlist = state.wishlist.filter((t) => (t._id || t.id) !== id);
         }
       });
   },

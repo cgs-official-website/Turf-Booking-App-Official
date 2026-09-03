@@ -9,7 +9,7 @@ import useTheme from '../hooks/useTheme';
 
 const RATING_LABELS = ['Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
 
-export default function RateReviewModal({ visible, turfName, onCancel, onSubmit }) {
+export default function RateReviewModal({ visible, turfName, onCancel, onClose, onSubmit }) {
   const { C } = useTheme();
   const [rating, setRating]   = useState(0);
   const [comment, setComment] = useState('');
@@ -19,7 +19,8 @@ export default function RateReviewModal({ visible, turfName, onCancel, onSubmit 
 
   const handleCancel = () => {
     reset();
-    onCancel();
+    if (typeof onCancel === 'function') onCancel();
+    if (typeof onClose === 'function') onClose();
   };
 
   const handleSubmit = async () => {

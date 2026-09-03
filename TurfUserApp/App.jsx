@@ -7,6 +7,11 @@ import { StatusBar } from 'react-native';
 import { COLORS } from './src/utils/theme';
 import NoInternetScreen from './src/screens/NoInternetScreen';
 import NetInfo from '@react-native-community/netinfo';
+import { initCustomAlert } from './src/utils/customAlert';
+import { CustomAlertModal } from './src/components/CustomAlertModal';
+
+// Initialize global Alert.alert replacement
+initCustomAlert();
 
 export default function App() {
   const [isConnected, setIsConnected] = useState(true);
@@ -23,6 +28,7 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
         {isConnected ? <RootNavigator /> : <NoInternetScreen />}
+        <CustomAlertModal />
       </SafeAreaProvider>
     </Provider>
   );

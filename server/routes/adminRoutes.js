@@ -16,6 +16,8 @@ router.get('/stats', adminController.getStats);
 
 // Users & Vendors Management
 router.get('/users', adminController.getAllUsers);
+router.patch('/users/:uid', adminController.updateUser);
+router.delete('/users/:uid', adminController.deleteUser);
 router.get('/vendors', adminController.getAllVendors);
 router.get('/vendors/pending', adminController.getPendingVendors);
 router.post('/vendors/:uid/approve', adminController.approveVendor);
@@ -34,6 +36,9 @@ router.get('/matches', adminController.getAllMatches);
 // Issue Reports & Support
 router.get('/reports', adminController.getAllReports);
 router.patch('/reports/:id', adminController.updateReportStatus);
+
+// Notification Testing & Custom Alerts
+router.post('/notifications/send-test', adminController.sendTestNotification);
 
 // Bootstrap Custom Admin Claim
 router.post('/set-admin-claim', adminController.setAdminClaim);

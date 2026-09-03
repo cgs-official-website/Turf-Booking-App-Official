@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 
+import { useModal } from '../context/ModalContext';
+
 export const ReportsView = ({ onUpdateStats }) => {
+  const { showAlert, showConfirm } = useModal();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,18 +26,31 @@ export const ReportsView = ({ onUpdateStats }) => {
   }, []);
 
   const handleResolve = async (reportId) => {
-    const note = window.prompt('Enter resolution note:', 'Issue reviewed and resolved by Super Admin.');
-    if (note === null) return;
+    const confirmed = await showConfirm({
+      title: 'Resolve Support Report',
+      message: 'Mark this issue as reviewed and resolved by Super Admin?',
+      type: 'info',
+      confirmText: 'Resolve Issue',
+    });
+    if (!confirmed) return;
 
     try {
-      const res = await api.resolveReport(reportId, note);
+      const res = await api.resolveReport(reportId, 'Issue reviewed and resolved by Super Admin.');
       if (res.success) {
-        alert('Report resolved.');
+        await showAlert({
+          title: 'Report Resolved',
+          message: 'Partner report resolved successfully.',
+          type: 'success',
+        });
         loadReports();
         if (onUpdateStats) onUpdateStats();
       }
     } catch (err) {
-      alert(`Action failed: ${err.message}`);
+      showAlert({
+        title: 'Action Failed',
+        message: err.message || 'Could not resolve report.',
+        type: 'error',
+      });
     }
   };
 

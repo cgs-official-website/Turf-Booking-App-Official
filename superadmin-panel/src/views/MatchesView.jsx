@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Trophy, Key, Users, Loader2, Coins } from 'lucide-react';
+import { dedupe } from '../utils/dedupe';
 
 export const MatchesView = () => {
   const [matches, setMatches] = useState([]);
@@ -10,7 +11,7 @@ export const MatchesView = () => {
     setLoading(true);
     try {
       const res = await api.getAllMatches();
-      setMatches(res.data?.items || []);
+      setMatches(dedupe(res.data?.items || []));
     } catch (err) {
       console.error('Failed to load matches:', err);
     } finally {

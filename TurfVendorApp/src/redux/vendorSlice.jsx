@@ -10,7 +10,7 @@ import {
 import { getDashboardStatsApi, getRevenueApi } from '../api/dashboard';
 import {
   getSubscriptionPlansApi, createSubscriptionOrderApi, verifySubscriptionPaymentApi,
-  getMySubscriptionApi, getSubscriptionHistoryApi,
+  getMySubscriptionApi, getSubscriptionHistoryApi, activateFreeSubscriptionApi,
 } from '../api/subscriptions';
 import { getMyReviewsApi, toggleReviewVisibilityApi, deleteReviewApi } from '../api/reviews';
 import { loginVendor, logoutVendor } from './authSlice';
@@ -181,6 +181,17 @@ export const fetchRevenue = createAsyncThunk('vendor/fetchRevenue', async (perio
 export const fetchPlans = createAsyncThunk('vendor/fetchPlans', async (_, { rejectWithValue }) => {
   try { return await getSubscriptionPlansApi(); } catch (e) { return rejectWithValue(e.message); }
 });
+
+export const activateFreePlan = createAsyncThunk(
+  'vendor/activateFreePlan',
+  async (planId = 'plan_free_starter', { rejectWithValue }) => {
+    try {
+      return await activateFreeSubscriptionApi(planId);
+    } catch (e) {
+      return rejectWithValue(e.message);
+    }
+  }
+);
  
 // Step 1 of real Razorpay flow — ask backend for a real order to hand to
 // RazorpayCheckout.open(). Does NOT activate the subscription.
@@ -328,13 +339,13 @@ const vendorSlice = createSlice({
       .addCase(fetchMyTurfs.pending, pending)
       .addCase(fetchMyTurfs.fulfilled, (state, { payload }) => {
         state.loading = false;
-        state.turfs = payload.turfs;
+        state.turfs = Array.isArray(payload) ? payload : (payload?.turfs || payload?.items || []);
         // Default the switcher to the first turf the first time we load the
         // list, and recover gracefully if the previously-active turf got
         // deleted elsewhere.
-        const stillExists = state.turfs.some((t) => t._id === state.activeTurfId);
+        const stillExists = state.turfs.some((t) => (t._id || t.id) === state.activeTurfId);
         if (!stillExists) {
-          state.activeTurfId = state.turfs[0]?._id || null;
+          state.activeTurfId = (state.turfs[0]?._id || state.turfs[0]?.id) || null;
         }
       })
       .addCase(fetchMyTurfs.rejected, rejected)
@@ -419,9 +430,9 @@ const vendorSlice = createSlice({
       .addCase(fetchSlotCalendar.pending, (state) => { state.slotCalendarLoading = true; state.error = null; })
       .addCase(fetchSlotCalendar.fulfilled, (state, { payload }) => {
         state.slotCalendarLoading = false;
-        state.slotCalendarDate = payload.date;
-        state.slotCalendar = payload.slots;
-        state.slotCounts = payload.counts;
+        state.slotCalendarDate = payload?.date || null;
+        state.slotCalendar = Array.isArray(payload?.slots) ? payload.slots : (payload?.items || []);
+        state.slotCounts = payload?.counts || { available: 0, requested: 0, booked: 0, frozen: 0, total: 0 };
       })
       .addCase(fetchSlotCalendar.rejected, (state, action) => {
         state.slotCalendarLoading = false;
@@ -480,7 +491,10 @@ const vendorSlice = createSlice({
     // Bookings
     builder
       .addCase(fetchBookings.pending, pending)
-      .addCase(fetchBookings.fulfilled, (state, { payload }) => { state.loading = false; state.bookings = payload.bookings; })
+      .addCase(fetchBookings.fulfilled, (state, { payload }) => {
+        state.loading = false;
+        state.bookings = Array.isArray(payload) ? payload : (payload?.bookings || payload?.items || []);
+      })
       .addCase(fetchBookings.rejected, rejected)
  
       .addCase(fetchBookingDetail.pending, pending)
@@ -490,9 +504,14 @@ const vendorSlice = createSlice({
       .addCase(acceptBooking.pending, pending)
       .addCase(acceptBooking.fulfilled, (state, { payload }) => {
         state.loading = false;
-        const idx = state.bookings.findIndex(b => b._id === payload.booking._id);
-        if (idx !== -1) state.bookings[idx] = payload.booking;
-        if (state.selectedBooking?._id === payload.booking._id) state.selectedBooking = payload.booking;
+        const bId = payload?.booking?._id || payload?.booking?.id;
+        const idx = state.bookings.findIndex(b => (b._id === bId || b.id === bId));
+        if (idx !== -1 && payload?.booking) {
+          state.bookings[idx] = { ...state.bookings[idx], ...payload.booking, status: 'confirmed' };
+        }
+        if (state.selectedBooking && (state.selectedBooking._id === bId || state.selectedBooking.id === bId)) {
+          state.selectedBooking = { ...state.selectedBooking, ...payload.booking, status: 'confirmed' };
+        }
         state.successMessage = 'Booking accepted';
       })
       .addCase(acceptBooking.rejected, rejected)
@@ -500,9 +519,14 @@ const vendorSlice = createSlice({
       .addCase(rejectBooking.pending, pending)
       .addCase(rejectBooking.fulfilled, (state, { payload }) => {
         state.loading = false;
-        const idx = state.bookings.findIndex(b => b._id === payload.booking._id);
-        if (idx !== -1) state.bookings[idx] = payload.booking;
-        if (state.selectedBooking?._id === payload.booking._id) state.selectedBooking = payload.booking;
+        const bId = payload?.booking?._id || payload?.booking?.id;
+        const idx = state.bookings.findIndex(b => (b._id === bId || b.id === bId));
+        if (idx !== -1 && payload?.booking) {
+          state.bookings[idx] = { ...state.bookings[idx], ...payload.booking, status: 'rejected' };
+        }
+        if (state.selectedBooking && (state.selectedBooking._id === bId || state.selectedBooking.id === bId)) {
+          state.selectedBooking = { ...state.selectedBooking, ...payload.booking, status: 'rejected' };
+        }
         state.successMessage = 'Booking rejected';
       })
       .addCase(rejectBooking.rejected, rejected);
@@ -518,14 +542,15 @@ const vendorSlice = createSlice({
       .addCase(fetchMyReviews.rejected, rejected)
 
       .addCase(toggleReviewVisibility.fulfilled, (state, { payload }) => {
-        const idx = state.reviews.findIndex((r) => r._id === payload.review._id);
+        const reviewId = payload.review?._id || payload.review?.id;
+        const idx = state.reviews.findIndex((r) => (r._id || r.id) === reviewId);
         if (idx !== -1) state.reviews[idx] = payload.review;
       })
       .addCase(toggleReviewVisibility.rejected, (state, action) => { state.error = action.payload; })
 
       .addCase(deleteReview.fulfilled, (state, { payload }) => {
-        state.reviews = state.reviews.filter((r) => r._id !== payload);
-        state.successMessage = 'Review deleted';
+        state.reviews = state.reviews.filter((r) => (r._id !== payload && r.id !== payload));
+        state.successMessage = 'Review deleted successfully';
       })
       .addCase(deleteReview.rejected, (state, action) => { state.error = action.payload; });
  

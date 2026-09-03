@@ -6,7 +6,11 @@ dotenv.config();
 let redis = null;
 let isRedisConnected = false;
 
-const isPlaceholderUrl = (url) => !url || url.includes('your_railway_redis') || url.includes('placeholder');
+const isPlaceholderUrl = (url) =>
+  !url ||
+  url.includes('your_railway_redis') ||
+  url.includes('placeholder') ||
+  (url.includes('.railway.internal') && !process.env.RAILWAY_ENVIRONMENT);
 
 if (process.env.REDIS_URL && !isPlaceholderUrl(process.env.REDIS_URL)) {
   try {

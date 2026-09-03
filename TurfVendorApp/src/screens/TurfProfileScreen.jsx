@@ -13,10 +13,15 @@ import {
 } from '../redux/vendorSlice';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
-import Icon from '../components/Icon';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const TABS = ['Turf Info', 'Turf Time', 'Price', 'Amenities'];
+const TABS = [
+  { key: 'info', title: 'Basic Info', icon: 'info' },
+  { key: 'time', title: 'Timing & Slots', icon: 'clock' },
+  { key: 'price', title: 'Pricing', icon: 'dollar-sign' },
+  { key: 'amenities', title: 'Sports & Amenities', icon: 'grid' },
+];
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   const totalMinutes = i * 30;
@@ -27,112 +32,43 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
 });
 
-const SPORT_ICON = { Cricket: 'cricket', Football: 'soccer' };
-const DEFAULT_SPORTS = [
-  { key: 'Cricket', icon: 'cricket' },
-  { key: 'Football', icon: 'soccer' },
-];
-const DEFAULT_AMENITIES = [
-  { key: 'Floodlights', icon: 'floor-lamp' },
-  { key: 'Parking', icon: 'parking' },
-  { key: 'CCTV', icon: 'cctv' },
-  { key: 'Washroom', icon: 'human-male-female' },
-  { key: 'Water', icon: 'water' },
-  { key: 'Seating', icon: 'seat' },
-];
+const DEFAULT_SPORTS = ['Cricket', 'Football', 'Basketball', 'Badminton', 'Tennis', 'Volleyball'];
+const DEFAULT_AMENITIES = ['Floodlights', 'Parking', 'CCTV', 'Washroom', 'Water', 'Seating', 'Changing Room'];
 
 const TimePickerModal = ({ visible, initial, onClose, onSelect, colors, styles }) => (
   <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <View style={styles.modalOverlay}>
-      <View style={styles.modalSheet}>
-        <View style={styles.modalHandle} />
-        <Text style={styles.modalTitle}>Select time</Text>
+      <View style={[styles.modalSheet, { backgroundColor: colors.card }, SHADOWS.md]}>
+        <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+        <Text style={[styles.modalTitle, { color: colors.text }]}>Select Time</Text>
         <FlatList
           data={TIME_OPTIONS}
           keyExtractor={(t) => t}
           initialNumToRender={48}
           style={{ maxHeight: 320 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.timeOption, item === initial && styles.timeOptionActive]}
-              onPress={() => { onSelect(item); onClose(); }}
-            >
-              <Text style={[styles.timeOptionText, item === initial && styles.timeOptionTextActive]}>{item}</Text>
-              {item === initial && <Icon name="check" size={16} color={colors.primary} />}
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const isSelected = item === initial;
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.timeOption,
+                  { borderBottomColor: colors.border },
+                  isSelected && { backgroundColor: colors.primaryLight, borderRadius: 8 },
+                ]}
+                onPress={() => { onSelect(item); onClose(); }}
+              >
+                <Text style={[styles.timeOptionText, { color: isSelected ? colors.primary : colors.text }]}>{item}</Text>
+                {isSelected && <Feather name="check" size={16} color={colors.primary} />}
+              </TouchableOpacity>
+            );
+          }}
         />
         <TouchableOpacity style={styles.modalCancelBtn} onPress={onClose}>
-          <Text style={styles.modalCancelText}>Cancel</Text>
+          <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Close</Text>
         </TouchableOpacity>
       </View>
     </View>
   </Modal>
-);
-
-const AddItemModal = ({ visible, title, onClose, onAdd, colors, styles }) => {
-  const [value, setValue] = useState('');
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.addItemSheet}>
-          <Text style={styles.modalTitle}>{title}</Text>
-          <TextInput
-            style={styles.addItemInput}
-            placeholder="Enter name"
-            placeholderTextColor={colors.textLight || colors.textSecondary}
-            value={value}
-            onChangeText={setValue}
-            autoFocus
-          />
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-            <TouchableOpacity style={styles.modalCancelBtnSmall} onPress={() => { setValue(''); onClose(); }}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalAddBtn}
-              onPress={() => {
-                if (!value.trim()) return;
-                onAdd(value.trim());
-                setValue('');
-                onClose();
-              }}
-            >
-              <Text style={styles.modalAddBtnText}>Add</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-};
-
-const TurfHeaderCard = ({ turf, onEditLogo, onEditLocation, colors, styles }) => (
-  <View style={styles.headerCard}>
-    <TouchableOpacity onPress={onEditLogo} activeOpacity={0.85} style={styles.headerLogoWrap}>
-      {turf.logo ? (
-        <Image source={{ uri: getImageUrl(turf.logo) }} style={styles.headerLogo} />
-      ) : (
-        <View style={styles.headerLogoFallback}>
-          <Icon name="image" size={20} color={colors.onAccent || '#FFFFFF'} />
-        </View>
-      )}
-      <View style={styles.headerLogoEditBadge}>
-        <Icon name="edit-2" size={11} color={colors.text} />
-      </View>
-    </TouchableOpacity>
-    <View style={{ flex: 1, marginLeft: 12 }}>
-      <View style={styles.statusRow}>
-        <View style={styles.statusDot} />
-        <Text style={styles.statusText}>{turf.status || 'ACTIVE'}</Text>
-      </View>
-      <Text style={styles.headerName} numberOfLines={1}>{turf.name || 'Your Turf'}</Text>
-      <TouchableOpacity style={styles.locationRow} onPress={onEditLocation} activeOpacity={0.7}>
-        <Feather name="map-pin" size={12} color="rgba(255,255,255,0.8)" />
-        <Text style={styles.locationText} numberOfLines={1}>{turf.city ? `${turf.city}` : 'Add location'}</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
 );
 
 const TurfProfileScreen = ({ navigation, route }) => {
@@ -152,7 +88,7 @@ const TurfProfileScreen = ({ navigation, route }) => {
   const [pinCode, setPinCode] = useState('');
 
   const [openingTime, setOpeningTime] = useState('06:00 AM');
-  const [closingTime, setClosingTime] = useState('06:00 PM');
+  const [closingTime, setClosingTime] = useState('11:00 PM');
   const [slotDuration, setSlotDuration] = useState('60');
   const [pickerFor, setPickerFor] = useState(null);
 
@@ -162,18 +98,15 @@ const TurfProfileScreen = ({ navigation, route }) => {
   const [ballPrice, setBallPrice] = useState('');
   const [weekendEveningPrice, setWeekendEveningPrice] = useState('');
 
-  const [sports, setSports] = useState(DEFAULT_SPORTS.map((s) => s.key));
-  const [amenities, setAmenities] = useState(DEFAULT_AMENITIES.map((a) => a.key));
+  const [sports, setSports] = useState(DEFAULT_SPORTS);
   const [selectedSports, setSelectedSports] = useState(['Cricket', 'Football']);
-  const [selectedAmenities, setSelectedAmenities] = useState(DEFAULT_AMENITIES.map((a) => a.key));
+  const [amenities, setAmenities] = useState(DEFAULT_AMENITIES);
+  const [selectedAmenities, setSelectedAmenities] = useState(['Floodlights', 'Parking', 'Washroom', 'Water']);
   const [turfImages, setTurfImages] = useState([]);
   const [amenitiesEditMode, setAmenitiesEditMode] = useState(false);
-  const [addModal, setAddModal] = useState(null);
 
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   useEffect(() => {
@@ -192,13 +125,13 @@ const TurfProfileScreen = ({ navigation, route }) => {
     setCity(turf.location?.city || turf.city || '');
     setPinCode(turf.location?.pincode || turf.pinCode || '');
     setOpeningTime(turf.openingTime || '06:00 AM');
-    setClosingTime(turf.closingTime || '06:00 PM');
+    setClosingTime(turf.closingTime || '11:00 PM');
     setSlotDuration(turf.slotDuration || '60');
-    setBasePrice(String(turf.basePrice ?? ''));
-    setEveningPrice(String(turf.eveningPrice ?? ''));
-    setWeekendPrice(String(turf.weekendPrice ?? ''));
-    setBallPrice(String(turf.ballPrice ?? ''));
-    setWeekendEveningPrice(String(turf.weekendEveningPrice ?? ''));
+    setBasePrice(String(turf.basePrice ?? '800'));
+    setEveningPrice(String(turf.eveningPrice ?? '1000'));
+    setWeekendPrice(String(turf.weekendPrice ?? '1200'));
+    setBallPrice(String(turf.ballPrice ?? '50'));
+    setWeekendEveningPrice(String(turf.weekendEveningPrice ?? '1400'));
     if (turf.sports?.length) setSports(turf.sports);
     if (turf.selectedSports?.length) setSelectedSports(turf.selectedSports);
     if (turf.amenities?.length) setAmenities(turf.amenities);
@@ -206,17 +139,11 @@ const TurfProfileScreen = ({ navigation, route }) => {
     if (turf.images?.length) setTurfImages(turf.images);
   }, [turf]);
 
-  const headerTurf = { logo, name: turfName, city: city || address, status: turf?.status || 'ACTIVE' };
-
   const pickSingleImage = (onPicked) => {
     launchImageLibrary(
       { mediaType: 'photo', quality: 0.8, selectionLimit: 1 },
       (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) {
-          Alert.alert('Permission needed', response.errorMessage || 'Please allow photo library access.');
-          return;
-        }
+        if (response.didCancel || response.errorCode) return;
         if (response.assets?.length) {
           logoDirtyRef.current = true;
           onPicked(response.assets[0].uri);
@@ -229,11 +156,7 @@ const TurfProfileScreen = ({ navigation, route }) => {
     launchImageLibrary(
       { mediaType: 'photo', quality: 0.8, selectionLimit: 0 },
       (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) {
-          Alert.alert('Permission needed', response.errorMessage || 'Please allow photo library access.');
-          return;
-        }
+        if (response.didCancel || response.errorCode) return;
         if (response.assets?.length) {
           setTurfImages((prev) => [...prev, ...response.assets.map((a) => a.uri)]);
         }
@@ -241,28 +164,9 @@ const TurfProfileScreen = ({ navigation, route }) => {
     );
   };
 
-  const handlePickLocation = () => {
-    navigation.navigate('LocationSearch', { returnTo: 'TurfProfile' });
-  };
-
-  useEffect(() => {
-    const picked = route?.params?.pickedLocation;
-    if (!picked) return;
-    setAddress(picked.address || '');
-    setCity(picked.city || '');
-    if (picked.pinCode) setPinCode(picked.pinCode);
-    navigation.setParams({ pickedLocation: undefined });
-  }, [route?.params?.pickedLocation]);
-
-  const goNextTab = () => setActiveTab((t) => Math.min(t + 1, TABS.length - 1));
-
   const handleSaveInfo = async () => {
     if (!turfName.trim() || !address.trim() || !city.trim() || !pinCode.trim()) {
-      Alert.alert('Missing details', 'Please fill in all fields before continuing.');
-      return;
-    }
-    if (!/^\d{6}$/.test(pinCode.trim())) {
-      Alert.alert('Invalid pin code', 'Pin code must be 6 digits.');
+      Alert.alert('Missing Details', 'Please complete all turf address and location fields.');
       return;
     }
     setSaving(true);
@@ -272,9 +176,10 @@ const TurfProfileScreen = ({ navigation, route }) => {
         logo: logo && /^(file:|content:)/i.test(logo) ? logo : undefined,
       })).unwrap();
       logoDirtyRef.current = false;
-      goNextTab();
+      Alert.alert('Success', 'Basic turf info saved.');
+      setActiveTab(1);
     } catch (err) {
-      Alert.alert('Save failed', typeof err === 'string' ? err : 'Please try again.');
+      Alert.alert('Save Failed', typeof err === 'string' ? err : 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -284,21 +189,16 @@ const TurfProfileScreen = ({ navigation, route }) => {
     setSaving(true);
     try {
       await dispatch(updateTurfTiming({ openingTime, closingTime, slotDuration })).unwrap();
-      goNextTab();
+      Alert.alert('Success', 'Operating schedule saved.');
+      setActiveTab(2);
     } catch (err) {
-      Alert.alert('Save failed', typeof err === 'string' ? err : 'Please try again.');
+      Alert.alert('Save Failed', typeof err === 'string' ? err : 'Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleSavePricing = async () => {
-    const values = { basePrice, eveningPrice, weekendPrice, ballPrice, weekendEveningPrice };
-    const invalid = Object.entries(values).some(([, v]) => v === '' || isNaN(Number(v)) || Number(v) < 0);
-    if (invalid) {
-      Alert.alert('Invalid pricing', 'Please enter valid numbers for all price fields.');
-      return;
-    }
     setSaving(true);
     try {
       await dispatch(updateTurfPricing({
@@ -306,9 +206,10 @@ const TurfProfileScreen = ({ navigation, route }) => {
         weekendPrice: Number(weekendPrice), ballPrice: Number(ballPrice),
         weekendEveningPrice: Number(weekendEveningPrice),
       })).unwrap();
-      goNextTab();
+      Alert.alert('Success', 'Pricing structure saved.');
+      setActiveTab(3);
     } catch (err) {
-      Alert.alert('Save failed', typeof err === 'string' ? err : 'Please try again.');
+      Alert.alert('Save Failed', typeof err === 'string' ? err : 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -321,10 +222,10 @@ const TurfProfileScreen = ({ navigation, route }) => {
         sports, amenities, selectedSports, selectedAmenities,
         images: turfImages,
       })).unwrap();
-      Alert.alert('Saved', 'Your turf profile has been updated.');
+      Alert.alert('Profile Saved', 'Your turf facilities and amenities have been updated.');
       setAmenitiesEditMode(false);
     } catch (err) {
-      Alert.alert('Save failed', typeof err === 'string' ? err : 'Please try again.');
+      Alert.alert('Save Failed', typeof err === 'string' ? err : 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -334,126 +235,173 @@ const TurfProfileScreen = ({ navigation, route }) => {
     setList((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   };
 
-  if (loading && !turf) {
-    return <ActivityIndicator color={colors.primary} style={{ flex: 1, marginTop: 60, backgroundColor: colors.background }} />;
-  }
-
   return (
-    <View style={styles.container}>
-      <View style={styles.customHeader}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} activeOpacity={0.7}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Top Navbar */}
+      <View style={styles.navBar}>
+        <TouchableOpacity
+          style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
           <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Turf Profile</Text>
+        <Text style={[styles.navTitle, { color: colors.text }]}>Turf Profile & Facilities</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <TurfHeaderCard turf={headerTurf} onEditLogo={() => pickSingleImage(setLogo)} onEditLocation={handlePickLocation} colors={colors} styles={styles} />
+        {/* Turf Header Banner Card */}
+        <View style={[styles.heroCard, SHADOWS.md]}>
+          <TouchableOpacity onPress={() => pickSingleImage(setLogo)} activeOpacity={0.85} style={styles.heroLogoWrap}>
+            {logo ? (
+              <Image source={{ uri: getImageUrl(logo) }} style={styles.heroLogo} />
+            ) : (
+              <View style={styles.heroLogoFallback}>
+                <Ionicons name="football" size={28} color="#00C566" />
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <Feather name="camera" size={11} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
 
-        <View style={styles.tabBar}>
-          {TABS.map((t, i) => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.tabBtn, activeTab === i && styles.tabBtnActive]}
-              onPress={() => setActiveTab(i)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabBtnText, activeTab === i && styles.tabBtnTextActive]}>{t}</Text>
-            </TouchableOpacity>
-          ))}
+          <View style={styles.heroInfo}>
+            <View style={styles.liveTagRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveTagText}>{turf?.status?.toUpperCase() || 'ACTIVE'}</Text>
+            </View>
+            <Text style={styles.heroTurfName} numberOfLines={1}>{turfName || 'Your Sports Arena'}</Text>
+            <Text style={styles.heroCity} numberOfLines={1}>
+              <Feather name="map-pin" size={12} color="#94A3B8" /> {city || address || 'Location not specified'}
+            </Text>
+          </View>
         </View>
 
-        {activeTab === 0 && (
-          <View>
-            <Text style={styles.sectionTitle}>Basic information</Text>
+        {/* Segmented Tab Pill Bar */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
+          {TABS.map((t, i) => {
+            const isActive = activeTab === i;
+            return (
+              <TouchableOpacity
+                key={t.key}
+                style={[
+                  styles.tabChip,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                  isActive && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => setActiveTab(i)}
+                activeOpacity={0.8}
+              >
+                <Feather name={t.icon} size={14} color={isActive ? '#FFFFFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+                <Text style={[styles.tabChipText, { color: isActive ? '#FFFFFF' : colors.text }]}>{t.title}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-            <Text style={styles.label}>Turf name</Text>
+        {/* Tab 0: Basic Info */}
+        {activeTab === 0 && (
+          <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Turf Information</Text>
+
+            <Text style={[styles.label, { color: colors.text }]}>Turf Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={turfName}
               onChangeText={setTurfName}
-              placeholder="Greenfield Turf Arena"
-              placeholderTextColor={colors.textLight || colors.textSecondary}
+              placeholder="e.g. Green Arena Sports Hub"
+              placeholderTextColor={colors.textSecondary}
             />
 
-            <Text style={styles.label}>Address</Text>
+            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Street Address</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={address}
               onChangeText={setAddress}
-              placeholder="Chennai"
-              placeholderTextColor={colors.textLight || colors.textSecondary}
+              placeholder="e.g. 124 Main Sports Road"
+              placeholderTextColor={colors.textSecondary}
             />
 
-            <Text style={styles.label}>City</Text>
+            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>City</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={city}
               onChangeText={setCity}
-              placeholder="RS Puram"
-              placeholderTextColor={colors.textLight || colors.textSecondary}
+              placeholder="e.g. Chennai"
+              placeholderTextColor={colors.textSecondary}
             />
 
-            <Text style={styles.label}>Pin code</Text>
+            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Postal Pin Code</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={pinCode}
               onChangeText={(t) => setPinCode(t.replace(/[^0-9]/g, ''))}
-              placeholder="638113"
-              placeholderTextColor={colors.textLight || colors.textSecondary}
+              placeholder="600001"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="number-pad"
               maxLength={6}
             />
 
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveInfo} disabled={saving} activeOpacity={0.85}>
-              {saving ? <ActivityIndicator color={colors.onAccent || '#FFFFFF'} /> : <Text style={styles.primaryBtnText}>Save & Next</Text>}
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSaveInfo} disabled={saving} activeOpacity={0.85}>
+              {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitBtnText}>Save & Next</Text>}
             </TouchableOpacity>
           </View>
         )}
 
+        {/* Tab 1: Timing & Slots */}
         {activeTab === 1 && (
-          <View>
-            <Text style={styles.sectionTitle}>Turf time</Text>
+          <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Operating Hours</Text>
 
-            <Text style={styles.labelCaps}>OPENING TIME</Text>
-            <TouchableOpacity style={styles.timeField} onPress={() => setPickerFor('open')} activeOpacity={0.8}>
-              <Text style={styles.timeFieldText}>{openingTime}</Text>
-              <Feather name="edit-2" size={15} color={colors.textSecondary} />
+            <Text style={[styles.label, { color: colors.text }]}>Opening Time</Text>
+            <TouchableOpacity
+              style={[styles.timeBtn, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+              onPress={() => setPickerFor('open')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.timeBtnText, { color: colors.text }]}>{openingTime}</Text>
+              <Feather name="clock" size={16} color={colors.primary} />
             </TouchableOpacity>
 
-            <Text style={[styles.labelCaps, { marginTop: 16 }]}>CLOSING TIME</Text>
-            <TouchableOpacity style={styles.timeField} onPress={() => setPickerFor('close')} activeOpacity={0.8}>
-              <Text style={styles.timeFieldText}>{closingTime}</Text>
-              <Feather name="edit-2" size={15} color={colors.textSecondary} />
+            <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Closing Time</Text>
+            <TouchableOpacity
+              style={[styles.timeBtn, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+              onPress={() => setPickerFor('close')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.timeBtnText, { color: colors.text }]}>{closingTime}</Text>
+              <Feather name="clock" size={16} color={colors.primary} />
             </TouchableOpacity>
 
-            <View style={[styles.slotCard, SHADOWS.sm]}>
-              <View style={styles.slotHeaderRow}>
-                <Feather name="clock" size={16} color={colors.primary} />
-                <Text style={styles.slotHeaderTitle}>Slot Duration</Text>
-              </View>
-              <Text style={styles.slotHeaderSub}>Select the Slot Duration</Text>
-              <View style={styles.slotOptionsRow}>
-                <TouchableOpacity
-                  style={[styles.slotOption, slotDuration === '60' && styles.slotOptionActive]}
-                  onPress={() => setSlotDuration('60')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.slotOptionText, slotDuration === '60' && styles.slotOptionTextActive]}>1 hours</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.slotOption, slotDuration === '30' && styles.slotOptionActive]}
-                  onPress={() => setSlotDuration('30')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.slotOptionText, slotDuration === '30' && styles.slotOptionTextActive]}>30 Min</Text>
-                </TouchableOpacity>
-              </View>
+            <Text style={[styles.label, { color: colors.text, marginTop: 16 }]}>Standard Slot Duration</Text>
+            <View style={styles.slotDurationRow}>
+              <TouchableOpacity
+                style={[
+                  styles.slotDurationBtn,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  slotDuration === '60' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => setSlotDuration('60')}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.slotDurationText, { color: slotDuration === '60' ? '#FFFFFF' : colors.text }]}>60 Minutes (1 Hour)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.slotDurationBtn,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  slotDuration === '30' && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => setSlotDuration('30')}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.slotDurationText, { color: slotDuration === '30' ? '#FFFFFF' : colors.text }]}>30 Minutes</Text>
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveTiming} disabled={saving} activeOpacity={0.85}>
-              {saving ? <ActivityIndicator color={colors.onAccent || '#FFFFFF'} /> : <Text style={styles.primaryBtnText}>Save & Next</Text>}
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSaveTiming} disabled={saving} activeOpacity={0.85}>
+              {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitBtnText}>Save & Next</Text>}
             </TouchableOpacity>
 
             <TimePickerModal
@@ -467,180 +415,111 @@ const TurfProfileScreen = ({ navigation, route }) => {
           </View>
         )}
 
+        {/* Tab 2: Pricing */}
         {activeTab === 2 && (
-          <View>
-            <Text style={styles.sectionTitle}>Price Details</Text>
+          <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Hourly Rates (₹)</Text>
 
-            <Text style={styles.label}>Base Price (per hour)</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.rupee}>₹</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={basePrice}
-                onChangeText={setBasePrice}
-                keyboardType="decimal-pad"
-                placeholder="100.00"
-                placeholderTextColor={colors.textLight || colors.textSecondary}
-              />
+            <Text style={[styles.label, { color: colors.text }]}>Base Price (Regular Hours)</Text>
+            <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={styles.rupeeSign}>₹</Text>
+              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={basePrice} onChangeText={setBasePrice} keyboardType="numeric" placeholder="800" placeholderTextColor={colors.textSecondary} />
             </View>
 
-            <Text style={styles.label}>Evening Price (After 6 PM)</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.rupee}>₹</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={eveningPrice}
-                onChangeText={setEveningPrice}
-                keyboardType="decimal-pad"
-                placeholder="100"
-                placeholderTextColor={colors.textLight || colors.textSecondary}
-              />
+            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Evening Price (After 6 PM)</Text>
+            <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={styles.rupeeSign}>₹</Text>
+              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={eveningPrice} onChangeText={setEveningPrice} keyboardType="numeric" placeholder="1000" placeholderTextColor={colors.textSecondary} />
             </View>
 
-            <Text style={styles.label}>Weekend Price</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.rupee}>₹</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={weekendPrice}
-                onChangeText={setWeekendPrice}
-                keyboardType="decimal-pad"
-                placeholder="100"
-                placeholderTextColor={colors.textLight || colors.textSecondary}
-              />
+            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Weekend Price</Text>
+            <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={styles.rupeeSign}>₹</Text>
+              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={weekendPrice} onChangeText={setWeekendPrice} keyboardType="numeric" placeholder="1200" placeholderTextColor={colors.textSecondary} />
             </View>
 
-            <Text style={styles.label}>Ball price</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.rupee}>₹</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={ballPrice}
-                onChangeText={setBallPrice}
-                keyboardType="decimal-pad"
-                placeholder="80"
-                placeholderTextColor={colors.textLight || colors.textSecondary}
-              />
+            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Equipment / Ball Addon Price</Text>
+            <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={styles.rupeeSign}>₹</Text>
+              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={ballPrice} onChangeText={setBallPrice} keyboardType="numeric" placeholder="50" placeholderTextColor={colors.textSecondary} />
             </View>
 
-            <Text style={styles.label}>Weekend Evening (After 6 PM)</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.rupee}>₹</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={weekendEveningPrice}
-                onChangeText={setWeekendEveningPrice}
-                keyboardType="decimal-pad"
-                placeholder="100"
-                placeholderTextColor={colors.textLight || colors.textSecondary}
-              />
-            </View>
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSavePricing} disabled={saving} activeOpacity={0.85}>
-              {saving ? <ActivityIndicator color={colors.onAccent || '#FFFFFF'} /> : <Text style={styles.primaryBtnText}>Save & Next</Text>}
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSavePricing} disabled={saving} activeOpacity={0.85}>
+              {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitBtnText}>Save & Next</Text>}
             </TouchableOpacity>
           </View>
         )}
 
+        {/* Tab 3: Sports & Amenities */}
         {activeTab === 3 && (
-          <View>
-            <Text style={styles.sectionTitle}>Available sport</Text>
+          <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Sports Offered</Text>
             <View style={styles.chipGrid}>
-              {sports.map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.chipBox, selectedSports.includes(s) && styles.chipBoxActive]}
-                  onPress={() => toggleSelected(selectedSports, setSelectedSports, s)}
-                  activeOpacity={0.8}
-                >
-                  <Icon family="mci" name={SPORT_ICON[s] || 'run'} size={18} color={selectedSports.includes(s) ? (colors.onAccent || '#FFFFFF') : colors.text} />
-                  <Text style={[styles.chipBoxText, selectedSports.includes(s) && styles.chipBoxTextActive]}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity style={styles.chipBoxAdd} onPress={() => setAddModal('sport')} activeOpacity={0.8}>
-                <Feather name="plus" size={18} color={colors.textSecondary} />
-                <Text style={styles.chipBoxAddText}>Add new</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Amenities</Text>
-            <View style={styles.chipGrid}>
-              {amenities.map((a) => {
-                const amenityDef = DEFAULT_AMENITIES.find((d) => d.key === a);
-                const active = selectedAmenities.includes(a);
+              {sports.map((s) => {
+                const isSelected = selectedSports.includes(s);
                 return (
                   <TouchableOpacity
-                    key={a}
-                    style={[styles.chipBox, active && styles.chipBoxActive]}
-                    onPress={() => toggleSelected(selectedAmenities, setSelectedAmenities, a)}
+                    key={s}
+                    style={[
+                      styles.sportPill,
+                      { backgroundColor: colors.inputBg, borderColor: colors.border },
+                      isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                    onPress={() => toggleSelected(selectedSports, setSelectedSports, s)}
                     activeOpacity={0.8}
                   >
-                    <Icon family="mci" name={amenityDef?.icon || 'check-circle'} size={18} color={active ? (colors.onAccent || '#FFFFFF') : colors.text} />
-                    <Text style={[styles.chipBoxText, active && styles.chipBoxTextActive]}>{a}</Text>
+                    <Text style={[styles.sportPillText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{s}</Text>
                   </TouchableOpacity>
                 );
               })}
-              <TouchableOpacity style={styles.chipBoxAdd} onPress={() => setAddModal('amenity')} activeOpacity={0.8}>
-                <Feather name="plus" size={18} color={colors.textSecondary} />
-                <Text style={styles.chipBoxAddText}>Add new</Text>
-              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.cardTitle, { color: colors.text, marginTop: 22 }]}>Turf Amenities</Text>
+            <View style={styles.chipGrid}>
+              {amenities.map((a) => {
+                const isSelected = selectedAmenities.includes(a);
+                return (
+                  <TouchableOpacity
+                    key={a}
+                    style={[
+                      styles.sportPill,
+                      { backgroundColor: colors.inputBg, borderColor: colors.border },
+                      isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                    onPress={() => toggleSelected(selectedAmenities, setSelectedAmenities, a)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.sportPillText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{a}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <View style={styles.imagesHeaderRow}>
-              <Text style={styles.sectionTitle}>Turf Images</Text>
-              <TouchableOpacity style={styles.editImagesBtn} onPress={() => setAmenitiesEditMode((v) => !v)} activeOpacity={0.8}>
-                <Feather name="edit-2" size={13} color={colors.primary} />
-                <Text style={styles.editImagesBtnText}>Edit</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, marginTop: 22 }]}>Gallery Photos</Text>
+              <TouchableOpacity style={styles.addPhotosBtn} onPress={pickMultipleImages} activeOpacity={0.7}>
+                <Feather name="plus-circle" size={15} color={colors.primary} />
+                <Text style={[styles.addPhotosText, { color: colors.primary }]}>Add Photos</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.imageGrid}>
+            <View style={styles.imageGalleryGrid}>
               {turfImages.map((uri, idx) => (
-                <View key={`${uri}-${idx}`} style={styles.imageItemWrap}>
-                  <Image source={{ uri: getImageUrl(uri) }} style={styles.imageItem} />
-                  {amenitiesEditMode && (
-                    <TouchableOpacity
-                      style={styles.imageRemoveBtn}
-                      onPress={() => setTurfImages((prev) => prev.filter((_, i) => i !== idx))}
-                    >
-                      <Feather name="x" size={12} color={colors.onAccent || '#FFFFFF'} />
-                    </TouchableOpacity>
-                  )}
+                <View key={`${uri}-${idx}`} style={styles.galleryItem}>
+                  <Image source={{ uri: getImageUrl(uri) }} style={styles.galleryThumb} />
+                  <TouchableOpacity
+                    style={styles.galleryRemoveBtn}
+                    onPress={() => setTurfImages((prev) => prev.filter((_, i) => i !== idx))}
+                  >
+                    <Feather name="x" size={12} color="#FFFFFF" />
+                  </TouchableOpacity>
                 </View>
               ))}
-              {amenitiesEditMode && (
-                <TouchableOpacity style={styles.imageAddBox} onPress={pickMultipleImages} activeOpacity={0.8}>
-                  <Feather name="plus" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
             </View>
 
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleSaveAmenities} disabled={saving} activeOpacity={0.85}>
-              {saving ? <ActivityIndicator color={colors.onAccent || '#FFFFFF'} /> : <Text style={styles.primaryBtnText}>Save Changes</Text>}
+            <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSaveAmenities} disabled={saving} activeOpacity={0.85}>
+              {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitBtnText}>Save Turf Profile</Text>}
             </TouchableOpacity>
-
-            <AddItemModal
-              visible={addModal === 'sport'}
-              title="Add a sport"
-              onClose={() => setAddModal(null)}
-              onAdd={(val) => {
-                setSports((prev) => (prev.includes(val) ? prev : [...prev, val]));
-                setSelectedSports((prev) => (prev.includes(val) ? prev : [...prev, val]));
-              }}
-              colors={colors}
-              styles={styles}
-            />
-            <AddItemModal
-              visible={addModal === 'amenity'}
-              title="Add an amenity"
-              onClose={() => setAddModal(null)}
-              onAdd={(val) => {
-                setAmenities((prev) => (prev.includes(val) ? prev : [...prev, val]));
-                setSelectedAmenities((prev) => (prev.includes(val) ? prev : [...prev, val]));
-              }}
-              colors={colors}
-              styles={styles}
-            />
           </View>
         )}
       </ScrollView>
@@ -649,155 +528,305 @@ const TurfProfileScreen = ({ navigation, route }) => {
 };
 
 const getStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  customHeader: {
+  container: { flex: 1 },
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SIZES.padding,
-    paddingVertical: 12,
-    backgroundColor: colors.card || colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  backButton: {
+  backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.inputBg || colors.border,
+    borderWidth: 1,
   },
-  headerTitle: {
-    fontSize: SIZES.lg,
+  navTitle: {
+    fontSize: SIZES.base,
     fontWeight: '700',
-    color: colors.text,
   },
-  content: { paddingHorizontal: SIZES.padding, paddingBottom: 50, paddingTop: 14 },
+  content: {
+    paddingHorizontal: SIZES.padding,
+    paddingBottom: 40,
+  },
 
-  headerCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.isDark ? '#064E3B' : '#0F5132',
-    borderRadius: SIZES.radiusLg, padding: 16, marginBottom: 18,
+  heroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: SIZES.radiusLg,
+    padding: 16,
+    marginBottom: 16,
   },
-  headerLogoWrap: { position: 'relative' },
-  headerLogo: { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.card || colors.background },
-  headerLogoFallback: {
-    width: 56, height: 56, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
+  heroLogoWrap: {
+    position: 'relative',
+    marginRight: 14,
   },
-  headerLogoEditBadge: {
-    position: 'absolute', bottom: -4, right: -4, width: 22, height: 22, borderRadius: 11,
-    backgroundColor: colors.card || '#FFFFFF', alignItems: 'center', justifyContent: 'center',
+  heroLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
   },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ADE80' },
-  statusText: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.5 },
-  headerName: { fontSize: SIZES.lg, fontWeight: '800', color: '#FFFFFF' },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  locationText: { fontSize: SIZES.xs, color: 'rgba(255,255,255,0.8)' },
+  heroLogoFallback: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#00C566',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#0F172A',
+  },
+  heroInfo: {
+    flex: 1,
+  },
+  liveTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 2,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00C566',
+  },
+  liveTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#00C566',
+    letterSpacing: 0.5,
+  },
+  heroTurfName: {
+    fontSize: SIZES.base + 1,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  heroCity: {
+    fontSize: SIZES.xs,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
 
-  tabBar: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
-  tabBtn: {
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: SIZES.radius,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card || colors.background,
+  tabScroll: {
+    marginBottom: 16,
   },
-  tabBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  tabBtnText: { fontSize: SIZES.sm, fontWeight: '600', color: colors.text },
-  tabBtnTextActive: { color: colors.onAccent || '#FFFFFF' },
+  tabChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  tabChipText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
 
-  sectionTitle: { fontSize: SIZES.lg, fontWeight: '800', color: colors.text, marginBottom: 14 },
-  label: { fontSize: SIZES.sm, color: colors.textSecondary, marginBottom: 6, marginTop: 4 },
-  labelCaps: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5, marginBottom: 6 },
+  formCard: {
+    borderRadius: SIZES.radiusLg,
+    padding: 20,
+    borderWidth: 1,
+  },
+  cardTitle: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
   input: {
-    backgroundColor: colors.card || colors.background, borderRadius: SIZES.radius, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 14, height: 48, fontSize: SIZES.base, color: colors.text, marginBottom: 4,
+    borderRadius: SIZES.radius,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: SIZES.sm,
+  },
+  timeBtn: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: SIZES.radius,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  timeBtnText: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
+  slotDurationRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  slotDurationBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: SIZES.radius,
+    borderWidth: 1,
+  },
+  slotDurationText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
   },
 
-  timeField: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.card || colors.background, borderRadius: SIZES.radius, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 14, height: 48,
+  priceInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: SIZES.radius,
+    borderWidth: 1,
+    paddingHorizontal: 14,
   },
-  timeFieldText: { fontSize: SIZES.base, fontWeight: '600', color: colors.text },
-  slotCard: { backgroundColor: colors.card || colors.background, borderRadius: SIZES.radiusLg, padding: 16, marginTop: 20 },
-  slotHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  slotHeaderTitle: { fontSize: SIZES.base, fontWeight: '700', color: colors.text },
-  slotHeaderSub: { fontSize: SIZES.xs, color: colors.textSecondary, marginTop: 2, marginBottom: 14 },
-  slotOptionsRow: { flexDirection: 'row', gap: 12 },
-  slotOption: {
-    flex: 1, borderRadius: SIZES.radius, borderWidth: 1, borderColor: colors.border,
-    paddingVertical: 14, alignItems: 'center', backgroundColor: colors.background,
+  rupeeSign: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+    color: '#00C566',
+    marginRight: 8,
   },
-  slotOptionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  slotOptionText: { fontSize: SIZES.base, fontWeight: '700', color: colors.text },
-  slotOptionTextActive: { color: colors.onAccent || '#FFFFFF' },
-
-  priceInputRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card || colors.background,
-    borderRadius: SIZES.radius, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 14, height: 48, marginBottom: 4,
-  },
-  rupee: { fontSize: SIZES.base, color: colors.textSecondary, marginRight: 6 },
-  priceInput: { flex: 1, fontSize: SIZES.base, color: colors.text },
-
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  chipBox: {
-    width: 96, height: 76, borderRadius: SIZES.radius, backgroundColor: colors.card || colors.background,
-    borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  chipBoxActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipBoxText: { fontSize: SIZES.xs, fontWeight: '600', color: colors.text },
-  chipBoxTextActive: { color: colors.onAccent || '#FFFFFF' },
-  chipBoxAdd: {
-    width: 96, height: 76, borderRadius: SIZES.radius, backgroundColor: colors.background,
-    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  chipBoxAddText: { fontSize: SIZES.xs, fontWeight: '600', color: colors.textSecondary },
-
-  imagesHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  editImagesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  editImagesBtnText: { fontSize: SIZES.sm, fontWeight: '700', color: colors.primary },
-  imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  imageItemWrap: { position: 'relative' },
-  imageItem: { width: 96, height: 96, borderRadius: SIZES.radius, backgroundColor: colors.border },
-  imageRemoveBtn: {
-    position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10,
-    backgroundColor: colors.error, alignItems: 'center', justifyContent: 'center',
-  },
-  imageAddBox: {
-    width: 96, height: 96, borderRadius: SIZES.radius, borderWidth: 1, borderColor: colors.border,
-    borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background,
+  priceTextInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: SIZES.sm,
+    fontWeight: '700',
   },
 
-  primaryBtn: {
-    backgroundColor: colors.primary, borderRadius: SIZES.radiusLg,
-    paddingVertical: 16, alignItems: 'center', marginTop: 28,
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  primaryBtnText: { color: colors.onAccent || '#FFFFFF', fontWeight: '700', fontSize: SIZES.base },
+  sportPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  sportPillText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: colors.card || colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 30 },
-  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 },
-  modalTitle: { fontSize: SIZES.lg, fontWeight: '800', color: colors.text, marginBottom: 10 },
+  imagesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addPhotosBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 22,
+  },
+  addPhotosText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
+  imageGalleryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 10,
+  },
+  galleryItem: {
+    position: 'relative',
+  },
+  galleryThumb: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+  },
+  galleryRemoveBtn: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  submitBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: SIZES.radius,
+    paddingVertical: 14,
+    marginTop: 24,
+  },
+  submitBtnText: {
+    color: '#FFFFFF',
+    fontSize: SIZES.sm,
+    fontWeight: '800',
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 30,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
   timeOption: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 13, paddingHorizontal: 6, borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
   },
-  timeOptionActive: { backgroundColor: colors.isDark ? '#064E3B' : '#D1FAE5', borderRadius: 8 },
-  timeOptionText: { fontSize: SIZES.base, color: colors.text },
-  timeOptionTextActive: { color: colors.primary, fontWeight: '700' },
-  modalCancelBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 12 },
-  modalCancelText: { fontSize: SIZES.base, fontWeight: '700', color: colors.textSecondary },
-
-  addItemSheet: { backgroundColor: colors.card || colors.background, borderRadius: SIZES.radiusLg, padding: 20, marginHorizontal: 24, marginBottom: 'auto', marginTop: 'auto' },
-  addItemInput: {
-    backgroundColor: colors.background, borderRadius: SIZES.radius, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 14, height: 46, fontSize: SIZES.base, color: colors.text, marginTop: 10,
+  timeOptionText: {
+    fontSize: SIZES.sm,
+    fontWeight: '600',
   },
-  modalCancelBtnSmall: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: SIZES.radius, backgroundColor: colors.background },
-  modalAddBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: SIZES.radius, backgroundColor: colors.primary },
-  modalAddBtnText: { color: colors.onAccent || '#FFFFFF', fontWeight: '700' },
+  modalCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+  modalCancelText: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
 });
 
 export default TurfProfileScreen;

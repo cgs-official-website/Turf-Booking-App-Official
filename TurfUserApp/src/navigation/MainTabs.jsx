@@ -1,30 +1,40 @@
-
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import Icon from 'react-native-vector-icons/Ionicons';
+import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
-import HomeScreen       from '../screens/HomeScreen';
+import HomeScreen from '../screens/HomeScreen';
 import MyBookingsScreen from '../screens/MyBookingsScreen';
-import WishlistScreen   from '../screens/WishlistScreen';
-import ProfileScreen    from '../screens/ProfileScreen';
+import WishlistScreen from '../screens/WishlistScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import { RADIUS, SHADOW } from '../utils/theme';
 
 const Tab = createBottomTabNavigator();
 
-const TAB_ICONS = {
-  Home:     { active: 'home',     inactive: 'home-outline'     },
-  Bookings: { active: 'calendar', inactive: 'calendar-outline' },
-  Wishlist: { active: 'heart',    inactive: 'heart-outline'    },
-  Profile:  { active: 'person',   inactive: 'person-outline'   },
+const TAB_CONFIG = {
+  Home:     { label: 'Explore',  icon: 'compass', activeIcon: 'compass' },
+  Bookings: { label: 'Bookings', icon: 'calendar', activeIcon: 'calendar' },
+  Wishlist: { label: 'Saved',    icon: 'heart',    activeIcon: 'heart' },
+  Profile:  { label: 'Profile',  icon: 'user',     activeIcon: 'user' },
 };
 
-// Wrapper — hooks inside Tab.Navigator screenOptions செய்ய முடியாது
-// So ஒரு wrapper component use பண்றோம்
-function TabBarIcon({ route, color, focused }) {
-  const icons = TAB_ICONS[route.name];
+function TabBarIcon({ route, focused, colors }) {
+  const conf = TAB_CONFIG[route.name] || TAB_CONFIG.Home;
   return (
-    <View style={[s.iconWrap, focused && s.iconWrapActive]}>
-      <Icon name={focused ? icons.active : icons.inactive} size={22} color={color} />
+    <View
+      style={[
+        styles.iconWrap,
+        focused && {
+          backgroundColor: colors.primaryLight,
+        },
+      ]}
+    >
+      <Feather
+        name={conf.icon}
+        size={20}
+        color={focused ? colors.primary : colors.subtext}
+      />
     </View>
   );
 }
@@ -36,44 +46,48 @@ export default function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor:   C.primary,
+        tabBarActiveTintColor: C.primary,
         tabBarInactiveTintColor: C.subtext,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
-          // ── Capsule style ──
-          position:        'absolute',
-          bottom:          20,
-          left:            20,
-          right:           20,
-          backgroundColor: dark ? C.card : '#fff',
-          borderRadius:    32,
-          height:          64,
-          paddingBottom:   8,
-          paddingTop:      8,
-          borderTopWidth:  0,
-          // Shadow
-          shadowColor:     '#000',
-          shadowOffset:    { width: 0, height: 4 },
-          shadowOpacity:   dark ? 0.4 : 0.12,
-          shadowRadius:    16,
-          elevation:       10,
-          borderWidth:     dark ? 1 : 0,
-          borderColor:     dark ? C.border : 'transparent',
+          position: 'absolute',
+          bottom: Platform.OS === 'ios' ? 24 : 14,
+          left: 16,
+          right: 16,
+          backgroundColor: dark ? '#131E2F' : '#FFFFFF',
+          borderRadius: 32,
+          height: 64,
+          paddingBottom: 6,
+          paddingTop: 6,
+          borderTopWidth: 0,
+          borderWidth: 1.5,
+          borderColor: dark ? '#223249' : '#E2E8F0',
+          ...SHADOW.floating,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
-        tabBarIcon: ({ color, focused }) => (
-          <TabBarIcon route={route} color={color} focused={focused} />
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '700',
+          marginTop: -2,
+        },
+        tabBarIcon: ({ focused }) => (
+          <TabBarIcon route={route} focused={focused} colors={C} />
         ),
       })}
     >
-      <Tab.Screen name="Home"     component={HomeScreen} />
-      <Tab.Screen name="Bookings" component={MyBookingsScreen} />
-      <Tab.Screen name="Wishlist" component={WishlistScreen} />
-      <Tab.Screen name="Profile"  component={ProfileScreen} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Explore' }} />
+      <Tab.Screen name="Bookings" component={MyBookingsScreen} options={{ tabBarLabel: 'Bookings' }} />
+      <Tab.Screen name="Wishlist" component={WishlistScreen} options={{ tabBarLabel: 'Saved' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );
 }
 
-const s = StyleSheet.create({
-  iconWrap:       { padding: 4, borderRadius: 10 },
-  iconWrapActive: { backgroundColor: 'rgba(12,176,83,0.12)' },
+const styles = StyleSheet.create({
+  iconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

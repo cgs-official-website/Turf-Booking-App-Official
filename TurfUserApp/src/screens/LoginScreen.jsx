@@ -1,26 +1,25 @@
-// src/screens/LoginScreen.jsx
-// This is the "Let's get started" screen (kept the filename/route "Login" so
-// RootNavigator + everything that navigates to 'Login' keeps working).
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, Image, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { sendOtp, googleLogin } from '../redux/authSlice';
-import { SPACING, RADIUS } from '../utils/theme';
-import useTheme from '../hooks/useTheme';
 import { signInWithGoogle } from '../utils/googleSignIn';
-import Icon from 'react-native-vector-icons/Ionicons';
+import useTheme from '../hooks/useTheme';
+import PrimaryButton from '../components/PrimaryButton';
+import SecondaryButton from '../components/SecondaryButton';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const background = require('../assets/background.jpg');
 const logo       = require('../assets/logo.png');
 
 export default function LoginScreen({ navigation }) {
   const dispatch = useDispatch();
-  const { C } = useTheme();
-  const { status } = useSelector((s) => s.auth);
+  const { C, dark } = useTheme();
 
   const [mode, setMode]   = useState('select'); // 'select' | 'phone'
   const [phone, setPhone] = useState('');
@@ -30,7 +29,7 @@ export default function LoginScreen({ navigation }) {
   const handleSendOtp = async () => {
     const clean = phone.trim();
     if (clean.length !== 10) {
-      Alert.alert('Invalid number', 'Please enter a valid 10 digit mobile number');
+      Alert.alert('Invalid number', 'Please enter a valid 10-digit mobile number');
       return;
     }
     setOtpLoading(true);
@@ -38,7 +37,7 @@ export default function LoginScreen({ navigation }) {
       await dispatch(sendOtp({ phone: clean })).unwrap();
       navigation.navigate('OTP', { phone: clean });
     } catch (e) {
-      Alert.alert('Failed', e.message || 'Could not send OTP, try again');
+      Alert.alert('Failed', e.message || 'Could not send OTP, please try again');
     } finally {
       setOtpLoading(false);
     }
@@ -48,11 +47,9 @@ export default function LoginScreen({ navigation }) {
     setGoogleLoading(true);
     try {
       const profile = await signInWithGoogle();
-      // Navigation onward (Location vs Home) is handled automatically by
-      // RootNavigator once token + locationSet update in the store.
       await dispatch(googleLogin(profile)).unwrap();
     } catch (e) {
-      if (e?.code !== '12501') { // user cancelled the Google sheet — no need to alert
+      if (e?.code !== '12501') {
         Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
       }
     } finally {
@@ -63,78 +60,81 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={styles.root}>
       <Image source={background} style={styles.bg} resizeMode="cover" />
-      <View style={styles.overlay} />
+      <View style={[styles.overlay, { backgroundColor: C.overlay }]} />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
+          {/* Floating Logo Badge */}
           <View style={styles.logoWrap}>
-            <View style={[styles.logoCircle, { backgroundColor: C.card }]}>
+            <View style={[styles.logoCircle, { backgroundColor: C.card }, SHADOW.floating]}>
               <Image source={logo} style={styles.logo} resizeMode="contain" />
             </View>
           </View>
 
-          <View style={[styles.card, { backgroundColor: C.card }]}>
+          {/* Main Card Surface */}
+          <View style={[styles.card, { backgroundColor: C.card }, SHADOW.card]}>
             <View style={styles.titleRow}>
               <Text style={[styles.title, { color: C.text }]}>Let's get started</Text>
-              <Icon name="hand-right-outline" size={20} color={C.text} style={styles.titleIcon} />
+              <Feather name="activity" size={20} color={C.primary} style={{ marginLeft: 6 }} />
             </View>
 
             {mode === 'select' ? (
               <>
                 <Text style={[styles.subtitle, { color: C.subtext }]}>
-                  Choose how you'd like to continue
+                  Book verified turf grounds & track live matches
                 </Text>
 
-                <TouchableOpacity
-                  style={[styles.optionBtn, { borderColor: C.border }]}
+                <PrimaryButton
+                  title="Continue with Mobile"
+                  icon={<Feather name="phone" size={18} color="#FFFFFF" />}
                   onPress={() => setMode('phone')}
-                >
-                  <Icon name="call-outline" size={18} color={C.text} />
-                  <Text style={[styles.optionText, { color: C.text }]}>Continue with phone</Text>
-                </TouchableOpacity>
+                  style={{ marginBottom: 12 }}
+                />
 
-                <View style={styles.dividerRow}>
-                  <View style={[styles.dividerLine, { backgroundColor: C.border }]} />
-                  <Text style={[styles.dividerText, { color: C.subtext }]}>or</Text>
-                  <View style={[styles.dividerLine, { backgroundColor: C.border }]} />
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.optionBtn, { borderColor: C.border }, googleLoading && { opacity: 0.6 }]}
+                <SecondaryButton
+                  title="Sign in with Google"
+                  icon={<Ionicons name="logo-google" size={18} color="#EA4335" />}
                   onPress={handleGoogle}
                   disabled={googleLoading}
-                >
-                  {googleLoading ? (
-                    <ActivityIndicator color={C.text} />
-                  ) : (
-                    <>
-                      <Icon name="logo-google" size={18} color="#EA4335" />
-                      <Text style={[styles.optionText, { color: C.text }]}>Sign in with Google</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                  style={{ marginBottom: 12 }}
+                />
 
-                <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.registerRow}>
+                <SecondaryButton
+                  title="Sign in with Email"
+                  icon={<Feather name="mail" size={18} color={C.primary} />}
+                  onPress={() => navigation.navigate('Login2')}
+                  outlined={false}
+                  style={{ marginBottom: 16 }}
+                />
+
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Register')}
+                  style={styles.registerRow}
+                  activeOpacity={0.7}
+                >
                   <Text style={[styles.registerText, { color: C.subtext }]}>
-                    New here?{' '}
-                    <Text style={{ color: C.primary, fontWeight: '700' }}>Create Account</Text>
+                    New player?{' '}
+                    <Text style={{ color: C.primary, fontWeight: '800' }}>Create Account</Text>
                   </Text>
                 </TouchableOpacity>
               </>
             ) : (
               <>
                 <Text style={[styles.subtitle, { color: C.subtext }]}>
-                  Enter your mobile number to continue
+                  Enter your 10-digit mobile number for instant verification
                 </Text>
 
-                <View style={[styles.phoneRow, { borderColor: C.border }]}>
-                  <Text style={[styles.countryCode, { color: C.text }]}>+91</Text>
-                  <Icon name="call-outline" size={16} color={C.subtext} style={{ marginHorizontal: 8 }} />
+                <View style={[styles.phoneRow, { borderColor: C.borderFocus || C.primary, backgroundColor: C.bgSoft }]}>
+                  <View style={styles.flagWrap}>
+                    <Feather name="globe" size={15} color={C.primary} />
+                    <Text style={[styles.countryCode, { color: C.text }]}>+91</Text>
+                  </View>
+                  <View style={[styles.verticalDivider, { backgroundColor: C.border }]} />
                   <TextInput
                     style={[styles.phoneInput, { color: C.text }]}
                     placeholder="98765 43210"
-                    placeholderTextColor={C.subtext}
+                    placeholderTextColor={C.caption}
                     keyboardType="number-pad"
                     maxLength={10}
                     value={phone}
@@ -143,27 +143,29 @@ export default function LoginScreen({ navigation }) {
                   />
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.primaryBtn, { backgroundColor: C.primary }, otpLoading && { opacity: 0.7 }]}
+                <PrimaryButton
+                  title="Send Verification OTP →"
                   onPress={handleSendOtp}
-                  disabled={otpLoading}
-                >
-                  {otpLoading
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={styles.primaryBtnText}>Send OTP →</Text>
-                  }
-                </TouchableOpacity>
+                  loading={otpLoading}
+                  style={{ marginBottom: 12 }}
+                />
 
-                <TouchableOpacity onPress={() => setMode('select')} style={styles.registerRow}>
-                  <Text style={[styles.registerText, { color: C.subtext }]}>← Back</Text>
+                <TouchableOpacity
+                  onPress={() => setMode('select')}
+                  style={styles.registerRow}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.registerText, { color: C.primary, fontWeight: '700' }]}>
+                    ← Choose other sign-in method
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
 
             <View style={styles.footNoteRow}>
-              <Icon name="lock-closed-outline" size={12} color={C.subtext} />
-              <Text style={[styles.footNote, { color: C.subtext }]}>
-                We will never share your information with anyone
+              <Feather name="shield" size={12} color={C.caption} style={{ marginRight: 4 }} />
+              <Text style={[styles.footNote, { color: C.caption }]}>
+                Secured by Turf Booking Security Shield
               </Text>
             </View>
           </View>
@@ -176,29 +178,24 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   root:         { flex: 1 },
   bg:           { position: 'absolute', width: '100%', height: '100%' },
-  overlay:      { position: 'absolute', width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.45)' },
+  overlay:      { position: 'absolute', width: '100%', height: '100%' },
   kav:          { flex: 1 },
-  scroll:       { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: SPACING.lg, paddingBottom: 40 },
-  logoWrap:     { alignItems: 'center', marginBottom: -50, zIndex: 10 },
-  logoCircle:   { width: 140, height: 140, borderRadius: 70, justifyContent: 'center', alignItems: 'center', elevation: 6 },
-  logo:         { width: 90, height: 90 },
-  card:         { borderRadius: RADIUS.xl, padding: SPACING.xl, paddingTop: 64 },
-  titleRow:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 6 },
-  title:        { fontSize: 22, fontWeight: '800', textAlign: 'center' },
-  titleIcon:    { marginTop: 2 },
-  subtitle:     { fontSize: 13, textAlign: 'center', marginBottom: SPACING.xl },
-  optionBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderWidth: 1, borderRadius: RADIUS.lg, paddingVertical: 14, marginBottom: 12 },
-  optionText:   { fontSize: 15, fontWeight: '600' },
-  dividerRow:   { flexDirection: 'row', alignItems: 'center', marginVertical: 8, gap: 10 },
-  dividerLine:  { flex: 1, height: 1 },
-  dividerText:  { fontSize: 12 },
-  phoneRow:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, marginBottom: SPACING.lg },
-  countryCode:  { fontSize: 15, fontWeight: '600' },
-  phoneInput:   { flex: 1, paddingVertical: 14, fontSize: 15 },
-  primaryBtn:   { paddingVertical: 16, borderRadius: RADIUS.lg, alignItems: 'center', marginBottom: SPACING.md },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  scroll:       { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: SPACING.lg, paddingBottom: 32 },
+  logoWrap:     { alignItems: 'center', marginBottom: -48, zIndex: 10 },
+  logoCircle:   { width: 120, height: 120, borderRadius: 60, justifyContent: 'center', alignItems: 'center' },
+  logo:         { width: 75, height: 75 },
+  card:         { borderRadius: RADIUS.xxl, padding: SPACING.xl, paddingTop: 60 },
+  titleRow:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  title:        { ...FONT.h1, fontSize: 22 },
+  emoji:        { fontSize: 20, marginLeft: 6 },
+  subtitle:     { ...FONT.body, fontSize: 13, textAlign: 'center', marginBottom: SPACING.xl },
+  phoneRow:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, marginBottom: SPACING.lg },
+  flagWrap:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  countryCode:  { fontSize: 15, fontWeight: '700' },
+  verticalDivider: { width: 1, height: 24, marginHorizontal: 10 },
+  phoneInput:   { flex: 1, paddingVertical: 14, fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
   registerRow:  { alignItems: 'center', marginTop: 4, marginBottom: 8 },
   registerText: { fontSize: 13 },
-  footNoteRow:  { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, marginTop: 8 },
-  footNote:     { fontSize: 11, textAlign: 'center' },
+  footNoteRow:  { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14 },
+  footNote:     { fontSize: 11, fontWeight: '500' },
 });

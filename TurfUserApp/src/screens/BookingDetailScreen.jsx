@@ -3,23 +3,27 @@ import {
   View, Text, StyleSheet, ScrollView,
   TouchableOpacity, Share, Alert, ActivityIndicator,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
+import Feather from 'react-native-vector-icons/Feather';
 import { bookingsApi } from '../api/bookings';
+import useTheme from '../hooks/useTheme';
+import PrimaryButton from '../components/PrimaryButton';
+import SecondaryButton from '../components/SecondaryButton';
+import { RatingBadge, StatusBadge } from '../components/RatingBadge';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const fmtDate = (d) => {
   if (!d) return '';
   return new Date(d).toLocaleDateString('en-IN', {
-    weekday: 'long', day: 'numeric', month: 'short', year: 'numeric',
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
   });
 };
 
 export default function BookingDetailScreen({ route, navigation }) {
   const { bookingId } = route.params;
+  const { C, dark } = useTheme();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Fetch booking from backend ────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -35,17 +39,17 @@ export default function BookingDetailScreen({ route, navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
+      <View style={[styles.loading, { backgroundColor: C.bg }]}>
+        <ActivityIndicator color={C.primary} size="large" />
       </View>
     );
   }
 
   if (!booking) {
     return (
-      <View style={styles.loading}>
-        <Icon name="alert-circle-outline" size={48} color={COLORS.primary} />
-        <Text style={{ color: COLORS.text, marginTop: 12 }}>Booking not found</Text>
+      <View style={[styles.loading, { backgroundColor: C.bg }]}>
+        <Feather name="alert-circle" size={48} color={C.primary} />
+        <Text style={{ color: C.text, marginTop: 12 }}>Booking not found</Text>
       </View>
     );
   }
@@ -57,303 +61,257 @@ export default function BookingDetailScreen({ route, navigation }) {
   const isPaid    = booking.paymentStatus === 'paid';
   const status    = booking.status;
 
-  // ── Rejected Screen ────────────────────────────────────────────────────────
-  if (status === 'rejected') {
-    return (
-      <View style={styles.root}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.backBtn}>
-            <Icon name="arrow-back" size={20} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Booking Status</Text>
-          <View style={{ width: 38 }} />
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-          <View style={[styles.successBanner, { backgroundColor: '#fef2f2' }]}>
-            <View style={[styles.successCircle, { backgroundColor: '#ef4444' }]}>
-              <Icon name="close" size={34} color="#fff" />
-            </View>
-            <Text style={[styles.successTitle, { color: '#991b1b' }]}>Booking Rejected</Text>
-            <Text style={[styles.successSub, { color: '#b91c1c' }]}>
-              {booking.rejectionReason || 'Vendor declined your request'}
-            </Text>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Icon name="ticket-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.cardTitle}>Booking Summary</Text>
-            </View>
-            {[
-              { icon: 'location-outline', label: 'Venue',      value: booking.turf?.name },
-              { icon: 'time-outline',     label: 'Time',       value: `${booking.startTime} to ${booking.endTime}` },
-              { icon: 'calendar-outline', label: 'Date',       value: fmtDate(booking.date) },
-              { icon: 'receipt-outline',  label: 'Booking ID', value: displayId },
-            ].map((row) => (
-              <View key={row.label} style={styles.summaryRow}>
-                <View style={styles.summaryLeft}>
-                  <Icon name={row.icon} size={15} color={COLORS.subtext} />
-                  <Text style={styles.summaryLabel}>{row.label}</Text>
-                </View>
-                <Text style={styles.summaryValue}>{row.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={[styles.card, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Icon name="information-circle-outline" size={20} color="#ef4444" />
-              <Text style={{ color: '#991b1b', fontWeight: '700', fontSize: 14 }}>What's next?</Text>
-            </View>
-            <Text style={{ color: '#b91c1c', fontSize: 13, marginTop: 8, lineHeight: 20 }}>
-              Your slot request was rejected. You can try booking a different time slot or another turf nearby.
-            </Text>
-            <TouchableOpacity
-              style={{ marginTop: 14, backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
-              onPress={() => navigation.navigate('Main')}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Find Another Turf</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // ── Pending Screen ─────────────────────────────────────────────────────────
-  if (status === 'pending') {
-    return (
-      <View style={styles.root}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.backBtn}>
-            <Icon name="arrow-back" size={20} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Booking Status</Text>
-          <View style={{ width: 38 }} />
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-          <View style={[styles.successBanner, { backgroundColor: '#fffbeb' }]}>
-            <View style={[styles.successCircle, { backgroundColor: '#f59e0b' }]}>
-              <Icon name="time-outline" size={34} color="#fff" />
-            </View>
-            <Text style={[styles.successTitle, { color: '#92400e' }]}>Request Sent</Text>
-            <Text style={[styles.successSub, { color: '#b45309' }]}>Waiting for vendor approval</Text>
-          </View>
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Icon name="ticket-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.cardTitle}>Booking Summary</Text>
-            </View>
-            {[
-              { icon: 'location-outline', label: 'Venue',      value: booking.turf?.name },
-              { icon: 'time-outline',     label: 'Time',       value: `${booking.startTime} to ${booking.endTime}` },
-              { icon: 'calendar-outline', label: 'Date',       value: fmtDate(booking.date) },
-              { icon: 'receipt-outline',  label: 'Booking ID', value: displayId },
-            ].map((row) => (
-              <View key={row.label} style={styles.summaryRow}>
-                <View style={styles.summaryLeft}>
-                  <Icon name={row.icon} size={15} color={COLORS.subtext} />
-                  <Text style={styles.summaryLabel}>{row.label}</Text>
-                </View>
-                <Text style={styles.summaryValue}>{row.value}</Text>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
   const handleShare = async () => {
     await Share.share({
-      message: `🏟️ Booking confirmed at ${booking.turf?.name}!\n📅 ${fmtDate(booking.date)}\n⏰ ${booking.startTime} to ${booking.endTime}\n💰 ₹${perPerson}/person (${players} players)\n\nBooked via Namma Ooru Turf!`,
+      message: `Booking Pass for ${booking.turf?.name}!\nDate: ${fmtDate(booking.date)}\nTime: ${booking.startTime} - ${booking.endTime}\nBooking ID: ${displayId}\nTotal: ₹${total} Paid\n\nBooked on Namma Ooru Turf`,
     });
   };
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.backBtn}>
-          <Icon name="arrow-back" size={20} color={COLORS.text} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Main')}
+          style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={18} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Booking Confirmed</Text>
-        <View style={{ width: 38 }} />
+        <Text style={[styles.headerTitle, { color: C.text }]}>Digital Booking Pass</Text>
+        <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
+          <Feather name="share-2" size={20} color={C.primary} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* ── You're All Set Banner ── */}
-        <View style={styles.successBanner}>
-          <View style={[styles.dot, styles.dotTL]} />
-          <View style={[styles.dot, styles.dotTR]} />
-          <View style={[styles.dot, styles.dotBL]} />
-          <View style={[styles.dot, styles.dotBR]} />
-          <View style={styles.successCircle}>
-            <Icon name="checkmark" size={34} color="#fff" />
-          </View>
-          <Text style={styles.successTitle}>You're All Set!</Text>
-          <Text style={styles.successSub}>Your slot has been confirmed</Text>
-        </View>
-
-        {/* ── Booking Summary ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Icon name="ticket-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Booking Summary</Text>
+        {/* Stadium Ticket Pass */}
+        <View style={[styles.ticketCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          {/* Ticket Header */}
+          <View style={[styles.ticketHeader, { backgroundColor: C.primary }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ticketBadge}>OFFICIAL MATCH PASS</Text>
+              <Text style={styles.ticketTurfName} numberOfLines={1}>
+                {booking.turf?.name || 'Turf Stadium'}
+              </Text>
+              <Text style={styles.ticketAddress} numberOfLines={1}>
+                {booking.turf?.location?.address || 'Court 1'}
+              </Text>
+            </View>
+            <View style={styles.ticketIdBadge}>
+              <Text style={styles.ticketIdText}>{displayId}</Text>
+            </View>
           </View>
 
-          {[
-            { icon: 'location-outline', label: 'Venue',      value: booking.turf?.name },
-            { icon: 'time-outline',      label: 'Time',       value: `${booking.startTime} to ${booking.endTime}` },
-            { icon: 'calendar-outline',  label: 'Date',       value: fmtDate(booking.date) },
-            { icon: 'receipt-outline',   label: 'Booking ID', value: displayId },
-            { icon: 'people-outline',    label: 'Players',    value: `${players} Player${players > 1 ? 's' : ''}` },
-          ].map((row) => (
-            <View key={row.label} style={styles.summaryRow}>
-              <View style={styles.summaryLeft}>
-                <Icon name={row.icon} size={15} color={COLORS.subtext} />
-                <Text style={styles.summaryLabel}>{row.label}</Text>
+          {/* Ticket Body Details */}
+          <View style={styles.ticketBody}>
+            <View style={styles.ticketRow}>
+              <View style={styles.ticketCol}>
+                <Text style={[styles.ticketLabel, { color: C.subtext }]}>GAME DATE</Text>
+                <Text style={[styles.ticketVal, { color: C.text }]}>{fmtDate(booking.date)}</Text>
               </View>
-              <Text style={styles.summaryValue}>{row.value}</Text>
+              <View style={styles.ticketCol}>
+                <Text style={[styles.ticketLabel, { color: C.subtext }]}>TIME SLOT</Text>
+                <Text style={[styles.ticketVal, { color: C.primary, fontWeight: '800' }]}>
+                  {booking.startTime} - {booking.endTime}
+                </Text>
+              </View>
             </View>
-          ))}
+
+            <View style={[styles.ticketRow, { marginTop: 14 }]}>
+              <View style={styles.ticketCol}>
+                <Text style={[styles.ticketLabel, { color: C.subtext }]}>SPORT</Text>
+                <Text style={[styles.ticketVal, { color: C.text }]}>{booking.sport || 'Football'}</Text>
+              </View>
+              <View style={styles.ticketCol}>
+                <Text style={[styles.ticketLabel, { color: C.subtext }]}>STATUS</Text>
+                <StatusBadge status={status} />
+              </View>
+            </View>
+
+            {/* Simulated QR Code / Barcode Display */}
+            <View style={[styles.qrArea, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+              <Feather name="maximize" size={32} color={C.primary} style={{ marginBottom: 6 }} />
+              <Text style={[styles.qrCodeText, { color: C.text }]}>SCAN AT VENUE GATE</Text>
+              <Text style={[styles.qrSub, { color: C.caption }]}>{booking._id || 'TURF-PASS-ONLINE'}</Text>
+            </View>
+          </View>
         </View>
 
-        {/* ── Payment Details ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Icon name="card-outline" size={18} color={COLORS.primary} />
-            <Text style={styles.cardTitle}>Payment Details</Text>
+        {/* Payment Summary */}
+        <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <Text style={[styles.cardTitle, { color: C.text }]}>Payment & Billing</Text>
+
+          <View style={styles.summaryRow}>
+            <Text style={[styles.summaryLabel, { color: C.subtext }]}>Total Amount</Text>
+            <Text style={[styles.summaryValue, { color: C.text }]}>₹ {total}</Text>
           </View>
 
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total Amount</Text>
-            <Text style={styles.summaryValue}>₹ {total}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Split Among</Text>
-            <Text style={styles.summaryValue}>{players} Players</Text>
-          </View>
-
-          <View style={styles.perPersonRow}>
-            <Text style={styles.perPersonLabel}>Per Person</Text>
-            <Text style={styles.perPersonValue}>₹ {perPerson}</Text>
+            <Text style={[styles.summaryLabel, { color: C.subtext }]}>Payment Mode</Text>
+            <Text style={[styles.summaryValue, { color: C.text, fontWeight: '700' }]}>
+              {booking.paymentMethod === 'cash' || booking.paymentMode === 'hand_cash'
+                ? '💵 Hand Cash (Pay at Ground)'
+                : '💳 Online Payment (UPI/Cards)'}
+            </Text>
           </View>
 
-          {/* Payment status badge */}
-          {isPaid ? (
-            <View style={styles.paidBadge}>
-              <Icon name="checkmark-circle" size={16} color={COLORS.primary} />
-              <Text style={styles.paidText}>Payment Successful</Text>
-            </View>
-          ) : (
-            <View style={styles.pendingBadge}>
-              <Icon name="time-outline" size={16} color="#f59e0b" />
-              <Text style={styles.pendingText}>Payment Pending</Text>
-            </View>
-          )}
-        </View>
-
-        {/* ── Share ── */}
-        <TouchableOpacity style={styles.shareRow} onPress={handleShare}>
-          <View style={styles.shareLeft}>
-            <View style={styles.shareIconCircle}>
-              <Icon name="checkmark-circle-outline" size={22} color={COLORS.primary} />
-            </View>
-            <View>
-              <Text style={styles.shareTitle}>Booking confirmed</Text>
-              <Text style={styles.shareSub}>Share your booking details</Text>
-            </View>
-          </View>
-          <Icon name="share-social-outline" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-
-        {/* ── Create a Match ── */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Create a Match ?</Text>
-          <Text style={styles.createMatchSub}>Set up teams and invite players for this bookings</Text>
-          <View style={styles.createMatchRow}>
-            <TouchableOpacity
-              style={styles.laterBtn}
-              onPress={() => navigation.navigate('Main')}
-            >
-              <Text style={styles.laterText}>Later</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.createMatchBtn}
-              onPress={() => navigation.navigate('CreateMatch', {
-                bookingId: booking._id,
-                venue: booking.turf?.name,
-                sport: booking.sport,
-                date: fmtDate(booking.date),
-                time: `${booking.startTime} - ${booking.endTime}`,
-              })}
-            >
-              <Text style={styles.createMatchText}>Create Match</Text>
-            </TouchableOpacity>
+          <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
+            <Text style={[styles.summaryLabel, { color: C.subtext }]}>Payment Status</Text>
+            <Text style={{ color: isPaid ? '#10B981' : (booking.paymentMethod === 'cash' ? '#F59E0B' : '#EF4444'), fontWeight: '800' }}>
+              {isPaid
+                ? 'PAID ONLINE'
+                : (booking.paymentMethod === 'cash' || booking.paymentMode === 'hand_cash'
+                    ? 'PAY ₹' + total + ' AT GROUND'
+                    : 'PAYMENT PENDING')}
+            </Text>
           </View>
         </View>
 
+        {/* Create Match Community Action */}
+        <View style={[styles.matchCard, { backgroundColor: dark ? '#132238' : '#0F172A' }]}>
+          <Text style={styles.matchTitle}>Setup Live Cricket Match?</Text>
+          <Text style={styles.matchSub}>
+            Invite players, run coin toss, and track ball-by-ball scoreboard for this booking.
+          </Text>
+          <PrimaryButton
+            title="Create Match Room →"
+            onPress={() => navigation.navigate('CreateMatch', {
+              bookingId: booking._id,
+              venue: booking.turf?.name,
+              sport: booking.sport,
+              date: fmtDate(booking.date),
+              time: `${booking.startTime} - ${booking.endTime}`,
+            })}
+            style={{ marginTop: 10, height: 46 }}
+          />
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root:            { flex: 1, backgroundColor: COLORS.bg },
-  loading:         { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  // Header
-  header:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: 50, paddingBottom: SPACING.md },
-  backBtn:         { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center' },
-  headerTitle:     { ...FONT.h3, color: COLORS.text },
-
-  // Success Banner
-  successBanner:   { backgroundColor: COLORS.greenSoft, margin: SPACING.lg, borderRadius: RADIUS.xl, paddingVertical: SPACING.xl, alignItems: 'center', overflow: 'hidden', position: 'relative' },
-  successCircle:   { width: 68, height: 68, borderRadius: 34, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
-  successTitle:    { fontSize: 22, fontWeight: '800', color: COLORS.text },
-  successSub:      { color: COLORS.subtext, fontSize: 13, marginTop: 4 },
-  dot:             { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.primary, opacity: 0.25 },
-  dotTL:           { top: 18, left: 28 },
-  dotTR:           { top: 12, right: 40 },
-  dotBL:           { bottom: 20, left: 60 },
-  dotBR:           { bottom: 14, right: 24 },
-
-  // Card
-  card:            { backgroundColor: '#fff', marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
-  cardHeaderRow:   { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
-  cardTitle:       { fontSize: 15, fontWeight: '700', color: COLORS.text },
-
-  // Summary rows
-  summaryRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  summaryLeft:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  summaryLabel:    { color: COLORS.subtext, fontSize: 13 },
-  summaryValue:    { fontWeight: '700', color: COLORS.text, fontSize: 13 },
-
-  // Per person
-  perPersonRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.greenSoft, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: 12, marginTop: SPACING.sm },
-  perPersonLabel:  { fontWeight: '700', color: COLORS.text, fontSize: 14 },
-  perPersonValue:  { fontWeight: '800', color: COLORS.primary, fontSize: 16 },
-
-  // Badges
-  paidBadge:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.greenSoft, borderRadius: RADIUS.round, paddingHorizontal: SPACING.md, paddingVertical: 6, alignSelf: 'flex-start', marginTop: SPACING.md },
-  paidText:        { color: COLORS.primary, fontSize: 12, fontWeight: '700' },
-  pendingBadge:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fef3c7', borderRadius: RADIUS.round, paddingHorizontal: SPACING.md, paddingVertical: 6, alignSelf: 'flex-start', marginTop: SPACING.md },
-  pendingText:     { color: '#92400e', fontSize: 12, fontWeight: '700' },
-
-  // Share
-  shareRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', marginHorizontal: SPACING.lg, marginBottom: SPACING.md, borderRadius: RADIUS.xl, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border },
-  shareLeft:       { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  shareIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.greenSoft, justifyContent: 'center', alignItems: 'center' },
-  shareTitle:      { fontWeight: '700', color: COLORS.text, fontSize: 14 },
-  shareSub:        { color: COLORS.subtext, fontSize: 12, marginTop: 2 },
-
-  // Create a Match
-  createMatchSub:  { color: COLORS.subtext, fontSize: 12, marginTop: 2, marginBottom: SPACING.md },
-  createMatchRow:  { flexDirection: 'row', gap: SPACING.md },
-  laterBtn:        { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingVertical: 13, alignItems: 'center' },
-  laterText:       { fontWeight: '700', color: COLORS.text, fontSize: 14 },
-  createMatchBtn:  { flex: 1.4, backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 13, alignItems: 'center' },
-  createMatchText: { fontWeight: '800', color: '#fff', fontSize: 14 },
+  root: { flex: 1 },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 52,
+    paddingBottom: 12,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: { ...FONT.h2, fontSize: 18, fontWeight: '800' },
+  scroll: { padding: SPACING.lg, paddingBottom: 60, gap: 14 },
+  ticketCard: {
+    borderRadius: RADIUS.xxl,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  ticketHeader: {
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ticketBadge: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  ticketTurfName: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  ticketAddress: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+  },
+  ticketIdBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.round,
+  },
+  ticketIdText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  ticketBody: {
+    padding: 18,
+  },
+  ticketRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  ticketCol: {
+    flex: 1,
+  },
+  ticketLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  ticketVal: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  qrArea: {
+    marginTop: 18,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    padding: 16,
+    alignItems: 'center',
+    borderStyle: 'dashed',
+  },
+  qrCodeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  qrSub: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  card: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+  },
+  cardTitle: {
+    ...FONT.h3,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  summaryLabel: { fontSize: 13 },
+  summaryValue: { fontSize: 13, fontWeight: '700' },
+  matchCard: {
+    padding: 18,
+    borderRadius: RADIUS.xl,
+  },
+  matchTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  matchSub: { color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 16, marginBottom: 8 },
 });

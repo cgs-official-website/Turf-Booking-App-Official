@@ -1,15 +1,14 @@
-// src/screens/Login2Screen.jsx
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, Image, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform, ScrollView,
+  TextInput, Image, Alert, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useDispatch } from 'react-redux';
+import Feather from 'react-native-vector-icons/Feather';
 import { loginUser } from '../redux/authSlice';
-import { SPACING, RADIUS } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
-import Icon from 'react-native-vector-icons/Ionicons';
+import PrimaryButton from '../components/PrimaryButton';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const background = require('../assets/background.jpg');
 const logo       = require('../assets/logo.png');
@@ -25,7 +24,7 @@ export default function Login2Screen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter email and password');
+      Alert.alert('Error', 'Please enter your email and password');
       return;
     }
     setLoading(true);
@@ -33,44 +32,48 @@ export default function Login2Screen({ navigation }) {
     setLoading(false);
 
     if (loginUser.rejected.match(res)) {
-      // res.payload is the exact message thrown by the backend
-      // (e.g. "Invalid email or password", "This account has been deactivated")
       Alert.alert('Login Failed', res.payload || 'Invalid email or password');
-      return;
     }
-    // res.payload.token is now set in the store — RootNavigator watches
-    // `token` / `locationSet` and automatically switches to Location or Home.
-    // No manual navigation call needed here.
   };
 
   return (
     <View style={styles.root}>
       <Image source={background} style={styles.bg} resizeMode="cover" />
-      <View style={styles.overlay} />
+      <View style={[styles.overlay, { backgroundColor: C.overlay }]} />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: 'rgba(15, 23, 42, 0.65)' }]}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+
           <View style={styles.logoWrap}>
-            <View style={[styles.logoCircle, { backgroundColor: C.card }]}>
+            <View style={[styles.logoCircle, { backgroundColor: C.card }, SHADOW.floating]}>
               <Image source={logo} style={styles.logo} resizeMode="contain" />
             </View>
           </View>
 
-          <View style={[styles.card, { backgroundColor: C.card }]}>
+          <View style={[styles.card, { backgroundColor: C.card }, SHADOW.card]}>
             <View style={styles.titleRow}>
               <Text style={[styles.title, { color: C.text }]}>Welcome Back</Text>
-              <Icon name="hand-right-outline" size={20} color={C.text} style={styles.titleIcon} />
+              <Feather name="smile" size={20} color={C.primary} style={{ marginLeft: 6 }} />
             </View>
-            <Text style={[styles.subtitle, { color: C.subtext }]}>Sign in to continue</Text>
+            <Text style={[styles.subtitle, { color: C.subtext }]}>
+              Sign in with your registered email address
+            </Text>
 
             <Text style={[styles.label, { color: C.text }]}>Email</Text>
-            <View style={[styles.inputRow, { borderColor: C.border }]}>
-              <Icon name="mail-outline" size={16} color={C.subtext} style={styles.inputIcon} />
+            <View style={[styles.inputRow, { borderColor: C.border, backgroundColor: C.bgSoft }]}>
+              <Feather name="mail" size={18} color={C.subtext} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { color: C.text }]}
                 placeholder="Enter your email"
-                placeholderTextColor={C.subtext}
+                placeholderTextColor={C.caption}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
@@ -79,39 +82,36 @@ export default function Login2Screen({ navigation }) {
             </View>
 
             <Text style={[styles.label, { color: C.text }]}>Password</Text>
-            <View style={[styles.inputRow, { borderColor: C.border }]}>
-              <Icon name="lock-closed-outline" size={16} color={C.subtext} style={styles.inputIcon} />
+            <View style={[styles.inputRow, { borderColor: C.border, backgroundColor: C.bgSoft }]}>
+              <Feather name="lock" size={18} color={C.subtext} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { color: C.text }]}
                 placeholder="Enter your password"
-                placeholderTextColor={C.subtext}
+                placeholderTextColor={C.caption}
                 secureTextEntry={!showPass}
                 value={password}
                 onChangeText={setPassword}
               />
               <TouchableOpacity onPress={() => setShowPass(!showPass)} style={styles.eyeBtn}>
-                <Icon name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.subtext} />
+                <Feather name={showPass ? 'eye-off' : 'eye'} size={18} color={C.subtext} />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={[styles.primaryBtn, { backgroundColor: C.primary }, loading && { opacity: 0.7 }]}
+            <PrimaryButton
+              title="Sign In →"
               onPress={handleLogin}
-              disabled={loading}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.primaryBtnText}>Sign In →</Text>
-              }
-            </TouchableOpacity>
+              loading={loading}
+              style={{ marginTop: 8, marginBottom: 16 }}
+            />
 
-            <TouchableOpacity onPress={() => navigation.navigate('Register')} style={styles.registerRow}>
-              <Text style={[styles.registerText, { color: C.subtext }]}>
+            <View style={styles.footerRow}>
+              <Text style={[styles.footerText, { color: C.subtext }]}>
                 Don't have an account?{' '}
-                <Text style={{ color: C.primary, fontWeight: '700' }}>Register</Text>
               </Text>
-            </TouchableOpacity>
-
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={[styles.footerLink, { color: C.primary }]}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -120,26 +120,25 @@ export default function Login2Screen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  root:         { flex: 1 },
-  bg:           { position: 'absolute', width: '100%', height: '100%' },
-  overlay:      { position: 'absolute', width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.45)' },
-  kav:          { flex: 1 },
-  scroll:       { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: SPACING.lg, paddingBottom: 40 },
-  logoWrap:     { alignItems: 'center', marginBottom: -50, zIndex: 10 },
-  logoCircle:   { width: 140, height: 140, borderRadius: 70, justifyContent: 'center', alignItems: 'center', elevation: 6 },
-  logo:         { width: 90, height: 90 },
-  card:         { borderRadius: RADIUS.xl, padding: SPACING.xl, paddingTop: 64 },
-  titleRow:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 6 },
-  title:        { fontSize: 22, fontWeight: '800', textAlign: 'center' },
-  titleIcon:    { marginTop: 2 },
-  subtitle:     { fontSize: 13, textAlign: 'center', marginBottom: SPACING.xl },
-  label:        { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 12 },
-  inputRow:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, marginBottom: 4 },
-  inputIcon:    { marginRight: 8 },
-  input:        { flex: 1, paddingVertical: 14, fontSize: 15 },
-  eyeBtn:       { padding: 6 },
-  primaryBtn:   { paddingVertical: 16, borderRadius: RADIUS.lg, alignItems: 'center', marginTop: SPACING.xl, marginBottom: SPACING.md },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  registerRow:  { alignItems: 'center', marginTop: 8 },
-  registerText: { fontSize: 13 },
+  root:        { flex: 1 },
+  bg:          { position: 'absolute', width: '100%', height: '100%' },
+  overlay:     { position: 'absolute', width: '100%', height: '100%' },
+  kav:         { flex: 1 },
+  scroll:      { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: SPACING.lg, paddingBottom: 32 },
+  backBtn:     { position: 'absolute', top: 54, left: SPACING.lg, zIndex: 10, width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  logoWrap:    { alignItems: 'center', marginBottom: -48, zIndex: 10 },
+  logoCircle:  { width: 120, height: 120, borderRadius: 60, justifyContent: 'center', alignItems: 'center' },
+  logo:        { width: 75, height: 75 },
+  card:        { borderRadius: RADIUS.xxl, padding: SPACING.xl, paddingTop: 60 },
+  titleRow:    { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 4 },
+  title:       { ...FONT.h1, fontSize: 22 },
+  subtitle:    { ...FONT.body, fontSize: 13, textAlign: 'center', marginBottom: SPACING.xl },
+  label:       { ...FONT.caption, fontWeight: '700', marginBottom: 6 },
+  inputRow:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, paddingHorizontal: 14, height: 52, marginBottom: 14 },
+  inputIcon:   { marginRight: 10 },
+  input:       { flex: 1, ...FONT.body, fontSize: 15, fontWeight: '500' },
+  eyeBtn:      { padding: 4 },
+  footerRow:   { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  footerText:  { fontSize: 13 },
+  footerLink:  { fontSize: 13, fontWeight: '800' },
 });

@@ -1,23 +1,22 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Image, StatusBar } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  RefreshControl, Image, StatusBar,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import Feather from 'react-native-vector-icons/Feather';
 import { bookingsApi } from '../api/bookings';
 import { getImageUrl as _getImageUrl, BASE_URL } from '../api/client';
 import RateReviewModal from './RateReviewModal';
-import { SPACING, RADIUS, FONT } from '../utils/theme';
+import { StatusBadge } from '../components/RatingBadge';
+import EmptyState from '../components/EmptyState';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
-import Icon from 'react-native-vector-icons/Ionicons';
 
-// ✅ "All" removed per design — only these 3 show as tabs.
-// "rejected" is kept out of the tab bar (not in the mockup) but the effective-status
-// logic below still exists so an expired pending booking doesn't get stuck looking "Pending".
-const TABS = ['pending', 'confirmed', 'completed'];
-const TAB_LABEL = { pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed' };
+const TABS = ['confirmed', 'pending', 'completed'];
+const TAB_LABEL = { confirmed: 'Confirmed', pending: 'Pending', completed: 'Past Bookings' };
 
-// Defensive wrapper: if ../api/client hasn't exported getImageUrl yet
-// (stale metro cache / not-yet-saved file), fall back to a same-logic
-// local implementation instead of crashing the whole screen.
 const getImageUrl = typeof _getImageUrl === 'function' ? _getImageUrl : (path) => {
   if (!path) return null;
   if (/^(https?:|file:|content:|data:image)/.test(path)) return path;
@@ -25,7 +24,6 @@ const getImageUrl = typeof _getImageUrl === 'function' ? _getImageUrl : (path) =
   return `${serverRoot}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 
-// "13:30" -> { h: 1, m: '30', period: 'PM' }
 const to12Hr = (time24) => {
   const [hStr, mStr] = String(time24).split(':');
   let h = parseInt(hStr, 10);
@@ -34,7 +32,6 @@ const to12Hr = (time24) => {
   return { h, m: mStr?.padStart(2, '0') || '00', period };
 };
 
-// combines start+end into "01:30 - 02:30 PM" (single suffix when both share the same period)
 const formatDuration = (startTime, endTime) => {
   if (!startTime || !endTime) return '';
   const s = to12Hr(startTime);
@@ -47,20 +44,24 @@ const formatDuration = (startTime, endTime) => {
 
 export default function MyBookingsScreen({ navigation }) {
   const { C, dark } = useTheme();
-  const [tab, setTab] = useState('pending');
+  const [tab, setTab] = useState('confirmed');
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [reviewTarget, setReviewTarget] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    bookingsApi.getMyBookings().then((res) => setBookings(res.bookings)).finally(() => setLoading(false));
+    bookingsApi.getMyBookings()
+      .then((res) => {
+        const list = res.bookings || res.items || res.data?.items || res.data?.bookings || (Array.isArray(res) ? res : []);
+        setBookings(list);
+      })
+      .catch(() => setBookings([]))
+      .finally(() => setLoading(false));
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // if a booking is still 'pending' but its slot end time has already passed,
-  // treat it as 'rejected' in the UI (vendor never actioned it in time).
   const isExpiredPending = (b) => {
     if (b.status !== 'pending' || !b.date || !b.endTime) return false;
     const datePart = String(b.date).split('T')[0];
@@ -69,20 +70,38 @@ export default function MyBookingsScreen({ navigation }) {
     return end.getTime() < Date.now();
   };
 
-  const getEffectiveStatus = (b) => (isExpiredPending(b) ? 'rejected' : b.status);
+  const getEffectiveStatus = (b) => {
+    if (b.status === 'confirmed') return 'confirmed';
+    if (b.status === 'completed') return 'completed';
+    if (isExpiredPending(b)) return 'rejected';
+    return b.status || 'confirmed';
+  };
 
-  const filtered = bookings.filter((b) => getEffectiveStatus(b) === tab);
+  const filtered = bookings.filter((b) => {
+    const st = getEffectiveStatus(b);
+    if (tab === 'confirmed') return st === 'confirmed';
+    if (tab === 'pending') return st === 'pending' || st === 'reserved';
+    if (tab === 'completed') return st === 'completed' || st === 'cancelled' || st === 'rejected';
+    return true;
+  });
 
   const openBooking = (b) => {
-    if (getEffectiveStatus(b) === 'pending') navigation.navigate('RequestPending', { bookingId: b._id });
-    else navigation.navigate('BookingDetail', { bookingId: b._id });
+    if (getEffectiveStatus(b) === 'pending') {
+      navigation.navigate('RequestPending', { bookingId: b._id || b.id });
+    } else {
+      navigation.navigate('BookingDetail', { bookingId: b._id || b.id });
+    }
   };
 
   const handleSubmitReview = async (rating, comment) => {
-    const bookingId = reviewTarget._id;
+    if (!reviewTarget) return;
+    const bookingId = reviewTarget._id || reviewTarget.id;
+    const turfId = reviewTarget.turfId || reviewTarget.turf?._id || reviewTarget.turf?.id;
     try {
-      await bookingsApi.addReview(bookingId, { rating, comment });
-      setBookings((prev) => prev.map((b) => (b._id === bookingId ? { ...b, reviewed: true } : b)));
+      await bookingsApi.addReview(bookingId, { rating, comment, turfId });
+      setBookings((prev) => prev.map((b) => ((b._id || b.id) === bookingId ? { ...b, reviewed: true, isReviewed: true } : b)));
+    } catch (err) {
+      console.warn('Failed to submit review:', err.message);
     } finally {
       setReviewTarget(null);
     }
@@ -91,163 +110,272 @@ export default function MyBookingsScreen({ navigation }) {
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
 
-        {/* Header: back button + title, same row */}
+        {/* Header */}
         <View style={styles.headerRow}>
-          <TouchableOpacity style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]} onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={20} color={C.text} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: C.text }]}>My Bookings</Text>
+          <Text style={[styles.title, { color: C.text }]}>My Booking Passes</Text>
         </View>
 
-        {/* Underline tabs: Pending / Confirmed / Completed */}
+        {/* Segmented Tabs */}
         <View style={styles.tabRow}>
           {TABS.map((t) => {
             const active = tab === t;
             return (
-              <TouchableOpacity key={t} style={styles.tabItem} onPress={() => setTab(t)}>
-                <Text style={[styles.tabText, { color: active ? C.primary : C.subtext }, active && styles.tabTextActive]}>
+              <TouchableOpacity
+                key={t}
+                style={[
+                  styles.tabItem,
+                  {
+                    backgroundColor: active ? C.primaryLight : 'transparent',
+                    borderColor: active ? C.primary : 'transparent',
+                  },
+                ]}
+                onPress={() => setTab(t)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color: active ? C.primary : C.subtext,
+                      fontWeight: active ? '800' : '600',
+                    },
+                  ]}
+                >
                   {TAB_LABEL[t]}
                 </Text>
-                <View style={[styles.tabUnderline, { backgroundColor: active ? C.primary : 'transparent' }]} />
               </TouchableOpacity>
             );
           })}
         </View>
-        <View style={[styles.tabDivider, { backgroundColor: C.border }]} />
 
+        {/* Bookings Feed */}
         <FlatList
           data={filtered}
-          keyExtractor={(b) => b._id}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.primary} />}
-          contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.lg }}
-          ListEmptyComponent={!loading && (
-            <View style={styles.empty}>
-              <Icon name="calendar-outline" size={48} color={C.border} />
-              <Text style={[styles.emptyText, { color: C.subtext }]}>No bookings here yet</Text>
-            </View>
-          )}
+          keyExtractor={(item) => item._id || item.id || String(Math.random())}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={load} colors={[C.primary]} />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon="calendar"
+              title={`No ${TAB_LABEL[tab]} Found`}
+              description={`You do not have any ${TAB_LABEL[tab].toLowerCase()} right now. Explore top-rated venues and reserve a pitch.`}
+              actionText="Explore Turfs & Book"
+              onActionPress={() => navigation.navigate('Home')}
+            />
+          }
           renderItem={({ item }) => {
-            const status = getEffectiveStatus(item);
-            const address = item.turf?.location?.address || item.turf?.location?.city || '';
-            // Distance isn't tracked by getMyBookings today — only shown if your
-            // turf/location logic already attaches it (e.g. item.turf.distanceKm).
-            // We don't fabricate a number if it's missing.
-            const distanceKm = item.turf?.distanceKm ?? item.distanceKm;
+            const dateStr = item.date ? new Date(item.date).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+            const turfImg = item.turf?.images?.[0] || item.turf?.image;
+            const imgUri = getImageUrl(turfImg);
 
             return (
               <TouchableOpacity
-                style={[styles.card, { backgroundColor: C.card }]}
+                style={[
+                  styles.bookingCard,
+                  {
+                    backgroundColor: dark ? '#131E2F' : '#FFFFFF',
+                    borderColor: dark ? '#223249' : '#E2E8F0',
+                  },
+                  SHADOW.subtle,
+                ]}
                 onPress={() => openBooking(item)}
-                activeOpacity={0.9}
+                activeOpacity={0.85}
               >
                 <View style={styles.cardTopRow}>
-                  <Image
-                    source={{ uri: getImageUrl(item.turf?.images?.[0]) || 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=400' }}
-                    style={styles.image}
-                  />
-                  <View style={styles.cardInfo}>
-                    <Text style={[styles.turfName, { color: C.text }]} numberOfLines={1}>{item.turf?.name}</Text>
-                    {!!address && (
-                      <View style={styles.metaRow}>
-                        <Icon name="location" size={13} color={C.primary} />
-                        <Text style={[styles.metaText, { color: C.subtext }]} numberOfLines={1}>{address}</Text>
-                      </View>
-                    )}
-                    {distanceKm != null && (
-                      <View style={styles.metaRow}>
-                        <Icon name="walk" size={13} color={C.primary} />
-                        <Text style={[styles.metaText, { color: C.subtext }]}>{distanceKm} Km away</Text>
-                      </View>
-                    )}
+                  {imgUri ? (
+                    <Image source={{ uri: imgUri }} style={styles.turfThumb} />
+                  ) : (
+                    <View style={[styles.turfThumbPlaceholder, { backgroundColor: C.primaryLight }]}>
+                      <Feather name="activity" size={20} color={C.primary} />
+                    </View>
+                  )}
+
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={styles.nameRow}>
+                      <Text style={[styles.cardTurfName, { color: C.text }]} numberOfLines={1}>
+                        {item.turf?.name || 'Turf Stadium'}
+                      </Text>
+                      <StatusBadge status={getEffectiveStatus(item)} />
+                    </View>
+
+                    <Text style={[styles.cardLocation, { color: C.subtext }]} numberOfLines={1}>
+                      {item.turf?.location?.address || item.turf?.location?.city || 'Local Arena'}
+                    </Text>
+
+                    <View style={styles.timeBadgeRow}>
+                      <Feather name="clock" size={12} color={C.primary} style={{ marginRight: 4 }} />
+                      <Text style={[styles.timeText, { color: C.text }]}>
+                        {dateStr} • {formatDuration(item.startTime, item.endTime)}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
-                <View style={[styles.divider, { backgroundColor: C.border }]} />
-
-                {status === 'completed' ? (
-                  item.reviewed ? (
-                    <View style={[styles.actionBox, { backgroundColor: C.bgSoft }]}>
-                      <Text style={[styles.reviewedText, { color: C.subtext }]}>Reviewed ✓</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.actionBox, { backgroundColor: C.primary }]}
-                      onPress={() => setReviewTarget(item)}
-                    >
-                      <Text style={styles.rateBtnText}>Rate your Experience</Text>
-                    </TouchableOpacity>
-                  )
-                ) : (
-                  <View style={[styles.priceDurationBox, { backgroundColor: C.primary }]}>
-                    <View>
-                      <Text style={styles.pdLabel}>PRICE</Text>
-                      <View style={styles.priceRow}>
-                        <Text style={styles.priceValue}>₹{item.turf?.pricePerHour ?? item.totalAmount}</Text>
-                        <Text style={styles.priceUnit}>/hr</Text>
-                      </View>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={styles.pdLabel}>DURATION</Text>
-                      <Text style={styles.durationValue}>{formatDuration(item.startTime, item.endTime)}</Text>
-                    </View>
+                {/* Footer with Amount & Actions */}
+                <View style={[styles.cardFooter, { borderTopColor: C.border }]}>
+                  <View>
+                    <Text style={[styles.priceLabel, { color: C.caption }]}>Paid Amount</Text>
+                    <Text style={[styles.priceValue, { color: C.primary }]}>₹{item.totalAmount || 800}</Text>
                   </View>
-                )}
+
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {tab === 'completed' && !item.reviewed && (
+                      <TouchableOpacity
+                        style={[styles.rateBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                        onPress={() => setReviewTarget(item)}
+                      >
+                        <Feather name="star" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
+                        <Text style={[styles.rateBtnText, { color: C.text }]}>Rate Ground</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <TouchableOpacity
+                      style={[styles.passBtn, { backgroundColor: C.primary }]}
+                      onPress={() => openBooking(item)}
+                    >
+                      <Text style={styles.passBtnText}>View Pass →</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </TouchableOpacity>
             );
           }}
         />
       </SafeAreaView>
 
-      <RateReviewModal
-        visible={!!reviewTarget}
-        turfName={reviewTarget?.turf?.name || ''}
-        onCancel={() => setReviewTarget(null)}
-        onSubmit={handleSubmitReview}
-      />
+      {reviewTarget && (
+        <RateReviewModal
+          visible={!!reviewTarget}
+          turfName={reviewTarget.turf?.name || 'Turf'}
+          onClose={() => setReviewTarget(null)}
+          onSubmit={handleSubmitReview}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerRow:   { flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
-                 paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, marginBottom: SPACING.lg },
-  backBtn:     { width: 44, height: 44, borderRadius: 22, borderWidth: 1,
-                 justifyContent: 'center', alignItems: 'center' },
-  title:       { ...FONT.h1, fontSize: 24, fontWeight: '800' },
-
-  tabRow:      { flexDirection: 'row', paddingHorizontal: SPACING.lg },
-  tabItem:     { flex: 1, alignItems: 'center', paddingBottom: SPACING.sm },
-  tabText:     { fontSize: 16, fontWeight: '600' },
-  tabTextActive: { fontWeight: '800' },
-  tabUnderline:{ height: 3, borderRadius: 2, width: '80%', marginTop: SPACING.sm },
-  tabDivider:  { height: 1, marginBottom: SPACING.lg },
-
-  card:        { borderRadius: RADIUS.xl, padding: SPACING.lg,
-                 shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
-                 elevation: 2 },
-  cardTopRow:  { flexDirection: 'row', gap: SPACING.md },
-  image:       { width: 90, height: 90, borderRadius: RADIUS.lg },
-  cardInfo:    { flex: 1, justifyContent: 'center', gap: 6 },
-  turfName:    { fontWeight: '800', fontSize: 18 },
-  metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaText:    { fontSize: 13, flexShrink: 1 },
-
-  divider:     { height: 1, marginVertical: SPACING.md },
-
-  actionBox:   { paddingVertical: 16, borderRadius: RADIUS.lg, alignItems: 'center' },
-  rateBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  reviewedText:{ fontWeight: '700', fontSize: 15 },
-
-  priceDurationBox: { flexDirection: 'row', justifyContent: 'space-between',
-                      borderRadius: RADIUS.lg, padding: SPACING.lg },
-  pdLabel:     { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  priceRow:    { flexDirection: 'row', alignItems: 'flex-end', gap: 4, marginTop: 4 },
-  priceValue:  { color: '#fff', fontSize: 22, fontWeight: '800' },
-  priceUnit:   { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginBottom: 3 },
-  durationValue:{ color: '#fff', fontSize: 15, fontWeight: '700', marginTop: 4 },
-
-  empty:       { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: SPACING.md },
-  emptyText:   { fontSize: 14 },
+  headerRow: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  title: {
+    ...FONT.h1,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.lg,
+    gap: 8,
+    marginBottom: 12,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabText: {
+    fontSize: 13,
+  },
+  listContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 100,
+    gap: 12,
+  },
+  bookingCard: {
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 2,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  turfThumb: {
+    width: 68,
+    height: 68,
+    borderRadius: RADIUS.lg,
+  },
+  turfThumbPlaceholder: {
+    width: 68,
+    height: 68,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  cardTurfName: {
+    ...FONT.h3,
+    fontSize: 15,
+    fontWeight: '800',
+    flex: 1,
+    marginRight: 6,
+  },
+  cardLocation: {
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  timeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+  },
+  priceLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  priceValue: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  rateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+  },
+  rateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  passBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.round,
+  },
+  passBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
 });

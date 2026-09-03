@@ -22,6 +22,7 @@ router.post('/google', verifyFirebaseToken, authController.googleAuth);
 
 // Profile & Session Endpoints
 router.get('/me', verifySessionToken, authController.getMe);
+router.put('/me', verifySessionToken, authController.updateMe);
 router.patch('/me', verifySessionToken, authController.updateMe);
 router.post('/sync-profile', verifySessionToken, authController.syncProfile);
 router.post('/refresh', verifySessionToken, authController.refreshToken);

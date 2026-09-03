@@ -2,16 +2,19 @@
 import React, { useEffect, useMemo, useState, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, Pressable,
+  ScrollView,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchBookings, fetchMySubscription } from '../redux/vendorSlice';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-// ---- helpers -------------------------------------------------------------
+const FILTERS = ['All', 'Bookings', 'Subscription', 'Unread'];
 
 const dayLabel = (date) => {
+  if (!date) return 'Earlier';
   const d = new Date(date);
   const today = new Date();
   const yesterday = new Date();
@@ -21,10 +24,11 @@ const dayLabel = (date) => {
 
   if (sameDay(d, today)) return 'Today';
   if (sameDay(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString('en-IN', { weekday: 'long' });
+  return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', weekday: 'short' });
 };
 
 const timeAgo = (date) => {
+  if (!date) return 'Just now';
   const diffMs = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return 'Just now';
@@ -35,39 +39,43 @@ const timeAgo = (date) => {
   return `${days}d ago`;
 };
 
-// Build notification objects out of bookings + subscription/plan events
-const buildBookingNotifications = (bookings = [], colors) => bookings.map((b) => {
+const buildBookingNotifications = (bookings = [], colors) => (Array.isArray(bookings) ? bookings : []).map((b) => {
   let title = 'New Booking Request';
-  let body = `${b.userName || b.customerName || 'A player'} requested a slot on ${b.date || ''}`.trim();
+  let body = `${b.userName || b.customerName || 'A player'} requested a slot on ${b.date || 'today'}`;
   let icon = 'calendar';
-  let color = colors.primary;
+  let iconBg = 'rgba(59, 130, 246, 0.12)';
+  let iconColor = '#3B82F6';
 
   if (b.status === 'confirmed' || b.status === 'accepted') {
-    title = 'Booking Accepted';
-    body = `You accepted the booking for ${b.date || 'the selected slot'}`;
+    title = 'Booking Confirmed';
+    body = `Slot for ${b.userName || 'Player'} on ${b.date || 'selected date'} is confirmed`;
     icon = 'check-circle';
-    color = colors.success || colors.primary;
+    iconBg = 'rgba(0, 197, 102, 0.12)';
+    iconColor = '#00C566';
   } else if (b.status === 'rejected' || b.status === 'cancelled') {
-    title = 'Booking Rejected';
-    body = `The booking for ${b.date || 'the selected slot'} was rejected`;
+    title = 'Booking Cancelled';
+    body = `Reservation for ${b.userName || 'Player'} has been cancelled`;
     icon = 'x-circle';
-    color = colors.error;
+    iconBg = 'rgba(239, 68, 68, 0.12)';
+    iconColor = '#EF4444';
   } else if (b.status === 'pending') {
-    title = 'New Booking Request';
-    body = `${b.userName || b.customerName || 'A player'} is waiting for your response`;
+    title = 'Pending Reservation';
+    body = `${b.userName || 'Player'} is waiting for your slot confirmation`;
     icon = 'clock';
-    color = colors.primary;
+    iconBg = 'rgba(245, 158, 11, 0.12)';
+    iconColor = '#F59E0B';
   }
 
   return {
-    id: `booking-${b._id}`,
+    id: `booking-${b._id || b.id || Math.random()}`,
     type: 'booking',
     title,
     body,
     icon,
-    color,
-    date: b.updatedAt || b.createdAt,
-    read: !!b.read,
+    iconBg,
+    iconColor,
+    date: b.updatedAt || b.createdAt || new Date(),
+    read: b.status !== 'pending',
     raw: b,
   };
 });
@@ -78,64 +86,30 @@ const buildSubscriptionNotifications = (mySubscription, colors) => {
 
   if (mySubscription.status === 'active') {
     list.push({
-      id: `sub-${mySubscription._id}-purchased`,
+      id: `sub-${mySubscription._id || 'active'}`,
       type: 'subscription',
-      title: 'Subscription Activated',
-      body: `Your ${mySubscription.plan?.name || 'plan'} subscription is now active`,
-      icon: 'award',
-      color: colors.primary,
-      date: mySubscription.startDate || mySubscription.createdAt,
-      read: !!mySubscription.read,
+      title: 'Subscription Active',
+      body: `Your ${mySubscription.plan?.name || 'Partner Pro'} membership is active`,
+      icon: 'zap',
+      iconBg: 'rgba(168, 85, 247, 0.12)',
+      iconColor: '#A855F7',
+      date: mySubscription.startDate || mySubscription.createdAt || new Date(),
+      read: true,
       raw: mySubscription,
     });
   }
-
-  if (mySubscription.expiryDate) {
-    const daysLeft = Math.ceil(
-      (new Date(mySubscription.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
-    if (daysLeft <= 7 && daysLeft >= 0) {
-      list.push({
-        id: `sub-${mySubscription._id}-expiring`,
-        type: 'subscription',
-        title: 'Subscription Expiring Soon',
-        body: `Your plan expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. Renew to avoid interruption`,
-        icon: 'alert-circle',
-        color: colors.error,
-        date: new Date(),
-        read: false,
-        raw: mySubscription,
-      });
-    }
-  }
-
   return list;
 };
-
-const SORT_OPTIONS = [
-  { key: 'newest', label: 'Newest First' },
-  { key: 'oldest', label: 'Older First' },
-  { key: 'read', label: 'Read Notification' },
-  { key: 'unread', label: 'Unread Notification' },
-];
-
-// ---- component ------------------------------------------------------------
 
 const NotificationScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const { bookings, mySubscription, loading } = useSelector((s) => s.vendor);
-
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors);
 
-  const [sortBy, setSortBy] = useState('newest');
-  const [sortVisible, setSortVisible] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('All');
 
-  // Hide default navigation header to remove white space
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   useEffect(() => {
@@ -149,20 +123,14 @@ const NotificationScreen = ({ navigation }) => {
       ...buildSubscriptionNotifications(mySubscription, colors),
     ];
 
-    let sorted = [...combined];
-    if (sortBy === 'newest') {
-      sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
-    } else if (sortBy === 'oldest') {
-      sorted.sort((a, b) => new Date(a.date) - new Date(b.date));
-    } else if (sortBy === 'read') {
-      sorted = sorted.filter((n) => n.read);
-    } else if (sortBy === 'unread') {
-      sorted = sorted.filter((n) => !n.read);
-    }
-    return sorted;
-  }, [bookings, mySubscription, sortBy, colors]);
+    let sorted = combined.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // group by day label, preserving sort order
+    if (activeFilter === 'Bookings') return sorted.filter((n) => n.type === 'booking');
+    if (activeFilter === 'Subscription') return sorted.filter((n) => n.type === 'subscription');
+    if (activeFilter === 'Unread') return sorted.filter((n) => !n.read);
+    return sorted;
+  }, [bookings, mySubscription, activeFilter, colors]);
+
   const sections = useMemo(() => {
     const map = new Map();
     notifications.forEach((n) => {
@@ -175,32 +143,56 @@ const NotificationScreen = ({ navigation }) => {
 
   const handlePressNotification = (item) => {
     if (item.type === 'booking') {
-      navigation.navigate('BookingDetail', { bookingId: item.raw._id });
+      const bookingId = item.raw?._id || item.raw?.id;
+      if (bookingId) {
+        navigation.navigate('BookingDetail', { bookingId });
+      } else {
+        navigation.navigate('BookingsTab');
+      }
     } else if (item.type === 'subscription') {
       navigation.navigate('SubscriptionPlans');
     }
   };
 
-  const currentSortLabel = SORT_OPTIONS.find((o) => o.key === sortBy)?.label || 'Sort By';
-
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
-          <Feather name="arrow-left" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notification</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Navigation Header */}
+      <View style={styles.navBar}>
         <TouchableOpacity
-          style={styles.sortBtn}
+          style={[styles.backBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => navigation.goBack()}
           activeOpacity={0.7}
-          onPress={() => setSortVisible(true)}
         >
-          <Text style={styles.sortBtnText}>Sort BY</Text>
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
+        <Text style={[styles.navTitle, { color: colors.text }]}>Notifications</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* List */}
+      {/* Filter Tabs */}
+      <View style={styles.filterBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          {FILTERS.map((f) => {
+            const isSelected = activeFilter === f;
+            return (
+              <TouchableOpacity
+                key={f}
+                style={[
+                  styles.filterChip,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                  isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => setActiveFilter(f)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>{f}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Notification List */}
       <FlatList
         data={sections}
         keyExtractor={(s) => s.label}
@@ -212,166 +204,190 @@ const NotificationScreen = ({ navigation }) => {
           dispatch(fetchMySubscription());
         }}
         ListEmptyComponent={(
-          <View style={styles.empty}>
-            <View style={styles.emptyIconContainer}>
-              <Feather name="bell-off" size={32} color={colors.textSecondary} />
+          <View style={styles.emptyWrap}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
+              <Feather name="bell" size={32} color={colors.primary} />
             </View>
-            <Text style={styles.emptyText}>No notifications yet</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>You're All Caught Up!</Text>
+            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+              New reservations, player messages, and system alerts will appear here.
+            </Text>
           </View>
         )}
         renderItem={({ item: section }) => (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>{section.label}</Text>
-            {section.items.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.notifRow}
-                activeOpacity={0.7}
-                onPress={() => handlePressNotification(item)}
-              >
-                <View style={[styles.notifIcon, { backgroundColor: !item.read ? colors.text : `${item.color}20` }]}>
-                  <Feather
-                    name={!item.read ? 'mail' : item.icon}
-                    size={18}
-                    color={!item.read ? colors.background : item.color}
-                  />
-                </View>
-                <View style={styles.notifBody}>
-                  <Text style={styles.notifTitle}>{item.title}</Text>
-                  <Text style={styles.notifDesc} numberOfLines={2}>{item.body}</Text>
-                </View>
-                <Text style={styles.notifTime}>{timeAgo(item.date)}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.sectionWrap}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>{section.label.toUpperCase()}</Text>
+            </View>
+
+            <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+              {section.items.map((item, idx) => {
+                const isLast = idx === section.items.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.notifRow,
+                      !isLast && [styles.notifRowBorder, { borderBottomColor: colors.border }],
+                    ]}
+                    activeOpacity={0.75}
+                    onPress={() => handlePressNotification(item)}
+                  >
+                    <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
+                      <Feather name={item.icon} size={18} color={item.iconColor} />
+                    </View>
+
+                    <View style={styles.notifBody}>
+                      <View style={styles.titleRow}>
+                        <Text style={[styles.notifTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+                        {!item.read && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
+                      </View>
+                      <Text style={[styles.notifDesc, { color: colors.textSecondary }]} numberOfLines={2}>{item.body}</Text>
+                      <Text style={[styles.notifTime, { color: colors.textSecondary }]}>{timeAgo(item.date)}</Text>
+                    </View>
+
+                    <Feather name="chevron-right" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         )}
       />
-
-      {/* Sort By modal */}
-      <Modal visible={sortVisible} transparent animationType="fade" onRequestClose={() => setSortVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setSortVisible(false)}>
-          <Pressable style={[styles.sortSheet, SHADOWS.md]} onPress={() => {}}>
-            <Text style={styles.sortSheetTitle}>Sort By</Text>
-            {SORT_OPTIONS.map((opt) => (
-              <TouchableOpacity
-                key={opt.key}
-                style={styles.sortOption}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setSortBy(opt.key);
-                  setSortVisible(false);
-                }}
-              >
-                <Text style={styles.sortOptionText}>{opt.label}</Text>
-                <View style={[styles.radioOuter, sortBy === opt.key && styles.radioOuterActive]}>
-                  {sortBy === opt.key && <View style={styles.radioInner} />}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 };
 
-const getStyles = (colors) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-
-  header: {
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: SIZES.padding,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  backBtn: { padding: 4, marginRight: 10 },
-  headerTitle: { flex: 1, fontSize: SIZES.xl, fontWeight: '800', color: colors.text },
-  sortBtn: {
-    backgroundColor: colors.card || colors.background,
-    borderRadius: SIZES.radiusLg,
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  navTitle: {
+    fontSize: SIZES.base,
+    fontWeight: '700',
+  },
+
+  filterBar: {
+    paddingBottom: 12,
+  },
+  filterScroll: {
+    paddingHorizontal: SIZES.padding,
+    gap: 8,
+  },
+  filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.border,
   },
-  sortBtnText: { color: colors.text, fontSize: SIZES.sm, fontWeight: '700' },
+  filterChipText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
 
-  listContent: { paddingHorizontal: SIZES.padding, paddingBottom: 110 },
-
-  section: { marginBottom: 8 },
+  listContent: {
+    paddingHorizontal: SIZES.padding,
+    paddingBottom: 40,
+  },
+  sectionWrap: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    marginBottom: 8,
+  },
   sectionLabel: {
-    color: colors.textSecondary,
-    fontSize: SIZES.sm,
-    fontWeight: '600',
-    marginTop: 14,
-    marginBottom: 10,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
-
+  sectionCard: {
+    borderRadius: SIZES.radiusLg,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
   notifRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    padding: 14,
   },
-  notifIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  notifRowBorder: {
+    borderBottomWidth: 1,
+  },
+  iconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  notifBody: { flex: 1, marginRight: 8 },
-  notifTitle: { fontSize: SIZES.base, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  notifDesc: { fontSize: SIZES.sm, color: colors.textSecondary, lineHeight: 18 },
-  notifTime: { fontSize: 11, color: colors.textSecondary, alignSelf: 'flex-start', marginTop: 2 },
-
-  empty: { alignItems: 'center', paddingVertical: 60 },
-  emptyIconContainer: {
-    backgroundColor: colors.inputBg || colors.border,
-    padding: 20,
-    borderRadius: 50,
-    marginBottom: 10,
-  },
-  emptyText: { color: colors.textSecondary, fontSize: SIZES.base, marginTop: 10 },
-
-  modalOverlay: {
+  notifBody: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
+    marginRight: 8,
   },
-  sortSheet: {
-    backgroundColor: colors.card || colors.background,
-    borderTopLeftRadius: SIZES.radiusLg,
-    borderTopRightRadius: SIZES.radiusLg,
-    padding: 24,
-    paddingBottom: 36,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sortSheetTitle: { fontSize: SIZES.lg, fontWeight: '800', color: colors.text, marginBottom: 16 },
-  sortOption: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    gap: 6,
+    marginBottom: 3,
   },
-  sortOptionText: { fontSize: SIZES.base, color: colors.text, fontWeight: '500' },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.textSecondary,
+  notifTitle: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  notifDesc: {
+    fontSize: SIZES.xs,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  notifTime: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+
+  emptyWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 30,
   },
-  radioOuterActive: { borderColor: colors.success || colors.primary },
-  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.success || colors.primary },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: SIZES.lg,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  emptySub: {
+    fontSize: SIZES.xs,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
 });
 
 export default NotificationScreen;

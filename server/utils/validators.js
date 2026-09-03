@@ -37,17 +37,22 @@ const googleAuthSchema = z.object({
 // Profile Update
 const updateProfileSchema = z.object({
   name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
+  email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
-  location: z.object({
-    lat: z.number().optional(),
-    lng: z.number().optional(),
-    address: z.string().optional(),
-    city: z.string().optional(),
-  }).optional(),
+  avatar: z.string().optional(),
+  photoURL: z.string().optional(),
+  bio: z.string().optional(),
+  location: z.union([
+    z.string(),
+    z.object({
+      lat: z.number().optional(),
+      lng: z.number().optional(),
+      address: z.string().optional(),
+      city: z.string().optional(),
+    }),
+  ]).optional(),
   fcmToken: z.string().optional(),
-  photoURL: z.string().url().optional(),
-});
+}).passthrough();
 
 // Slot Reservation Schema
 const reserveSlotSchema = z.object({
@@ -135,7 +140,7 @@ const updateScorecardSchema = z.object({
 
 // Review Schema
 const createReviewSchema = z.object({
-  turfId: z.string().min(1),
+  turfId: z.string().optional(),
   rating: z.number().min(1).max(5),
   comment: z.string().optional().default(''),
 });

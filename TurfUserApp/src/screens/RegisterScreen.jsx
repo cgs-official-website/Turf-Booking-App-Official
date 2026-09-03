@@ -1,10 +1,14 @@
-// src/screens/RegisterScreen.jsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import {
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, ScrollView, Alert
+} from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
+import Feather from 'react-native-vector-icons/Feather';
 import { registerUser } from '../redux/authSlice';
-import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
-import Icon from 'react-native-vector-icons/Ionicons';
+import useTheme from '../hooks/useTheme';
+import PrimaryButton from '../components/PrimaryButton';
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 export default function RegisterScreen({ navigation }) {
   const [name, setName]                 = useState('');
@@ -13,61 +17,90 @@ export default function RegisterScreen({ navigation }) {
   const [confirmPassword, setConfirm]   = useState('');
   const [showPass, setShowPass]         = useState(false);
   const [showConfirm, setShowConfirm]   = useState(false);
+
   const dispatch = useDispatch();
   const { status } = useSelector((s) => s.auth);
   const loading = status === 'loading';
+  const { C, dark } = useTheme();
 
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      Alert.alert('Missing info', 'Please fill in all fields');
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    if (!cleanName || !cleanEmail || !cleanPass || !confirmPassword.trim()) {
+      Alert.alert('Missing Details', 'Please fill in your name, email, and password.');
       return;
     }
-    if (password.length < 6) {
-      Alert.alert('Weak password', 'Password must be at least 6 characters');
+    if (cleanPass.length < 6) {
+      Alert.alert('Weak Password', 'Password must be at least 6 characters long.');
       return;
     }
-    if (password !== confirmPassword) {
-      Alert.alert('Passwords do not match', 'Please make sure both passwords are the same');
+    if (cleanPass !== confirmPassword.trim()) {
+      Alert.alert('Passwords Do Not Match', 'Please ensure both password fields are identical.');
       return;
     }
 
-    const res = await dispatch(registerUser({ name: name.trim(), email: email.trim(), password }));
-    if (registerUser.rejected.match(res)) {
-      Alert.alert('Registration Failed', res.payload || 'Please try again');
-      return;
+    try {
+      const res = await dispatch(registerUser({
+        name: cleanName,
+        email: cleanEmail,
+        password: cleanPass,
+        role: 'user',
+      }));
+
+      if (registerUser.rejected.match(res)) {
+        Alert.alert('Registration Failed', res.payload || 'An error occurred during registration. Please try again.');
+        return;
+      }
+
+      // Successful registration will automatically navigate through RootNavigator!
+    } catch (err) {
+      Alert.alert('Network Error', err.message || 'Could not connect to the backend server.');
     }
-    // Automatically navigates into app via RootNavigator watching token
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: C.bg }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Icon name="arrow-back" size={22} color={COLORS.text} />
+        {/* Header */}
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="arrow-left" size={20} color={C.text} />
         </TouchableOpacity>
 
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Join and start booking turfs in minutes</Text>
+        <Text style={[styles.title, { color: C.text }]}>Create Player Account</Text>
+        <Text style={[styles.subtitle, { color: C.subtext }]}>
+          Join thousands of players booking grounds across India
+        </Text>
 
-        <Text style={styles.label}>Full Name</Text>
-        <View style={styles.inputWrap}>
-          <Icon name="person-outline" size={18} color={COLORS.subtext} />
+        {/* Input Fields */}
+        <Text style={[styles.label, { color: C.text }]}>Full Name</Text>
+        <View style={[styles.inputWrap, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Feather name="user" size={18} color={C.subtext} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
-            placeholder="John Doe"
-            placeholderTextColor={COLORS.subtext}
+            style={[styles.input, { color: C.text }]}
+            placeholder="e.g. Rahul Sharma"
+            placeholderTextColor={C.caption}
             value={name}
             onChangeText={setName}
+            autoCapitalize="words"
           />
         </View>
 
-        <Text style={styles.label}>Email Address</Text>
-        <View style={styles.inputWrap}>
-          <Icon name="mail-outline" size={18} color={COLORS.subtext} />
+        <Text style={[styles.label, { color: C.text }]}>Email Address</Text>
+        <View style={[styles.inputWrap, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Feather name="mail" size={18} color={C.subtext} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
-            placeholder="you@example.com"
-            placeholderTextColor={COLORS.subtext}
+            style={[styles.input, { color: C.text }]}
+            placeholder="e.g. rahul@example.com"
+            placeholderTextColor={C.caption}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -75,46 +108,51 @@ export default function RegisterScreen({ navigation }) {
           />
         </View>
 
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.inputWrap}>
-          <Icon name="lock-closed-outline" size={18} color={COLORS.subtext} />
+        <Text style={[styles.label, { color: C.text }]}>Password</Text>
+        <View style={[styles.inputWrap, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Feather name="lock" size={18} color={C.subtext} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: C.text }]}
             placeholder="At least 6 characters"
-            placeholderTextColor={COLORS.subtext}
+            placeholderTextColor={C.caption}
             secureTextEntry={!showPass}
             value={password}
             onChangeText={setPassword}
           />
           <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-            <Icon name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.subtext} />
+            <Feather name={showPass ? 'eye-off' : 'eye'} size={18} color={C.subtext} />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Confirm Password</Text>
-        <View style={styles.inputWrap}>
-          <Icon name="lock-closed-outline" size={18} color={COLORS.subtext} />
+        <Text style={[styles.label, { color: C.text }]}>Confirm Password</Text>
+        <View style={[styles.inputWrap, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Feather name="shield" size={18} color={C.subtext} style={styles.inputIcon} />
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: C.text }]}
             placeholder="Re-enter your password"
-            placeholderTextColor={COLORS.subtext}
+            placeholderTextColor={C.caption}
             secureTextEntry={!showConfirm}
             value={confirmPassword}
             onChangeText={setConfirm}
           />
           <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
-            <Icon name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={18} color={COLORS.subtext} />
+            <Feather name={showConfirm ? 'eye-off' : 'eye'} size={18} color={C.subtext} />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
-        </TouchableOpacity>
+        <PrimaryButton
+          title="Create Account & Enter"
+          onPress={handleRegister}
+          loading={loading}
+          style={{ marginTop: 24, marginBottom: 16 }}
+        />
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login2')}>
-            <Text style={styles.footerLink}>Login</Text>
+        <View style={styles.loginRow}>
+          <Text style={[styles.loginText, { color: C.subtext }]}>
+            Already have an account?{' '}
+          </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <Text style={[styles.loginLink, { color: C.primary }]}>Sign In</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -123,17 +161,16 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.xl, paddingTop: 56, flexGrow: 1 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg },
-  title: { ...FONT.h1, color: COLORS.text },
-  subtitle: { ...FONT.body, color: COLORS.subtext, marginTop: 6, marginBottom: SPACING.lg },
-  label: { ...FONT.small, color: COLORS.text, fontWeight: '600', marginBottom: SPACING.xs, marginTop: SPACING.md },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, gap: SPACING.sm, backgroundColor: COLORS.bgSoft },
-  input: { flex: 1, paddingVertical: 14, color: COLORS.text, fontSize: 15 },
-  button: { backgroundColor: COLORS.primary, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center', marginTop: SPACING.xl },
-  buttonText: { color: '#fff', ...FONT.button },
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.xl, marginBottom: SPACING.xl },
-  footerText: { color: COLORS.subtext },
-  footerLink: { color: COLORS.primary, fontWeight: '700' },
+  container: { flex: 1 },
+  content:   { padding: SPACING.xl, paddingTop: 56, paddingBottom: 40 },
+  backBtn:   { width: 42, height: 42, borderRadius: 21, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  title:     { ...FONT.display, fontSize: 26, marginBottom: 6 },
+  subtitle:  { ...FONT.body, fontSize: 13, marginBottom: 28 },
+  label:     { ...FONT.caption, fontWeight: '700', marginBottom: 6, fontSize: 13 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, paddingHorizontal: 14, height: 52, marginBottom: 16 },
+  inputIcon: { marginRight: 10 },
+  input:     { flex: 1, ...FONT.body, fontSize: 15, fontWeight: '500' },
+  loginRow:  { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  loginText: { fontSize: 13 },
+  loginLink: { fontSize: 13, fontWeight: '800' },
 });

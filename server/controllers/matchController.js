@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const firestoreService = require('../services/firestoreService');
+const notificationService = require('../services/notificationService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const {
   createMatchSchema,
@@ -48,6 +49,8 @@ const matchController = {
         nonStriker: '',
         bowler: '',
       },
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     const match = await firestoreService.createDoc('matches', matchData);
@@ -88,10 +91,42 @@ const matchController = {
       await firestoreService.updateDoc('matches', match.id, {
         players,
         playerProfiles,
+        updatedAt: new Date(),
       });
     }
 
     return sendSuccess(res, { match: { ...match, players, playerProfiles } });
+  },
+
+  /**
+   * POST /api/v1/matches/:id/invite
+   * Invite players to match room with FCM notifications
+   */
+  async invitePlayers(req, res) {
+    const { id } = req.params;
+    const { playerIds = [] } = req.body;
+
+    const match = await firestoreService.getDoc('matches', id);
+    if (!match) {
+      return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+    }
+
+    if (playerIds.length > 0) {
+      await notificationService.sendToUsers(playerIds, {
+        title: 'Match Invitation 🏏',
+        body: `You have been invited by ${match.creatorName || 'a player'} to join a ${match.sport || 'Cricket'} match at ${match.place || 'the turf'}.`,
+        type: 'match',
+        data: {
+          matchId: id,
+          joinCode: match.joinCode || '',
+        },
+      });
+    }
+
+    return sendSuccess(res, {
+      message: 'Invitations sent successfully',
+      invitedCount: playerIds.length,
+    });
   },
 
   /**
@@ -115,6 +150,7 @@ const matchController = {
 
     const updated = await firestoreService.updateDoc('matches', id, {
       teams: parsed,
+      updatedAt: new Date(),
     });
 
     return sendSuccess(res, { match: updated });
@@ -130,6 +166,7 @@ const matchController = {
     const updated = await firestoreService.updateDoc('matches', id, {
       toss: parsed,
       status: 'live',
+      updatedAt: new Date(),
     });
 
     return sendSuccess(res, { match: updated });
@@ -145,6 +182,7 @@ const matchController = {
 
     const updatePayload = {
       scorecard: parsed.scorecard,
+      updatedAt: new Date(),
     };
     if (parsed.status) {
       updatePayload.status = parsed.status;

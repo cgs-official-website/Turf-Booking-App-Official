@@ -8,6 +8,7 @@ router.use(verifySessionToken);
 
 router.post('/', matchController.createMatch);
 router.post('/join', matchController.joinMatch);
+router.post('/:id/invite', matchController.invitePlayers);
 router.get('/mine', matchController.getMyMatches);
 router.get('/:id', matchController.getMatchById);
 router.patch('/:id/teams', matchController.updateTeams);

@@ -1,22 +1,22 @@
 import { apiRequest } from './client';
 
 export const loginVendorApi = (credentials) =>
-  apiRequest('/vendor/auth/login', {
+  apiRequest('/auth/login', {
     method: 'POST',
-    body: JSON.stringify(credentials),
+    body: JSON.stringify({ ...credentials, role: 'vendor' }),
   });
 
 export const registerVendorApi = (data) =>
-  apiRequest('/vendor/auth/register', {
+  apiRequest('/auth/register', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, role: 'vendor' }),
   });
 
-export const getMeApi = () => apiRequest('/vendor/auth/me');
+export const getMeApi = () => apiRequest('/auth/me');
 
 export const updateProfileApi = (data) =>
-  apiRequest('/vendor/auth/profile', {
-    method: 'PUT',
+  apiRequest('/auth/me', {
+    method: 'PATCH',
     body: JSON.stringify(data),
   });
 

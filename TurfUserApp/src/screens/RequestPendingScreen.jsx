@@ -1,294 +1,410 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Linking, ActivityIndicator, Image, ScrollView,
+  Linking, ActivityIndicator, ScrollView, StatusBar,
 } from 'react-native';
+import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { bookingsApi } from '../api/bookings';
-import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
-import Icon from 'react-native-vector-icons/Ionicons';
-
-const orangeClock = require('../assets/orangeclock.png');
-const redClock    = require('../assets/redclock.png');
-const greenClock  = require('../assets/greenclock.png');
-const greenBell   = require('../assets/greenbell.png');
+import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
+import useTheme from '../hooks/useTheme';
+import PrimaryButton from '../components/PrimaryButton';
+import SecondaryButton from '../components/SecondaryButton';
 
 const RESPONSE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 export default function RequestPendingScreen({ route, navigation }) {
   const { bookingId } = route.params;
+  const { C, dark } = useTheme();
   const [booking,     setBooking]     = useState(null);
-  const [secondsLeft, setSecondsLeft] = useState(RESPONSE_WINDOW_MS / 1000);
+  const [secondsLeft, setSecondsLeft] = useState(600);
   const pollRef  = useRef(null);
   const timerRef = useRef(null);
 
-  // ── Polling: fetch booking every 4s ───────────────────────────────────────
+  const parseDateMs = (d) => {
+    if (!d) return Date.now();
+    if (typeof d === 'number') return d;
+    if (d._seconds) return d._seconds * 1000;
+    if (typeof d.toDate === 'function') return d.toDate().getTime();
+    const t = new Date(d).getTime();
+    return isNaN(t) ? Date.now() : t;
+  };
+
   const fetchBooking = async () => {
     try {
       const res = await bookingsApi.getBooking(bookingId);
-      const b = res.booking;
-      setBooking(b);
+      const b = res.booking || res.data?.booking || res;
+      if (b) {
+        setBooking(b);
 
-      if (b.status === 'confirmed') {
-        clearInterval(pollRef.current);
-        clearInterval(timerRef.current);
-        navigation.replace('BookingDetail', { bookingId });
-      } else if (['rejected', 'cancelled'].includes(b.status)) {
-        clearInterval(pollRef.current);
-        clearInterval(timerRef.current);
-        setSecondsLeft(0);
+        if (b.status === 'confirmed') {
+          clearInterval(pollRef.current);
+          clearInterval(timerRef.current);
+          navigation.replace('BookingDetail', { bookingId });
+        } else if (['rejected', 'cancelled'].includes(b.status)) {
+          clearInterval(pollRef.current);
+          clearInterval(timerRef.current);
+          setSecondsLeft(0);
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Polling error on pending booking:', e.message);
+    }
   };
 
   useEffect(() => {
     fetchBooking();
-    pollRef.current = setInterval(fetchBooking, 4000);
+    pollRef.current = setInterval(fetchBooking, 3500);
     return () => {
       clearInterval(pollRef.current);
       clearInterval(timerRef.current);
     };
   }, []);
 
-  // ── Countdown timer: starts from booking createdAt + 10 mins ──────────────
   useEffect(() => {
-    if (!booking?.createdAt) return;
+    if (!booking) return;
     clearInterval(timerRef.current);
-
-    const deadline = new Date(booking.createdAt).getTime() + RESPONSE_WINDOW_MS;
+    const createdMs = parseDateMs(booking.requestedAt || booking.createdAt || booking.reservedAt);
+    const deadline = createdMs + RESPONSE_WINDOW_MS;
 
     const tick = () => {
       const diff = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
-      setSecondsLeft(diff);
+      setSecondsLeft(isNaN(diff) ? 600 : diff);
     };
     tick();
     timerRef.current = setInterval(tick, 1000);
     return () => clearInterval(timerRef.current);
-  }, [booking?.createdAt]);
+  }, [booking?.requestedAt, booking?.createdAt, booking?.reservedAt]);
 
-  // ── Loading ────────────────────────────────────────────────────────────────
   if (!booking) {
     return (
-      <View style={styles.loadingBox}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
+      <View style={[styles.loadingBox, { backgroundColor: C.bg }]}>
+        <ActivityIndicator color={C.primary} size="large" />
+        <Text style={[styles.loadingText, { color: C.subtext }]}>Loading booking status...</Text>
       </View>
     );
   }
 
-  // ── Derived state ──────────────────────────────────────────────────────────
-  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
-  const ss = String(secondsLeft % 60).padStart(2, '0');
+  const validSeconds = typeof secondsLeft === 'number' && !isNaN(secondsLeft) ? secondsLeft : 600;
+  const mm = String(Math.floor(validSeconds / 60)).padStart(2, '0');
+  const ss = String(validSeconds % 60).padStart(2, '0');
 
-  const isPending   = booking.status === 'pending';
+  const isPending   = booking.status === 'pending' || booking.status === 'reserved';
   const isRejected  = booking.status === 'rejected';
   const isCancelled = booking.status === 'cancelled';
-  const isExpired   = isPending && secondsLeft === 0;
-  const isBad       = isRejected || isCancelled || isExpired;
+  const isExpired   = isPending && validSeconds === 0;
 
-  // Status card colours + icon asset
-  const cardBg      = isBad ? COLORS.redBg : COLORS.orangeBg;
-  const statusClock = isBad ? redClock : orangeClock;
-
-  const statusTitle = isPending && !isExpired
-    ? 'Request Pending'
-    : isRejected  ? 'Request Declined'
-    : isCancelled ? 'Booking Cancelled'
-    : 'Request Expired';
-
-  const statusSub = isPending && !isExpired
-    ? 'Waiting for vendor confirmation'
-    : isRejected
-    ? (booking.rejectionReason || 'Vendor declined this request')
-    : isCancelled
-    ? 'This booking was cancelled'
-    : 'Vendor did not respond in time';
-
-  // Timer colours + icon asset
-  const timerCircleBg   = isExpired ? COLORS.redBg    : COLORS.greenSoft;
-  const timerClockAsset = isExpired ? redClock        : greenClock;
-  const timerValueColor = isExpired ? COLORS.red      : COLORS.text;
-
-  // Call now: enabled only when timer expired or rejected/cancelled
-  const callEnabled = isExpired || isRejected || isCancelled;
-
-  // Phone number from vendor (populate vendor on turf)
+  const turfName    = booking.turfName || booking.turf?.name || 'Turf Pitch Arena';
+  const turfAddress = booking.turfAddress || booking.turf?.address || booking.turf?.location?.address || `${booking.turf?.city || 'Tamil Nadu'}`;
+  const totalAmount = booking.amount || booking.totalAmount || 800;
   const vendorPhone = booking.turf?.vendor?.phone || booking.vendorPhone;
 
+  const fmtDate = (d) => {
+    if (!d) return 'Today';
+    const dateObj = new Date(d);
+    if (isNaN(dateObj.getTime())) return String(d);
+    return dateObj.toLocaleDateString('en-IN', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={dark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.backBtn}>
-          <Icon name="arrow-back" size={20} color={COLORS.text} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Main')}
+          style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="home" size={18} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Request Pending</Text>
-        <View style={{ width: 38 }} />
+        <Text style={[styles.headerTitle, { color: C.text }]}>Booking Status</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Status Banner */}
+        <View
+          style={[
+            styles.statusBanner,
+            {
+              backgroundColor: isRejected || isCancelled || isExpired
+                ? (dark ? '#3D1414' : '#FEE2E2')
+                : (dark ? '#1A2E20' : '#ECFDF5'),
+              borderColor: isRejected || isCancelled || isExpired
+                ? '#EF4444'
+                : '#10B981',
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.statusIconWrap,
+              {
+                backgroundColor: isRejected || isCancelled || isExpired
+                  ? '#EF4444'
+                  : '#10B981',
+              },
+            ]}
+          >
+            <Feather
+              name={isRejected || isCancelled || isExpired ? 'alert-circle' : 'clock'}
+              size={24}
+              color="#FFFFFF"
+            />
+          </View>
 
-        {/* ── Status Card ── */}
-        <View style={[styles.statusCard, { backgroundColor: cardBg }]}>
-          <View style={styles.statusIconCircle}>
-            <Image source={statusClock} style={styles.statusIconImg} resizeMode="contain" />
-          </View>
-          <View style={styles.statusTextCol}>
-            <Text style={styles.statusTitle}>{statusTitle}</Text>
-            <Text style={styles.statusSub}>{statusSub}</Text>
-            <View style={styles.codeBadge}>
-              <Icon name="ticket-outline" size={14} color="#fff" />
-              <Text style={styles.codeText}>
-                Booking ID: {booking._id?.slice(-6).toUpperCase()}
-              </Text>
-            </View>
-          </View>
+          <Text
+            style={[
+              styles.statusTitle,
+              {
+                color: isRejected || isCancelled || isExpired
+                  ? '#DC2626'
+                  : '#059669',
+              },
+            ]}
+          >
+            {isPending && !isExpired
+              ? 'Hand Cash Request Placed ⏳'
+              : isRejected
+              ? 'Request Declined by Venue'
+              : isCancelled
+              ? 'Booking Cancelled'
+              : 'Hold Window Expired'}
+          </Text>
+
+          <Text style={[styles.statusSub, { color: C.subtext }]}>
+            {isPending && !isExpired
+              ? 'The venue manager has received your booking request and will confirm shortly.'
+              : isRejected
+              ? (booking.rejectionReason || 'The selected slot was filled.')
+              : 'Please select another available time slot or pitch.'}
+          </Text>
         </View>
 
-        {/* ── Timer Card ── */}
-        <View style={styles.timerCard}>
-          <View style={styles.timerRow}>
-            <View style={[styles.timerIconCircle, { backgroundColor: timerCircleBg }]}>
-              <Image source={timerClockAsset} style={styles.timerIconImg} resizeMode="contain" />
-            </View>
-            <View>
-              <Text style={styles.timerLabel}>Response expected within</Text>
-              <Text style={[styles.timerValue, { color: timerValueColor }]}>
-                {mm} : {ss}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.timerRow}>
-            <Image source={greenBell} style={styles.bellIconImg} resizeMode="contain" />
-            <Text style={styles.timerHint}>
-              We will notify you as soon as the vendor responds
+        {/* Live Timer Countdown */}
+        {isPending && !isExpired && (
+          <View style={[styles.timerCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+            <Text style={[styles.timerLabel, { color: C.subtext }]}>Manager Acceptance Window</Text>
+            <Text style={[styles.timerNumbers, { color: C.primary }]}>
+              {mm}:{ss}
+            </Text>
+            <Text style={[styles.timerDesc, { color: C.caption }]}>
+              Auto-syncing in real time. You will be redirected instantly when accepted.
             </Text>
           </View>
-        </View>
+        )}
 
-        {/* ── Booking Details Card ── */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>Booking Details</Text>
+        {/* Booking Details Card (Venue, Location, Time, Payment) */}
+        <View style={[styles.summaryBox, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <Text style={[styles.summaryTitle, { color: C.text }]}>Venue & Slot Details</Text>
 
-          <View style={styles.turfRow}>
-            {booking.turf?.images?.[0] ? (
-              <Image source={{ uri: booking.turf.images[0] }} style={styles.turfThumb} />
-            ) : (
-              <View style={[styles.turfThumb, { backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center' }]}>
-                <Icon name="image-outline" size={24} color={COLORS.subtext} />
-              </View>
-            )}
+          {/* Venue Name */}
+          <View style={styles.summaryItem}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <Feather name="shield" size={14} color={C.primary} />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.turfName}>{booking.turf?.name}</Text>
-              <View style={styles.locRow}>
-                <Icon name="location-outline" size={13} color={COLORS.primary} />
-                <Text style={styles.locText} numberOfLines={1}>
-                  {booking.turf?.location?.city}, {booking.turf?.location?.state}, India
-                </Text>
-              </View>
-              <View style={styles.locRow}>
-                <Icon name="walk-outline" size={13} color={COLORS.subtext} />
-                <Text style={styles.locText}>2.4 Km away</Text>
-              </View>
+              <Text style={[styles.summaryKey, { color: C.subtext }]}>Venue Name</Text>
+              <Text style={[styles.summaryVal, { color: C.text, fontWeight: '800' }]}>{turfName}</Text>
             </View>
           </View>
 
-          {/* Dark price banner */}
-          <View style={styles.priceBox}>
-            <View>
-              <Text style={styles.priceLabel}>PRICE</Text>
-              <Text style={styles.priceValue}>
-                ₹{booking.turf?.pricePerHour}
-                <Text style={styles.priceUnit}>/hr</Text>
-              </Text>
+          {/* Venue Location Address */}
+          <View style={styles.summaryItem}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
+              <Feather name="map-pin" size={14} color="#3B82F6" />
             </View>
-            <View style={styles.priceDivider} />
-            <View>
-              <Text style={styles.priceLabel}>DURATION</Text>
-              <Text style={styles.durationValue}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.summaryKey, { color: C.subtext }]}>Location</Text>
+              <Text style={[styles.summaryVal, { color: C.text }]} numberOfLines={2}>{turfAddress}</Text>
+            </View>
+          </View>
+
+          {/* Schedule Date */}
+          <View style={styles.summaryItem}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
+              <Feather name="calendar" size={14} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.summaryKey, { color: C.subtext }]}>Match Date</Text>
+              <Text style={[styles.summaryVal, { color: C.text }]}>{fmtDate(booking.date)}</Text>
+            </View>
+          </View>
+
+          {/* Slot Duration */}
+          <View style={styles.summaryItem}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(236, 72, 153, 0.12)' }]}>
+              <Feather name="clock" size={14} color="#EC4899" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.summaryKey, { color: C.subtext }]}>Slot Timing</Text>
+              <Text style={[styles.summaryVal, { color: C.primary, fontWeight: '800' }]}>
                 {booking.startTime} - {booking.endTime}
               </Text>
             </View>
           </View>
+
+          {/* Payment Mode */}
+          <View style={styles.summaryItem}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <Ionicons name="cash-outline" size={16} color={C.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.summaryKey, { color: C.subtext }]}>Payment Mode</Text>
+              <Text style={[styles.summaryVal, { color: C.text, fontWeight: '700' }]}>
+                {booking.paymentMethod === 'cash' || booking.paymentMode === 'hand_cash'
+                  ? '💵 Hand Cash (Pay at Venue)'
+                  : '💳 Online Payment'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Total Amount */}
+          <View style={[styles.summaryItem, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <Feather name="tag" size={14} color={C.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.summaryKey, { color: C.subtext }]}>Total Amount Payable</Text>
+              <Text style={[styles.summaryVal, { color: C.primary, fontSize: 18, fontWeight: '900' }]}>
+                ₹{totalAmount}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        {/* ── Call Now ── */}
-        <TouchableOpacity
-          style={[styles.callBtn, callEnabled && styles.callBtnActive]}
-          disabled={!callEnabled}
-          onPress={() => {
-            if (vendorPhone) Linking.openURL(`tel:${vendorPhone}`);
-          }}
-        >
-          <Icon name="call" size={18} color="#fff" />
-          <Text style={styles.callBtnText}>Call now</Text>
-        </TouchableOpacity>
-
-        {/* ── Try Another Slot (only on bad status) ── */}
-        {isBad && (
-          <TouchableOpacity
-            style={styles.tryAgainBtn}
-            onPress={() => navigation.navigate('TurfDetail', { id: booking.turf?._id })}
-          >
-            <Text style={styles.tryAgainText}>Try Another Slot</Text>
-          </TouchableOpacity>
+        {/* Action Buttons */}
+        {vendorPhone && (
+          <SecondaryButton
+            title="Call Venue Manager"
+            icon={<Feather name="phone-call" size={16} color={C.primary} />}
+            onPress={() => Linking.openURL(`tel:${vendorPhone}`)}
+            style={{ marginTop: 6 }}
+          />
         )}
 
+        <PrimaryButton
+          title="Return to Home Dashboard"
+          onPress={() => navigation.navigate('Main')}
+          style={{ marginTop: 10 }}
+        />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container:        { flex: 1, backgroundColor: COLORS.bg },
-  loadingBox:       { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  // Header
-  header:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: 50, paddingBottom: SPACING.md },
-  backBtn:          { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center' },
-  headerTitle:      { ...FONT.h3, color: COLORS.text, fontWeight: '700' },
-
-  // Status Card
-  statusCard:       { flexDirection: 'row', alignItems: 'center', borderRadius: RADIUS.lg, padding: SPACING.lg, gap: SPACING.md, marginBottom: SPACING.lg },
-  statusIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
-  statusIconImg:    { width: 40, height: 40 },
-  statusTextCol:    { flex: 1 },
-  statusTitle:      { fontSize: 19, fontWeight: '800', color: COLORS.text },
-  statusSub:        { color: COLORS.subtext, fontSize: 13, marginTop: 2 },
-  codeBadge:        { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: COLORS.primaryDark, paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.round, marginTop: SPACING.md },
-  codeText:         { color: '#fff', fontSize: 12, fontWeight: '700' },
-
-  // Timer Card
-  timerCard:        { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.lg, backgroundColor: '#fff' },
-  timerRow:         { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  timerIconCircle:  { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  timerIconImg:     { width: 22, height: 22 },
-  bellIconImg:      { width: 18, height: 18 },
-  timerLabel:       { color: COLORS.subtext, fontSize: 12 },
-  timerValue:       { fontSize: 28, fontWeight: '800', letterSpacing: 1 },
-  divider:          { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md },
-  timerHint:        { color: COLORS.subtext, fontSize: 12, flex: 1 },
-
-  // Details Card
-  detailsCard:      { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.lg, backgroundColor: '#fff' },
-  detailsTitle:     { fontSize: 16, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
-  turfRow:          { flexDirection: 'row', gap: SPACING.md, alignItems: 'center', marginBottom: SPACING.md },
-  turfThumb:        { width: 70, height: 70, borderRadius: RADIUS.md },
-  turfName:         { fontWeight: '700', color: COLORS.text, fontSize: 15 },
-  locRow:           { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  locText:          { color: COLORS.subtext, fontSize: 12, flexShrink: 1 },
-
-  // Price banner
-  priceBox:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', backgroundColor: COLORS.primaryDark, borderRadius: RADIUS.md, padding: SPACING.md, marginTop: SPACING.sm },
-  priceDivider:     { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.2)' },
-  priceLabel:       { color: 'rgba(255,255,255,0.6)', fontSize: 10, letterSpacing: 1, fontWeight: '600' },
-  priceValue:       { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 2 },
-  priceUnit:        { fontSize: 12, fontWeight: '400' },
-  durationValue:    { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 2 },
-
-  // Buttons
-  callBtn:          { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, backgroundColor: COLORS.subtext, paddingVertical: SPACING.lg, borderRadius: RADIUS.round, marginBottom: SPACING.md },
-  callBtnActive:    { backgroundColor: COLORS.primary },
-  callBtnText:      { color: '#fff', fontWeight: '700', fontSize: 15 },
-  tryAgainBtn:      { backgroundColor: COLORS.red, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center' },
-  tryAgainText:     { color: '#fff', fontWeight: '700' },
+  container: { flex: 1 },
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { marginTop: 12, fontSize: 13, fontWeight: '600' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 52,
+    paddingBottom: 12,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerTitle: {
+    ...FONT.h2,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  scroll: {
+    padding: SPACING.lg,
+    paddingBottom: 100,
+    gap: 14,
+  },
+  statusBanner: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  statusIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  statusSub: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  timerCard: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  timerLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  timerNumbers: {
+    fontSize: 36,
+    fontWeight: '900',
+    letterSpacing: 2,
+    marginVertical: 4,
+  },
+  timerDesc: {
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  summaryBox: {
+    padding: 16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+  },
+  summaryTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 14,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  iconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  summaryKey: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  summaryVal: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
 });

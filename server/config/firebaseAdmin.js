@@ -21,7 +21,14 @@ function initFirebase() {
 
     const resolvedPath = path.resolve(__dirname, '..', serviceAccountFile);
 
-    if (fs.existsSync(resolvedPath)) {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      try {
+        const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        credential = admin.credential.cert(sa);
+      } catch (e) {
+        console.warn('⚠️ Could not parse FIREBASE_SERVICE_ACCOUNT JSON:', e.message);
+      }
+    } else if (fs.existsSync(resolvedPath)) {
       const serviceAccount = require(resolvedPath);
       credential = admin.credential.cert(serviceAccount);
     } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {

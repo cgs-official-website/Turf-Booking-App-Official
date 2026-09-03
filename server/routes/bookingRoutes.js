@@ -8,6 +8,7 @@ router.use(verifySessionToken);
 
 router.post('/reserve', bookingController.reserveSlot);
 router.post('/:id/create-order', bookingController.createRazorpayOrder);
+router.post('/:id/confirm-cash', bookingController.confirmCashBooking);
 router.get('/mine', bookingController.getMyBookings);
 router.get('/:id', bookingController.getBookingDetail);
 router.post('/:id/cancel', bookingController.cancelBooking);

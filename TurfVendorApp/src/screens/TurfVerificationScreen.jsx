@@ -36,23 +36,28 @@ export default function TurfVerificationScreen({ navigation }) {
     setter({ uri: asset.uri, name: asset.fileName, type: asset.type });
   };
 
-  const handleDigiLocker = () => {
-    Alert.alert('DigiLocker', 'Connecting to DigiLocker...', [
-      { text: 'OK', onPress: () => setDigilockerVerified(true) },
-    ]);
-  };
+  // const handleDigiLocker = () => {
+  //   Alert.alert('DigiLocker', 'Connecting to DigiLocker...', [
+  //     { text: 'OK', onPress: () => setDigilockerVerified(true) },
+  //   ]);
+  // };
 
   const handleContinue = async () => {
-    if (!digilockerVerified && (!gstFile || !ebBillFile)) {
-      Alert.alert('Missing documents', 'Please upload GST Certificate and EB Bill, or verify with DigiLocker.');
+    if (!gstFile || !ebBillFile) {
+      Alert.alert('Missing documents', 'Please upload GST Certificate and EB Bill to continue.');
       return;
     }
-    const res = await dispatch(submitTurfKyc({ gstFile, ebBillFile, digilockerVerified }));
+    const res = await dispatch(submitTurfKyc({ gstFile, ebBillFile }));
     if (submitTurfKyc.fulfilled.match(res)) {
-      dispatch(markTurfOnboardingComplete());
       Alert.alert(
-        'Submitted for review',
-        'Your turf has been submitted to the admin for approval. You will be notified once verified.'
+        'Documents Uploaded',
+        'Your KYC documents have been saved. Please select a partner subscription plan and complete the registration payment to submit your turf for Super Admin review.',
+        [
+          {
+            text: 'Choose Plan & Pay',
+            onPress: () => navigation.navigate('SubscriptionPlans', { isOnboarding: true }),
+          },
+        ]
       );
     } else {
       Alert.alert('Error', res.payload || 'Something went wrong. Try again.');
@@ -100,6 +105,7 @@ export default function TurfVerificationScreen({ navigation }) {
           Verify your identity before registering your turf and receiving bookings.
         </Text>
 
+        {/* DigiLocker concept commented out
         <View style={[styles.digiCard, { borderColor: colors.border, backgroundColor: isDark ? '#064E3B' : '#F3FBF6' }]}>
           <View style={styles.digiRow}>
             <View style={styles.digiIcon}><Feather name="book-open" size={18} color={colors.primary} /></View>
@@ -114,8 +120,9 @@ export default function TurfVerificationScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         </View>
+        */}
 
-        <Text style={[styles.manualLabel, { color: colors.text }]}>Manual Upload</Text>
+        <Text style={[styles.manualLabel, { color: colors.text }]}>Upload Turf Documents</Text>
 
         <UploadBox label="Gst certificate" file={gstFile} onPress={() => pickFile(setGstFile)} />
         <View style={{ height: 14 }} />

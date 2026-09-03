@@ -13,7 +13,11 @@ import Feather from 'react-native-vector-icons/Feather';
 
 // Optional illustration — see src/assets/README.md. Falls back to a vector icon banner.
 let tosImage = null;
-try { tosImage = require('../assets/terms-illustration.png'); } catch (e) {}
+try {
+  tosImage = require('../assets/terms-illustration.png');
+} catch (e) {
+  tosImage = null;
+}
 
 const Section = ({ icon, title, children, colors, styles }) => (
   <View style={styles.section}>
@@ -62,15 +66,22 @@ const TermsScreen = ({ navigation, route }) => {
   }, [navigation]);
 
   useEffect(() => {
-    if (error && isFocused) { Alert.alert('Registration Failed', error); dispatch(clearError()); }
+    if (error && isFocused) {
+      Alert.alert('Registration Failed', error);
+      dispatch(clearError());
+    }
   }, [error, isFocused]);
 
   useEffect(() => {
     if (registrationSuccess) {
       dispatch(clearRegistrationSuccess());
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      Alert.alert(
+        'Registration Successful',
+        'Your vendor account has been created. Please log in to proceed.',
+        [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }) }]
+      );
     }
-  }, [registrationSuccess]);
+  }, [registrationSuccess, navigation]);
 
   const handleContinue = () => {
     if (!agreed) {
@@ -113,7 +124,7 @@ const TermsScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Section icon="shield" title="1. Usage Rights" colors={colors} styles={styles}>
           <Text style={styles.paragraph}>
             PitchPerfect grants you a limited, non-exclusive, non-transferable, and revocable
@@ -163,28 +174,40 @@ const TermsScreen = ({ navigation, route }) => {
       </ScrollView>
 
       <View style={[styles.footer, SHADOWS.md]}>
-        <TouchableOpacity style={styles.checkboxRow} onPress={() => setAgreed(!agreed)} activeOpacity={0.7}>
-          <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-            {agreed && <Feather name="check" size={14} color={colors.onAccent} />}
-          </View>
-          <Text style={styles.checkboxLabel}>I agree to the Terms & Conditions</Text>
-        </TouchableOpacity>
+        {formData ? (
+          <>
+            <TouchableOpacity style={styles.checkboxRow} onPress={() => setAgreed(!agreed)} activeOpacity={0.7}>
+              <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+                {agreed && <Feather name="check" size={14} color={colors.onAccent} />}
+              </View>
+              <Text style={styles.checkboxLabel}>I agree to the Terms & Conditions</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.btn, (!agreed || loading) && { opacity: 0.6 }]}
-          onPress={handleContinue}
-          disabled={!agreed || loading}
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.onAccent} />
-          ) : (
-            <>
-              <Text style={styles.btnText}>Accept & Continue</Text>
-              <Feather name="arrow-right" size={18} color={colors.onAccent} style={{ marginLeft: 8 }} />
-            </>
-          )}
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btn, (!agreed || loading) && { opacity: 0.6 }]}
+              onPress={handleContinue}
+              disabled={!agreed || loading}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.onAccent} />
+              ) : (
+                <>
+                  <Text style={styles.btnText}>Accept & Continue</Text>
+                  <Feather name="arrow-right" size={18} color={colors.onAccent} style={{ marginLeft: 8 }} />
+                </>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnText}>Close</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -233,6 +256,7 @@ const getStyles = (colors) => StyleSheet.create({
     borderColor: (colors.success || colors.primary) + '30',
   },
   
+  scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: SIZES.paddingLg, paddingTop: 8, paddingBottom: 24 },
   section: { marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },

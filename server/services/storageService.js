@@ -1,89 +1,74 @@
 const path = require('path');
 const crypto = require('crypto');
-const { storage } = require('../config/firebaseAdmin');
+const fs = require('fs');
+const cloudinaryService = require('./cloudinaryService');
+
+const UPLOADS_DIR = path.join(__dirname, '../public/uploads');
 
 /**
- * Firebase Cloud Storage Service
+ * Unified Storage Service (Cloudinary Cloud Storage + Local Static Mirror)
  */
 const storageService = {
   /**
-   * Upload file buffer to Firebase Cloud Storage
+   * Upload file buffer to Cloudinary (Production) or Local Static Uploads (Dev/Fallback)
    * @param {Object} file - Express Multer file object { buffer, originalname, mimetype }
    * @param {string} destinationFolder - e.g. "kyc", "turfs", "users"
-   * @returns {Promise<{ url: string, storagePath: string }>}
+   * @returns {Promise<{ url: string, storagePath: string, public_id?: string }>}
    */
   async uploadFile(file, destinationFolder = 'general') {
     if (!file || !file.buffer) {
       throw new Error('No file buffer provided for upload');
     }
 
-    if (!storage) {
-      console.warn('⚠️ Firebase Storage is not configured. Returning fallback placeholder URL.');
-      return {
-        url: `https://storage.googleapis.com/placeholder-bucket/${destinationFolder}/${Date.now()}-${file.originalname || 'file.jpg'}`,
-        storagePath: `${destinationFolder}/${Date.now()}-${file.originalname || 'file.jpg'}`,
-      };
-    }
-
-    const bucket = storage.bucket();
-    const ext = path.extname(file.originalname || '.jpg');
+    const ext = path.extname(file.originalname || '.jpg') || '.jpg';
     const randomName = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
     const storagePath = `${destinationFolder}/${randomName}`;
-    const fileRef = bucket.file(storagePath);
 
-    await fileRef.save(file.buffer, {
-      metadata: {
-        contentType: file.mimetype || 'application/octet-stream',
-      },
-      resumable: false,
-    });
+    // Always persist a local copy for dev fallback / serving
+    try {
+      const targetDir = path.join(UPLOADS_DIR, destinationFolder);
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      const localFilePath = path.join(targetDir, randomName);
+      fs.writeFileSync(localFilePath, file.buffer);
+    } catch (localErr) {
+      console.warn('⚠️ Local file save warning:', localErr.message);
+    }
 
-    // Option A: Make public for turf images
-    // Option B: Signed URL for private KYC docs
-    let downloadUrl;
-    if (destinationFolder === 'kyc') {
-      const [signedUrl] = await fileRef.getSignedUrl({
-        action: 'read',
-        expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
-      });
-      downloadUrl = signedUrl;
-    } else {
-      // Public accessible URL for turfs/avatars
+    // 1. Primary: Cloudinary Cloud Storage
+    if (cloudinaryService.isConfigured()) {
       try {
-        await fileRef.makePublic();
-        downloadUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
-      } catch {
-        const [signedUrl] = await fileRef.getSignedUrl({
-          action: 'read',
-          expires: Date.now() + 30 * 24 * 60 * 60 * 1000,
+        const cloudResult = await cloudinaryService.uploadBuffer(file.buffer, {
+          folder: `turf_app/${destinationFolder}`,
+          resource_type: file.mimetype?.includes('pdf') ? 'raw' : 'image',
         });
-        downloadUrl = signedUrl;
+
+        return {
+          url: cloudResult.url,
+          storagePath: cloudResult.public_id || storagePath,
+          public_id: cloudResult.public_id,
+        };
+      } catch (cloudErr) {
+        console.warn('⚠️ Cloudinary upload failed, falling back to local storage:', cloudErr.message);
       }
     }
 
+    // 2. Fallback / Local Static URL
+    const localUrl = `/uploads/${destinationFolder}/${randomName}`;
     return {
-      url: downloadUrl,
+      url: localUrl,
       storagePath,
     };
   },
 
   /**
-   * Get fresh signed URL for a private storage path
+   * Get public or signed URL for a storage path
    */
-  async getSignedUrl(storagePath, expiresInMinutes = 60) {
-    if (!storage) return null;
-    try {
-      const bucket = storage.bucket();
-      const fileRef = bucket.file(storagePath);
-      const [signedUrl] = await fileRef.getSignedUrl({
-        action: 'read',
-        expires: Date.now() + expiresInMinutes * 60 * 1000,
-      });
-      return signedUrl;
-    } catch (err) {
-      console.error('getSignedUrl error:', err.message);
-      return null;
-    }
+  async getSignedUrl(storagePath) {
+    if (!storagePath) return null;
+    if (/^(https?:|data:)/i.test(storagePath)) return storagePath;
+    return `/uploads/${storagePath.replace(/^\/+/, '')}`;
   },
 };
 

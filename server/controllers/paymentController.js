@@ -19,6 +19,14 @@ const paymentController = {
       return sendError(res, 'Booking not found', 404, 'NOT_FOUND');
     }
 
+    // Idempotent return if already confirmed
+    if (booking.status === 'confirmed') {
+      return sendSuccess(res, {
+        booking,
+        message: 'Booking is already confirmed',
+      });
+    }
+
     const isValid = razorpayService.verifySignature(
       razorpay_order_id,
       razorpay_payment_id,
@@ -34,6 +42,7 @@ const paymentController = {
       razorpayPaymentId: razorpay_payment_id,
       razorpaySignature: razorpay_signature,
       confirmedAt: new Date(),
+      notificationSent: true,
     });
 
     // Invalidate Redis slot cache and vendor dashboard
@@ -42,28 +51,32 @@ const paymentController = {
       await cacheService.invalidateDashboard(booking.vendorId);
     }
 
-    // Send FCM push notifications
-    // 1. To User
-    await notificationService.sendNotification({
-      recipientId: booking.userId,
-      recipientRole: 'user',
-      title: 'Booking Confirmed! 🏟️',
-      body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
-      type: 'booking',
-      data: { bookingId },
-    });
+    // Send FCM push notifications safely in background
+    (async () => {
+      // 1. To User
+      if (booking.userId) {
+        await notificationService.sendNotification({
+          recipientId: booking.userId,
+          recipientRole: 'user',
+          title: 'Booking Confirmed! 🏟️',
+          body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
+          type: 'booking',
+          data: { bookingId },
+        });
+      }
 
-    // 2. To Vendor
-    if (booking.vendorId) {
-      await notificationService.sendNotification({
-        recipientId: booking.vendorId,
-        recipientRole: 'vendor',
-        title: 'New Booking Received! 💰',
-        body: `New booking for ${booking.date} at ${booking.startTime} (₹${booking.amount}).`,
-        type: 'booking',
-        data: { bookingId },
-      });
-    }
+      // 2. To Vendor
+      if (booking.vendorId) {
+        await notificationService.sendNotification({
+          recipientId: booking.vendorId,
+          recipientRole: 'vendor',
+          title: 'New Booking Received! 💰',
+          body: `New booking for ${booking.date} at ${booking.startTime} (₹${booking.amount || booking.totalAmount || ''}).`,
+          type: 'booking',
+          data: { bookingId },
+        });
+      }
+    })().catch((err) => console.warn('⚠️ Push notification dispatch warning:', err.message));
 
     return sendSuccess(res, {
       booking: confirmedBooking,
@@ -108,12 +121,26 @@ const paymentController = {
                 status: 'confirmed',
                 razorpayPaymentId: paymentId || '',
                 confirmedAt: new Date(),
+                notificationSent: true,
               });
 
               await cacheService.invalidateSlots(booking.turfId, booking.date);
               if (booking.vendorId) {
                 await cacheService.invalidateDashboard(booking.vendorId);
               }
+
+              // Send background notifications if not already sent
+              if (booking.vendorId) {
+                await notificationService.sendNotification({
+                  recipientId: booking.vendorId,
+                  recipientRole: 'vendor',
+                  title: 'New Booking Received! 💰',
+                  body: `New booking for ${booking.date} at ${booking.startTime}.`,
+                  type: 'booking',
+                  data: { bookingId: booking.id },
+                });
+              }
+
               console.log(`✅ Webhook confirmed booking ${booking.id}`);
             }
           }

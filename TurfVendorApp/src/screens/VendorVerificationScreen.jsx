@@ -35,18 +35,18 @@ export default function VendorVerificationScreen({ navigation }) {
     setter({ uri: asset.uri, name: asset.fileName, type: asset.type });
   };
 
-  const handleDigiLocker = () => {
-    Alert.alert('DigiLocker', 'Connecting to DigiLocker...', [
-      { text: 'OK', onPress: () => setDigilockerVerified(true) },
-    ]);
-  };
+  // const handleDigiLocker = () => {
+  //   Alert.alert('DigiLocker', 'Connecting to DigiLocker...', [
+  //     { text: 'OK', onPress: () => setDigilockerVerified(true) },
+  //   ]);
+  // };
 
   const handleContinue = async () => {
-    if (!digilockerVerified && (!aadhaarFile || !panFile)) {
-      Alert.alert('Missing documents', 'Please upload Aadhaar and PAN, or verify with DigiLocker.');
+    if (!aadhaarFile || !panFile) {
+      Alert.alert('Missing documents', 'Please upload Aadhaar and PAN cards to continue.');
       return;
     }
-    const res = await dispatch(submitVendorKyc({ aadhaarFile, panFile, digilockerVerified }));
+    const res = await dispatch(submitVendorKyc({ aadhaarFile, panFile }));
     if (submitVendorKyc.fulfilled.match(res)) {
       navigation.navigate('TurfVerification');
     } else {
@@ -95,6 +95,7 @@ export default function VendorVerificationScreen({ navigation }) {
           Verify your identity before registering your turf and receiving bookings.
         </Text>
 
+        {/* DigiLocker concept commented out
         <View style={[styles.digiCard, { borderColor: colors.border, backgroundColor: isDark ? '#064E3B' : '#F3FBF6' }]}>
           <View style={styles.digiRow}>
             <View style={styles.digiIcon}><Feather name="book-open" size={18} color={colors.primary} /></View>
@@ -109,8 +110,9 @@ export default function VendorVerificationScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         </View>
+        */}
 
-        <Text style={[styles.manualLabel, { color: colors.text }]}>Manual Upload</Text>
+        <Text style={[styles.manualLabel, { color: colors.text }]}>Upload Identity Documents</Text>
 
         <UploadBox label="Aadhaar" file={aadhaarFile} onPress={() => pickFile(setAadhaarFile)} />
         <View style={{ height: 14 }} />

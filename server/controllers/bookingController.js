@@ -135,6 +135,71 @@ const bookingController = {
   },
 
   /**
+   * POST /api/v1/bookings/:id/confirm-cash
+   * Confirm booking with Hand Cash (Pay at Ground upon arrival)
+   */
+  async confirmCashBooking(req, res) {
+    const { id } = req.params;
+    const { uid } = req.user;
+
+    const booking = await firestoreService.getDoc('bookings', id);
+    if (!booking) {
+      return sendError(res, 'Booking not found', 404, 'NOT_FOUND');
+    }
+
+    if (booking.userId !== uid) {
+      return sendError(res, 'Unauthorized booking access', 403, 'FORBIDDEN');
+    }
+
+    if (booking.status === 'confirmed') {
+      return sendSuccess(res, { booking, message: 'Booking is already confirmed' });
+    }
+
+    // Set status to pending awaiting vendor approval
+    const updated = await firestoreService.updateDoc('bookings', id, {
+      status: 'pending',
+      paymentMethod: 'cash',
+      paymentMode: 'hand_cash',
+      paymentStatus: 'pending_cash',
+      requestedAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Invalidate slot cache
+    await cacheService.invalidateSlots(booking.turfId, booking.date);
+
+    // Notify user & vendor
+    try {
+      await notificationService.sendNotification({
+        recipientId: uid,
+        recipientRole: 'user',
+        title: '⏳ Hand Cash Request Submitted',
+        body: `Your request for ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime} - ${booking.endTime}) has been submitted. The pitch owner will review and confirm.`,
+        type: 'booking',
+        data: { bookingId: id, screen: 'Bookings' },
+      });
+
+      if (booking.vendorId) {
+        await notificationService.sendNotification({
+          recipientId: booking.vendorId,
+          recipientRole: 'vendor',
+          title: '🏟️ New Hand Cash Request!',
+          body: `New booking request for ${booking.sport} on ${booking.date} (${booking.startTime} - ${booking.endTime}). Collect ₹${booking.amount} at the pitch. Please review and accept.`,
+          type: 'booking',
+          data: { bookingId: id, screen: 'Bookings' },
+        });
+      }
+    } catch (notifErr) {
+      console.warn('⚠️ Notification warning on cash booking:', notifErr.message);
+    }
+
+    return sendSuccess(res, {
+      booking: updated,
+      message: 'Hand Cash booking request submitted. Awaiting vendor confirmation.',
+    });
+  },
+
+  /**
    * GET /api/v1/bookings/mine
    * User booking history with cursor pagination
    */
@@ -158,7 +223,29 @@ const bookingController = {
       cursor,
     });
 
-    return sendPaginated(res, result.items, result.nextCursor, { count: result.items.length });
+    const populatedItems = await Promise.all(
+      (result.items || []).map(async (b) => {
+        let turf = b.turf;
+        if (!turf && b.turfId) {
+          turf = await firestoreService.getDoc('turfs', b.turfId);
+        }
+        return {
+          ...b,
+          _id: b.id || b._id,
+          id: b.id || b._id,
+          turf: turf || {
+            name: b.turfName || 'Turf Pitch',
+            address: b.turfAddress || '',
+            images: ['https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800'],
+          },
+        };
+      })
+    );
+
+    return sendPaginated(res, populatedItems, result.nextCursor, {
+      count: populatedItems.length,
+      bookings: populatedItems,
+    });
   },
 
   /**
@@ -178,7 +265,25 @@ const bookingController = {
       return sendError(res, 'Access denied', 403, 'FORBIDDEN');
     }
 
-    return sendSuccess(res, { booking });
+    let turf = booking.turf;
+    if (!turf && booking.turfId) {
+      turf = await firestoreService.getDoc('turfs', booking.turfId);
+    }
+
+    const populated = {
+      ...booking,
+      _id: booking.id || booking._id,
+      id: booking.id || booking._id,
+      turfName: booking.turfName || turf?.name || 'Turf Pitch',
+      turfAddress: booking.turfAddress || turf?.address || turf?.location?.address || `${turf?.city || 'Tamil Nadu'}`,
+      turf: turf || {
+        name: booking.turfName || 'Turf Pitch',
+        address: booking.turfAddress || '',
+        images: ['https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800'],
+      },
+    };
+
+    return sendSuccess(res, { booking: populated });
   },
 
   /**
@@ -235,7 +340,7 @@ const bookingController = {
     const { id } = req.params;
     const { uid } = req.user;
     const parsed = createReviewSchema.parse(req.body);
-    const { turfId, rating, comment } = parsed;
+    const { rating, comment } = parsed;
 
     const booking = await firestoreService.getDoc('bookings', id);
     if (!booking) {
@@ -246,24 +351,44 @@ const bookingController = {
       return sendError(res, 'Only the player who booked can review', 403, 'FORBIDDEN');
     }
 
+    const turfId = parsed.turfId || booking.turfId;
     const userProfile = await firestoreService.getDoc('users', uid);
 
     const reviewDoc = await firestoreService.createDoc('reviews', {
       bookingId: id,
       turfId,
       userId: uid,
-      userName: userProfile?.name || 'Player',
-      userPhoto: userProfile?.photoURL || '',
-      rating,
-      comment,
+      userName: userProfile?.name || booking.userName || 'Turf Player',
+      userPhoto: userProfile?.photoURL || userProfile?.avatar || '',
+      rating: Number(rating) || 5,
+      comment: comment || '',
+      createdAt: new Date().toISOString(),
     });
 
     await firestoreService.updateDoc('bookings', id, {
       isReviewed: true,
+      reviewed: true,
       reviewId: reviewDoc.id,
     });
 
-    return sendSuccess(res, { review: reviewDoc }, 201);
+    // Recalculate turf rating summary
+    if (turfId) {
+      const allReviewsSnap = await firestoreService.queryWithCursor('reviews', {
+        filters: [['turfId', '==', turfId]],
+        limit: 100,
+      });
+      const allReviews = allReviewsSnap.items || [];
+      const totalRatings = allReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+      const avgRating = allReviews.length > 0 ? Number((totalRatings / allReviews.length).toFixed(1)) : rating;
+
+      await firestoreService.updateDoc('turfs', turfId, {
+        rating: { avg: avgRating, count: allReviews.length },
+        ratingAvg: avgRating,
+        reviewsCount: allReviews.length,
+      });
+    }
+
+    return sendSuccess(res, { review: reviewDoc, message: 'Review submitted successfully' }, 201);
   },
 };
 

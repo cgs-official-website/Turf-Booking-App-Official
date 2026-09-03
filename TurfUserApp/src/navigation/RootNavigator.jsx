@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useSelector } from 'react-redux';
+import { Platform } from 'react-native';
+import { fcmHelper } from '../utils/fcmHelper';
 import MainTabs              from './MainTabs';
 import SplashScreen          from '../screens/SplashScreen';
 import OnboardingScreen      from '../screens/OnboardingScreen';
@@ -28,8 +30,16 @@ import ScorecardScreen       from '../screens/ScorecardScreen';
 const Stack = createStackNavigator();
 
 export default function RootNavigator() {
-  const { token, bootstrapped, splashDone, locationSet } = useSelector((s) => s.auth);
-console.log('RootNavigator render:', { token: !!token, bootstrapped, splashDone, locationSet });
+  const { token, user, bootstrapped, splashDone, locationSet } = useSelector((s) => s.auth);
+
+  useEffect(() => {
+    if (token) {
+      fcmHelper.requestPermission().then(() => {
+        const deviceId = `fcm_${Platform.OS}_${user?.id || user?._id || 'device'}`;
+        fcmHelper.registerDeviceToken(deviceId);
+      });
+    }
+  }, [token, user]);
 
   // Wait for BOTH bootstrapAuth (data ready) AND splash animation (visual ready)
   const showSplash = !bootstrapped || !splashDone;

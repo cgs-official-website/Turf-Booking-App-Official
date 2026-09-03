@@ -12,6 +12,7 @@ import { VendorsView } from './views/VendorsView';
 import { UsersView } from './views/UsersView';
 import { MatchesView } from './views/MatchesView';
 import { ReportsView } from './views/ReportsView';
+import { SubscriptionsView } from './views/SubscriptionsView';
 
 function DashboardApp() {
   const { isAuthenticated } = useAuth();
@@ -96,16 +97,21 @@ function DashboardApp() {
           {activeTab === 'matches' && <MatchesView />}
 
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
+          {activeTab === 'subscriptions' && <SubscriptionsView />}
         </main>
       </div>
     </div>
   );
 }
 
+import { ModalProvider } from './context/ModalContext';
+
 export default function App() {
   return (
     <AuthProvider>
-      <DashboardApp />
+      <ModalProvider>
+        <DashboardApp />
+      </ModalProvider>
     </AuthProvider>
   );
 }

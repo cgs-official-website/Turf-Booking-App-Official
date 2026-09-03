@@ -104,6 +104,19 @@ class AdminApiClient {
     return this.request(`/admin/users${cursor ? `?cursor=${cursor}` : ''}`);
   }
 
+  updateUser(uid, data) {
+    return this.request(`/admin/users/${uid}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteUser(uid) {
+    return this.request(`/admin/users/${uid}`, {
+      method: 'DELETE',
+    });
+  }
+
   getAllMatches(status, cursor) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
@@ -124,6 +137,31 @@ class AdminApiClient {
     return this.request(`/admin/reports/${reportId}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'resolved', resolutionNote }),
+    });
+  }
+
+  // Subscription Plans Management
+  getSubscriptionPlans() {
+    return this.request('/subscription/plans');
+  }
+
+  createSubscriptionPlan(data) {
+    return this.request('/subscription/plans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateSubscriptionPlan(id, data) {
+    return this.request(`/subscription/plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteSubscriptionPlan(id) {
+    return this.request(`/subscription/plans/${id}`, {
+      method: 'DELETE',
     });
   }
 }

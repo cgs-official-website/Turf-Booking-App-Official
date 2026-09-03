@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Search, Loader2 } from 'lucide-react';
 
+import { useModal } from '../context/ModalContext';
+
 export const TurfsView = ({ onUpdateStats }) => {
+  const { showAlert } = useModal();
   const [turfs, setTurfs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -32,7 +35,11 @@ export const TurfsView = ({ onUpdateStats }) => {
         if (onUpdateStats) onUpdateStats();
       }
     } catch (err) {
-      alert(`Action failed: ${err.message}`);
+      showAlert({
+        title: 'Action Failed',
+        message: err.message || 'Could not update turf status.',
+        type: 'error',
+      });
     }
   };
 

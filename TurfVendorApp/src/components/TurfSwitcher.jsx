@@ -5,49 +5,55 @@ import { setActiveTurf } from '../redux/vendorSlice';
 import { getImageUrl } from '../api/client';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
-import Icon from './Icon';
+import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const STATUS_LABEL = {
-  active: 'ACTIVE',
-  pending: 'UNDER REVIEW',
-  rejected: 'REJECTED',
-  inactive: 'INACTIVE',
+const STATUS_CONFIG = {
+  active: { label: 'ACTIVE', color: '#00C566', bg: 'rgba(0, 197, 102, 0.12)' },
+  pending: { label: 'REVIEW', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
+  rejected: { label: 'REJECTED', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
+  inactive: { label: 'INACTIVE', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },
 };
 
-const TurfAvatar = ({ turf, size = 44 }) => {
+const TurfAvatar = ({ turf, size = 46 }) => {
   const { colors } = useTheme();
-  const uri = turf?.images?.[0] ? getImageUrl(turf.images[0]) : null;
+  const uri = turf?.images?.[0] ? getImageUrl(turf.images[0]) : (turf?.logo ? getImageUrl(turf.logo) : null);
+
   return uri ? (
     <Image
       source={{ uri }}
-      style={[
-        { backgroundColor: colors.inputBg },
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 14,
+        backgroundColor: colors.inputBg,
+      }}
     />
   ) : (
     <View
-      style={[
-        { backgroundColor: colors.inputBg, alignItems: 'center', justifyContent: 'center' },
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 14,
+        backgroundColor: colors.primaryLight,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
     >
-      <Icon name="image" size={size * 0.45} color={colors.textLight} />
+      <Ionicons name="football" size={size * 0.5} color={colors.primary} />
     </View>
   );
 };
 
-// Header row (turf avatar + name + vendor name + switcher chevron + bell)
-// used at the top of the Home screen, plus the dropdown sheet it opens.
 const TurfSwitcher = ({ navigation, onBellPress }) => {
   const dispatch = useDispatch();
-  const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const { colors, isDark } = useTheme();
   const { turfs, activeTurfId, unreadNotificationCount } = useSelector((s) => s.vendor);
   const { vendor } = useSelector((s) => s.auth);
   const [open, setOpen] = useState(false);
 
-  const activeTurf = turfs.find((t) => t._id === activeTurfId) || turfs[0] || null;
+  const safeTurfs = Array.isArray(turfs) ? turfs : [];
+  const activeTurf = safeTurfs.find((t) => (t._id || t.id) === activeTurfId) || safeTurfs[0] || null;
 
   const handleSelect = (turfId) => {
     dispatch(setActiveTurf(turfId));
@@ -61,59 +67,124 @@ const TurfSwitcher = ({ navigation, onBellPress }) => {
 
   return (
     <>
+      {/* Top Switcher Bar */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerLeft} onPress={() => setOpen(true)} activeOpacity={0.7}>
-          <TurfAvatar turf={activeTurf} />
+        <TouchableOpacity
+          style={[styles.headerLeft, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}
+          onPress={() => setOpen(true)}
+          activeOpacity={0.75}
+        >
+          <TurfAvatar turf={activeTurf} size={38} />
+
           <View style={styles.headerText}>
             <View style={styles.turfNameRow}>
-              <Text style={styles.turfName} numberOfLines={1}>
-                {activeTurf?.name || 'Add your first turf'}
+              <Text style={[styles.turfName, { color: colors.text }]} numberOfLines={1}>
+                {activeTurf?.name || 'My Turf Arena'}
               </Text>
-              <Icon name="chevron-down" size={16} color={colors.text} style={{ marginLeft: 4 }} />
+              <Feather name="chevron-down" size={15} color={colors.primary} style={{ marginLeft: 4 }} />
             </View>
-            <Text style={styles.vendorName} numberOfLines={1}>{vendor?.name || ''}</Text>
+            <Text style={[styles.vendorSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+              {vendor?.name ? `${vendor.name} • Active` : 'Partner Facility'}
+            </Text>
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bellBtn} onPress={onBellPress} activeOpacity={0.7}>
-          <Icon name="bell" size={20} color={colors.text} />
-          {unreadNotificationCount > 0 && <View style={styles.bellDot} />}
+        {/* Bell Action Button */}
+        <TouchableOpacity
+          style={[styles.bellBtn, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}
+          onPress={onBellPress}
+          activeOpacity={0.75}
+        >
+          <Feather name="bell" size={19} color={colors.text} />
+          {unreadNotificationCount > 0 && (
+            <View style={[styles.bellDot, { backgroundColor: colors.error || '#EF4444' }]} />
+          )}
         </TouchableOpacity>
       </View>
 
+      {/* Switcher Modal Sheet */}
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => setOpen(false)}>
-          <View style={styles.sheetWrap}>
-            <TouchableOpacity activeOpacity={1} style={[styles.sheet, SHADOWS.md]}>
+          <View style={styles.sheetContainer}>
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[
+                styles.sheet,
+                { backgroundColor: colors.card, borderColor: colors.border },
+                SHADOWS.md,
+              ]}
+            >
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={[styles.modalTitle, { color: colors.text }]}>Switch Active Turf</Text>
+                  <Text style={[styles.modalSubTitle, { color: colors.textSecondary }]}>
+                    Manage schedules and bookings for your arenas
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setOpen(false)} style={styles.closeModalBtn}>
+                  <Feather name="x" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.modalDivider, { backgroundColor: colors.border }]} />
+
               <FlatList
-                data={turfs}
-                keyExtractor={(t) => t._id}
-                ItemSeparatorComponent={() => <View style={styles.divider} />}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.row}
-                    onPress={() => handleSelect(item._id)}
-                    activeOpacity={0.7}
-                  >
-                    <TurfAvatar turf={item} size={40} />
-                    <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
-                    {item._id === activeTurfId && (
-                      <View style={styles.activePill}>
-                        <Text style={styles.activePillText}>{STATUS_LABEL[item.status] || 'ACTIVE'}</Text>
+                data={safeTurfs}
+                keyExtractor={(t) => String(t._id || t.id || Math.random())}
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: 300 }}
+                renderItem={({ item }) => {
+                  const itemId = item._id || item.id;
+                  const isActive = itemId === activeTurfId;
+                  const statusConf = STATUS_CONFIG[item.status] || STATUS_CONFIG.active;
+
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.turfItemCard,
+                        { backgroundColor: colors.inputBg, borderColor: isActive ? colors.primary : colors.border },
+                        isActive && styles.turfItemActive,
+                      ]}
+                      onPress={() => handleSelect(itemId)}
+                      activeOpacity={0.75}
+                    >
+                      <TurfAvatar turf={item} size={42} />
+
+                      <View style={styles.turfItemInfo}>
+                        <Text style={[styles.turfItemName, { color: colors.text }]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={[styles.turfItemAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {item.location?.city || item.city || item.address || 'Verified Facility'}
+                        </Text>
                       </View>
-                    )}
-                  </TouchableOpacity>
-                )}
-                ListFooterComponent={
-                  <>
-                    {turfs.length > 0 && <View style={styles.divider} />}
-                    <TouchableOpacity style={styles.row} onPress={handleAddTurf} activeOpacity={0.7}>
-                      <View style={styles.addIconBox}>
-                        <Icon name="plus" size={18} color={colors.primary} />
+
+                      <View style={[styles.statusPill, { backgroundColor: statusConf.bg }]}>
+                        <Text style={[styles.statusPillText, { color: statusConf.color }]}>
+                          {statusConf.label}
+                        </Text>
                       </View>
-                      <Text style={[styles.rowName, { color: colors.primary, fontWeight: '700' }]}>Add New Turf</Text>
+
+                      {isActive && (
+                        <View style={[styles.checkCircle, { backgroundColor: colors.primary }]}>
+                          <Feather name="check" size={13} color="#FFFFFF" />
+                        </View>
+                      )}
                     </TouchableOpacity>
-                  </>
+                  );
+                }}
+                ListFooterComponent={
+                  <TouchableOpacity
+                    style={[styles.addTurfCard, { borderColor: colors.primary }]}
+                    onPress={handleAddTurf}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.addIconCircle, { backgroundColor: colors.primaryLight }]}>
+                      <Feather name="plus" size={18} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.addTurfText, { color: colors.primary }]}>Register Another Turf</Text>
+                  </TouchableOpacity>
                 }
               />
             </TouchableOpacity>
@@ -124,32 +195,158 @@ const TurfSwitcher = ({ navigation, onBellPress }) => {
   );
 };
 
-const getStyles = (colors) => StyleSheet.create({
+const styles = StyleSheet.create({
   headerRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: 8, paddingBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    paddingBottom: 8,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
-  headerText: { marginLeft: 10, flexShrink: 1 },
-  turfNameRow: { flexDirection: 'row', alignItems: 'center' },
-  turfName: { fontSize: SIZES.base, fontWeight: '700', color: colors.text, maxWidth: 190 },
-  vendorName: { fontSize: SIZES.sm, color: colors.textSecondary, marginTop: 1 },
-  bellBtn: { padding: 6 },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 22,
+    borderWidth: 1,
+  },
+  headerText: {
+    marginLeft: 10,
+    flex: 1,
+  },
+  turfNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  turfName: {
+    fontSize: SIZES.sm,
+    fontWeight: '800',
+    maxWidth: 160,
+  },
+  vendorSubtitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  bellBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
   bellDot: {
-    position: 'absolute', top: 4, right: 6, width: 8, height: 8, borderRadius: 4,
-    backgroundColor: colors.error, borderWidth: 1.5, borderColor: colors.card,
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-start' },
-  sheetWrap: { marginTop: 90, paddingHorizontal: SIZES.padding },
-  sheet: { backgroundColor: colors.card, borderRadius: SIZES.radiusLg, overflow: 'hidden', maxHeight: 360 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
-  rowName: { fontSize: SIZES.base, color: colors.text, fontWeight: '600', marginLeft: 12, flex: 1 },
-  divider: { height: 1, backgroundColor: colors.border },
-  activePill: { backgroundColor: colors.primaryLight, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  activePillText: { fontSize: 10, fontWeight: '700', color: colors.primaryDark, letterSpacing: 0.3 },
-  addIconBox: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight,
-    alignItems: 'center', justifyContent: 'center',
+
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-start',
+  },
+  sheetContainer: {
+    marginTop: 85,
+    paddingHorizontal: SIZES.padding,
+  },
+  sheet: {
+    borderRadius: SIZES.radiusLg,
+    padding: 18,
+    borderWidth: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  modalTitle: {
+    fontSize: SIZES.base + 1,
+    fontWeight: '800',
+  },
+  modalSubTitle: {
+    fontSize: SIZES.xs,
+    marginTop: 2,
+  },
+  closeModalBtn: {
+    padding: 4,
+  },
+  modalDivider: {
+    height: 1,
+    marginVertical: 14,
+  },
+
+  turfItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: SIZES.radius,
+    borderWidth: 1.5,
+    marginBottom: 8,
+  },
+  turfItemActive: {
+    borderWidth: 1.5,
+  },
+  turfItemInfo: {
+    flex: 1,
+    marginLeft: 10,
+    marginRight: 6,
+  },
+  turfItemName: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
+  turfItemAddress: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  statusPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  statusPillText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  checkCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  addTurfCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: SIZES.radius,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    marginTop: 6,
+    gap: 8,
+  },
+  addIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTurfText: {
+    fontSize: SIZES.xs,
+    fontWeight: '800',
   },
 });
 

@@ -1,307 +1,311 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, Image, Linking, Platform, StatusBar,
-  Modal, Pressable,
+  Platform, StatusBar, RefreshControl,
 } from 'react-native';
-import { turfsApi } from '../api/turfs';
-import { SPACING, RADIUS, FONT } from '../utils/theme';
-import useTheme from '../hooks/useTheme';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { useDispatch, useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Feather from 'react-native-vector-icons/Feather';
+import { turfsApi } from '../api/turfs';
+import { fetchWishlist, toggleWishlist } from '../redux/wishlistSlice';
+import useTheme from '../hooks/useTheme';
+import SearchBar from '../components/SearchBar';
+import SportChip from '../components/SportChip';
+import TurfCard from '../components/TurfCard';
+import { TurfCardSkeleton } from '../components/SkeletonLoader';
+import EmptyState from '../components/EmptyState';
+import FilterBottomSheet from './FilterBottomSheet';
+import { SPACING, RADIUS, FONT } from '../utils/theme';
 
 const SPORTS = [
-  { label: 'All',        icon: null,                                value: 'All'        },
-  { label: 'Football',   icon: require('../assets/football.png'),   value: 'Football'   },
-  { label: 'Cricket',    icon: require('../assets/cricket.png'),    value: 'Cricket'    },
-  { label: 'Basketball', icon: require('../assets/basketball.png'), value: 'Basketball' },
-  { label: 'Badminton',  icon: require('../assets/badminton.png'),  value: 'Badminton'  },
-  { label: 'Tennis',     icon: require('../assets/tennis.png'),     value: 'Tennis'     },
-  { label: 'Volleyball', icon: require('../assets/volleyball.png'), value: 'Volleyball' },
+  { name: 'All' },
+  { name: 'Football' },
+  { name: 'Cricket' },
+  { name: 'Badminton' },
+  { name: 'Tennis' },
+  { name: 'Basketball' },
+  { name: 'Volleyball' },
 ];
 
 const SORT_OPTIONS = [
-  { label: 'Newest',      value: ''               },
+  { label: 'Recommended', value: ''               },
   { label: 'Top Rated',   value: 'topRated'       },
   { label: 'Price: Low',  value: 'priceLowToHigh' },
   { label: 'Price: High', value: 'priceHighToLow' },
 ];
 
-const openMap = (address, lat, lng) => {
-  const url = (lat && lng)
-    ? Platform.select({
-        ios:     `maps://app?ll=${lat},${lng}&q=${encodeURIComponent(address)}`,
-        android: `geo:${lat},${lng}?q=${encodeURIComponent(address)}`,
-      })
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-  Linking.openURL(url).catch(() =>
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`)
-  );
-};
-
-// ── FIX: shows the vendor-uploaded turf logo from DB. Falls back to the
-// generic app icon if the turf has no logo saved, or if the logo URL fails
-// to load (e.g. broken/missing file on the server).
-function TurfLogo({ uri, style }) {
-  const [failed, setFailed] = useState(false);
-  if (!uri || failed) {
-    return (
-      <Image
-        source={require('../assets/icon.png')}
-        style={style || styles.appIcon}
-        resizeMode="contain"
-      />
-    );
-  }
-  return (
-    <Image
-      source={{ uri }}
-      style={style || styles.appIcon}
-      resizeMode="cover"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
 export default function ExploreScreen({ navigation }) {
+  const dispatch = useDispatch();
   const { C, dark } = useTheme();
-  const [turfs,    setTurfs]    = useState([]);
-  const [query,    setQuery]    = useState('');
-  const [sport,    setSport]    = useState('All');
-  const [sort,     setSort]     = useState('');
-  const [showSort, setShowSort] = useState(false);
-  const [loading,  setLoading]  = useState(true);
+
+  const wishlist = useSelector((s) => s.wishlist.wishlist);
+  const location = useSelector((s) => s.auth.location);
+
+  const [turfs,         setTurfs]         = useState([]);
+  const [query,         setQuery]         = useState('');
+  const [sport,         setSport]         = useState('All');
+  const [sort,          setSort]          = useState('');
+  const [loading,       setLoading]       = useState(true);
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [activeFilters, setActiveFilters] = useState({ sort: null, time: null });
 
   const load = () => {
     setLoading(true);
     const params = {};
     if (sport !== 'All') params.sport  = sport;
     if (sort)            params.sort   = sort;
-    if (query)           params.search = query;
+    if (activeFilters.sort) params.sort = activeFilters.sort;
+    if (activeFilters.time) params.time = activeFilters.time;
+    if (location && location !== 'Current Location') params.location = location;
+    if (query.trim()) params.search = query.trim();
+
     turfsApi.getTurfs(params)
-      .then((r) => setTurfs(r.turfs))
+      .then((r) => setTurfs(r.turfs || r.items || []))
+      .catch(() => setTurfs([]))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [sport, sort]);
+  useEffect(() => {
+    load();
+  }, [sport, sort, activeFilters, location, query]);
 
-  const filtered = turfs.filter((t) =>
-    !query ||
-    t.name.toLowerCase().includes(query.toLowerCase()) ||
-    t.location.city.toLowerCase().includes(query.toLowerCase())
-  );
+  useEffect(() => {
+    dispatch(fetchWishlist());
+  }, [dispatch]);
 
-  // ─── FIX: Search bar இன்னு தனியா வெளியே எடுக்கணும் ───────────────────────────
-  // ListHeaderComponent-ஒட கிட்ட FlatList-ல TextInput வச்சா
-  // FlatList scroll gesture keyboard-ஐ dismiss பண்ணிடும்.
-  // Solution: Search bar-ஐ FlatList-க்கு வெளியே வை — அதுக்கு touch பண்ணாலும்
-  // keyboard போகாது, ஏன்னா அது FlatList-ஓட scroll event-ஓட connection இல்ல.
+  const filtered = turfs.filter((t) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    const nameMatch = (t.name || '').toLowerCase().includes(q);
+    const cityMatch =
+      (t.city || '').toLowerCase().includes(q) ||
+      (t.address || '').toLowerCase().includes(q) ||
+      (t.location?.city || '').toLowerCase().includes(q) ||
+      (t.location?.address || '').toLowerCase().includes(q);
+    const sportMatch = (t.sportTypes || t.sports || []).some((s) => s.toLowerCase().includes(q));
+    const amenMatch = (t.amenities || []).some((a) => a.toLowerCase().includes(q));
+    return nameMatch || cityMatch || sportMatch || amenMatch;
+  });
+
+  const isWishlisted = (id) => wishlist.some((t) => (t._id || t.id) === id);
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} backgroundColor={C.bg} />
-      <SafeAreaView style={{ flex: 1 }}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={dark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
 
-        {/* Sort Modal */}
-        <Modal
-          transparent
-          visible={showSort}
-          animationType="fade"
-          onRequestClose={() => setShowSort(false)}
-        >
-          <Pressable style={styles.modalBackdrop} onPress={() => setShowSort(false)}>
-            <View style={[styles.sortPopup, { backgroundColor: C.card }]}>
-              <Text style={[styles.sortPopupTitle, { color: C.text }]}>Sort By</Text>
-              {SORT_OPTIONS.map((o, i) => (
-                <TouchableOpacity
-                  key={o.value}
-                  style={[
-                    styles.sortOpt,
-                    { borderBottomColor: C.border },
-                    i === SORT_OPTIONS.length - 1 && { borderBottomWidth: 0 },
-                  ]}
-                  onPress={() => { setSort(o.value); setShowSort(false); }}
-                >
-                  <Text style={[styles.sortOptTxt, { color: C.text }]}>{o.label}</Text>
-                  <View style={[styles.radioCircle, { borderColor: sort === o.value ? C.primary : C.border }]}>
-                    {sort === o.value && (
-                      <View style={[styles.radioDot, { backgroundColor: C.primary }]} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
+        {/* Header & Sticky Search Bar */}
+        <View style={styles.topBar}>
+          <View style={styles.titleRow}>
+            {navigation.canGoBack() && (
+              <TouchableOpacity
+                style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.7}
+              >
+                <Feather name="arrow-left" size={18} color={C.text} />
+              </TouchableOpacity>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.headerTitle, { color: C.text }]} numberOfLines={1}>Discover Grounds</Text>
+              <Text style={[styles.headerSub, { color: C.subtext }]} numberOfLines={1}>
+                {filtered.length} pitches available for booking
+              </Text>
             </View>
-          </Pressable>
-        </Modal>
+          </View>
 
-        {/* ── FIXED: Header + Search bar OUTSIDE FlatList ─────────────────────── */}
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={[styles.backBtn, { backgroundColor: C.bgSoft }]}
-            onPress={() => navigation.goBack()}
-          >
-            <Icon name="arrow-back" size={20} color={C.text} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: C.text }]}>Explore</Text>
-        </View>
-
-        {/* Search bar — FlatList வெளியே இருக்கு, so keyboard dismiss ஆகாது */}
-        <View style={[styles.searchWrap, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-          <Icon name="search" size={16} color={C.subtext} />
-          <TextInput
-            style={[styles.searchInput, { color: C.text }]}
-            placeholder="Search turf, sport or location"
-            placeholderTextColor={C.subtext}
+          <SearchBar
             value={query}
-            onChangeText={(v) => { setQuery(v); if (!v) load(); }}
-            onSubmitEditing={load}
-            returnKeyType="search"
-            // FIX: blurOnSubmit false — search submit பண்ணினாலும் keyboard இருக்கும்
-            blurOnSubmit={false}
+            onChangeText={setQuery}
+            onFilterPress={() => setFilterVisible(true)}
+            placeholder="Search venue name, sport, or city..."
           />
-          {query
-            ? <TouchableOpacity onPress={() => { setQuery(''); load(); }}>
-                <Icon name="close" size={16} color={C.subtext} />
-              </TouchableOpacity>
-            : <TouchableOpacity
-                onPress={() => setShowSort(true)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Icon name="options-outline" size={16} color={C.primary} />
-              </TouchableOpacity>
-          }
         </View>
 
-        {/* Sport chips — also OUTSIDE FlatList */}
-        <FlatList
-          data={SPORTS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(s) => s.value}
-          contentContainerStyle={styles.sportScroll}
-          // FIX: horizontal FlatList-லயும் keyboardShouldPersistTaps வேணும்
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item: s }) => {
-            const active = sport === s.value;
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  { backgroundColor: C.card, borderColor: C.border },
-                  active && { backgroundColor: C.primary, borderColor: C.primary },
-                ]}
-                onPress={() => setSport(s.value)}
-              >
-                {s.icon
-                  ? <Image
-                      source={s.icon}
-                      style={[styles.chipIcon, active && { tintColor: '#fff' }]}
-                      resizeMode="contain"
-                    />
-                  : <Icon name="apps-outline" size={13} color={active ? '#fff' : C.text} />
-                }
-                <Text style={[styles.chipTxt, { color: active ? '#fff' : C.text }]}>
-                  {s.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
+        {/* Sports Horizontal Filter Chips */}
+        <View style={styles.sportsWrap}>
+          <FlatList
+            data={SPORTS}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.name}
+            contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
+            renderItem={({ item }) => (
+              <SportChip
+                name={item.name}
+                icon={item.icon}
+                selected={sport === item.name}
+                onPress={() => setSport(item.name)}
+              />
+            )}
+          />
+        </View>
 
-        <Text style={[styles.resultCount, { color: C.subtext }]}>
-          {filtered.length} turfs found
-        </Text>
-
-        {/* Main results FlatList */}
-        <FlatList
-          data={filtered}
-          keyExtractor={(i) => i._id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.list}
-          // FIX: keyboard persist — chip select / result tap பண்ணினாலும் keyboard போகாது
-          keyboardShouldPersistTaps="handled"
-          // FIX: scroll பண்ணும்போது keyboard dismiss ஆகாது (none = never dismiss on scroll)
-          keyboardDismissMode="none"
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="search" size={40} color={C.border} />
-              <Text style={[styles.emptyTxt, { color: C.subtext }]}>No turfs found</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            const lat     = item.location?.lat || item.location?.latitude || null;
-            const lng     = item.location?.lng || item.location?.longitude || null;
-            const address = item.location?.address || `${item.location?.city}, ${item.location?.state}`;
-            return (
-              <TouchableOpacity
-                style={[styles.row, { backgroundColor: C.card, borderColor: C.border }]}
-                onPress={() => navigation.navigate('TurfDetail', { id: item._id })}
-                activeOpacity={0.85}
-              >
-                <View style={[styles.rowIconBox, { backgroundColor: C.primaryLight }]}>
-                  <TurfLogo uri={item.logo} />
-                </View>
-                <View style={styles.rowInfo}>
-                  <Text style={[styles.rowName, { color: C.text }]} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={[styles.rowSports, { color: C.primary }]} numberOfLines={1}>
-                    {item.sports.join(' · ')}
-                  </Text>
-                  <View style={[styles.locBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-                    <Icon name="location-outline" size={10} color={C.subtext} />
-                    <Text style={[styles.locTxt, { color: C.subtext }]} numberOfLines={1}>
-                      {item.location?.city}, {item.location?.state || ''}
-                    </Text>
-                  </View>
-                </View>
+        {/* Sort Pill Row - Properly Aligned */}
+        <View style={styles.sortRow}>
+          <View style={styles.sortLabelWrap}>
+            <Feather name="sliders" size={12} color={C.subtext} style={{ marginRight: 4 }} />
+            <Text style={[styles.sortLabel, { color: C.subtext }]}>SORT:</Text>
+          </View>
+          <FlatList
+            data={SORT_OPTIONS}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item.label}
+            contentContainerStyle={styles.sortListContent}
+            renderItem={({ item }) => {
+              const active = sort === item.value;
+              return (
                 <TouchableOpacity
-                  style={[styles.mapBox, { backgroundColor: C.primaryLight }]}
-                  onPress={() => openMap(address, lat, lng)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={() => setSort(item.value)}
+                  style={[
+                    styles.sortPill,
+                    {
+                      backgroundColor: active ? C.primaryLight : C.card,
+                      borderColor: active ? C.primary : C.border,
+                    },
+                  ]}
+                  activeOpacity={0.75}
                 >
-                  <Icon name="navigate-outline" size={11} color={C.primary} />
-                  <Text style={[styles.distTxt, { color: C.primary }]}>2.4 Km</Text>
+                  <Text
+                    style={[
+                      styles.sortPillText,
+                      { color: active ? C.primary : C.subtext, fontWeight: active ? '800' : '600' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Text>
                 </TouchableOpacity>
-              </TouchableOpacity>
-            );
-          }}
-        />
+              );
+            }}
+          />
+        </View>
+
+        {/* Turfs List */}
+        {loading ? (
+          <View style={{ paddingHorizontal: SPACING.lg, paddingTop: 10 }}>
+            <TurfCardSkeleton />
+            <TurfCardSkeleton />
+            <TurfCardSkeleton />
+          </View>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item._id || item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: 90, paddingTop: 4 }}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={load} colors={[C.primary]} />
+            }
+            ListEmptyComponent={
+              <EmptyState
+                icon="search"
+                title="No Turfs Found"
+                description={
+                  query
+                    ? `No grounds found matching "${query}". Try searching a different sport or city.`
+                    : 'No stadiums match the selected filters.'
+                }
+                actionText="Reset Filters"
+                onActionPress={() => {
+                  setQuery('');
+                  setSport('All');
+                  setSort('');
+                  setActiveFilters({ sort: null, time: null });
+                }}
+              />
+            }
+            renderItem={({ item }) => (
+              <TurfCard
+                turf={item}
+                variant="vertical"
+                isFavorite={isWishlisted(item._id || item.id)}
+                onToggleFavorite={() => dispatch(toggleWishlist(item))}
+                onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id })}
+              />
+            )}
+          />
+        )}
       </SafeAreaView>
+
+      <FilterBottomSheet
+        visible={filterVisible}
+        onClose={() => setFilterVisible(false)}
+        onApply={(filters) => setActiveFilters(filters)}
+        initialFilters={activeFilters}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.sm, gap: SPACING.sm },
-  backBtn:        { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
-  title:          { ...FONT.h1, fontSize: 20, flex: 1 },
-  modalBackdrop:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
-  sortPopup:      { width: 280, borderRadius: RADIUS.xl, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
-  sortPopupTitle: { fontSize: 15, fontWeight: '700', padding: SPACING.lg, paddingBottom: SPACING.sm },
-  sortOpt:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1 },
-  sortOptTxt:     { fontSize: 14 },
-  radioCircle:    { width: 20, height: 20, borderRadius: 10, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
-  radioDot:       { width: 10, height: 10, borderRadius: 5 },
-  searchWrap:     { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.lg, paddingHorizontal: SPACING.md, paddingVertical: 9, borderRadius: RADIUS.lg, gap: SPACING.sm, borderWidth: 1, marginBottom: 6 },
-  searchInput:    { flex: 1, fontSize: 13, paddingVertical: 0 },
-  sportScroll:    { paddingHorizontal: SPACING.lg, gap: 6, paddingBottom: 6, paddingTop: 2 },
-  chip:           { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.round, borderWidth: 1, height: 34 },
-  chipIcon:       { width: 14, height: 14 },
-  chipTxt:        { fontSize: 12, fontWeight: '600' },
-  resultCount:    { paddingHorizontal: SPACING.lg, paddingVertical: 4, fontSize: 12 },
-  list:           { paddingHorizontal: SPACING.lg, gap: SPACING.sm, paddingBottom: 100 },
-  row:            { flexDirection: 'row', alignItems: 'center', borderRadius: RADIUS.lg, padding: SPACING.sm, borderWidth: 1, gap: SPACING.sm },
-  rowIconBox:     { width: 46, height: 46, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-  appIcon:        { width: 30, height: 30 },
-  rowInfo:        { flex: 1, gap: 3 },
-  rowName:        { fontSize: 13, fontWeight: '700' },
-  rowSports:      { fontSize: 11, fontWeight: '600' },
-  locBox:         { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
-  locTxt:         { fontSize: 11 },
-  mapBox:         { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: RADIUS.round, flexShrink: 0 },
-  distTxt:        { fontSize: 10, fontWeight: '700' },
-  empty:          { alignItems: 'center', paddingTop: 20, gap: 12 },
-  emptyTxt:       { fontSize: 15 },
+  container: { flex: 1 },
+  topBar: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerTitle: {
+    ...FONT.h2,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  headerSub: {
+    ...FONT.caption,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  sportsWrap: {
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: SPACING.lg,
+    marginBottom: 8,
+  },
+  sortLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  sortLabel: {
+    ...FONT.tiny,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  sortListContent: {
+    gap: 8,
+    paddingRight: 20,
+    alignItems: 'center',
+  },
+  sortPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sortPillText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
 });

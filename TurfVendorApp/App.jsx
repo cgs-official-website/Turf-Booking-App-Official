@@ -17,12 +17,17 @@
 //   );
 // }
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Provider } from 'react-redux';
 import { store } from './src/redux/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import { StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { initCustomAlert } from './src/utils/customAlert';
+import { CustomAlertModal } from './src/components/CustomAlertModal';
+
+// Initialize global Alert.alert replacement
+initCustomAlert();
 
 // Small inner component so it can read the theme via the hook
 // (StatusBar needs to react to isDark, and hooks can't be used
@@ -36,6 +41,7 @@ const ThemedApp = () => {
         backgroundColor={colors.background}
       />
       <RootNavigator />
+      <CustomAlertModal />
     </>
   );
 };
