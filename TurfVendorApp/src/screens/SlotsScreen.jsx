@@ -121,14 +121,15 @@ const SlotsScreen = ({ navigation }) => {
 
   const safeTurfs = Array.isArray(turfs) ? turfs : [];
   const activeTurf = safeTurfs.find((t) => (t._id || t.id) === activeTurfId) || safeTurfs[0] || null;
+  const currentTurfId = activeTurf?._id || activeTurf?.id || 'default';
   const dateStr = toDateStr(selectedDate);
   const dateList = useMemo(() => getNextDays(14), []);
 
   useEffect(() => {
-    if (activeTurf) dispatch(fetchSlotCalendar({ turfId: activeTurf._id || activeTurf.id, dateStr }));
-  }, [activeTurf?._id, activeTurf?.id, dateStr]);
+    dispatch(fetchSlotCalendar({ turfId: currentTurfId, dateStr }));
+  }, [currentTurfId, dateStr]);
 
-  const refresh = () => activeTurf && dispatch(fetchSlotCalendar({ turfId: activeTurf._id || activeTurf.id, dateStr }));
+  const refresh = () => dispatch(fetchSlotCalendar({ turfId: currentTurfId, dateStr }));
 
   const safeCalendar = Array.isArray(slotCalendar) ? slotCalendar : [];
 

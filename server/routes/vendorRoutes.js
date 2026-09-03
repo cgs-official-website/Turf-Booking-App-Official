@@ -57,7 +57,9 @@ router.get('/turfs/:turfId', vendorController.getTurfById);
 router.put('/turfs/:turfId', vendorController.updateTurf);
 router.delete('/turfs/:turfId', vendorController.deleteTurf);
 
+router.get('/slots/calendar', vendorController.getSlotCalendar);
 router.get('/turfs/:turfId/slots/calendar', vendorController.getSlotCalendar);
+router.post('/slots/freeze', vendorController.freezeSlot);
 router.post('/turfs/:turfId/slots/freeze', vendorController.freezeSlot);
 router.post('/turfs/:turfId/slots', vendorController.addSlot);
 router.delete('/turfs/:turfId/slots/:slotId', vendorController.deleteSlot);
