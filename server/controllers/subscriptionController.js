@@ -316,11 +316,12 @@ const subscriptionController = {
    */
   async getSubscriptionHistory(req, res) {
     const { uid } = req.user;
-    const history = await firestoreService.queryDocs('subscriptions', [
-      { field: 'vendorId', operator: '==', value: uid },
-    ]);
+    const result = await firestoreService.queryWithCursor('subscriptions', {
+      filters: [['vendorId', '==', uid]],
+      limit: 50,
+    });
 
-    return sendSuccess(res, { history: history || [] });
+    return sendSuccess(res, { history: result.items || [] });
   },
 
   /**
