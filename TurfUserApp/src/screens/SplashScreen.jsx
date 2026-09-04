@@ -300,7 +300,7 @@ export default function SplashScreen() {
           },
         ]}
       >
-        <Image source={require('../assets/logosm.png')} style={styles.logoImage} resizeMode="contain" />
+        <Image source={require('../assets/logo.png')} style={styles.logoImage} resizeMode="contain" />
       </Animated.View>
 
       {/* Layer 4: Staggered Typography Reveal */}

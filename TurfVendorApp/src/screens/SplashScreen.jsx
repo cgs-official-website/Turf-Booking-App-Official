@@ -3,18 +3,6 @@ import { View, Text, StyleSheet, Image, Animated, Dimensions, Easing } from 'rea
 
 const { width, height } = Dimensions.get('window');
 
-const FRAMES = [
-  require('../assets/splash-1.png'),
-  require('../assets/splash-2.png'),
-  require('../assets/splash-3.png'),
-  require('../assets/splash-4.png'),
-  require('../assets/splash-5.png'),
-];
-
-const FRAME_DURATION = 320;
-const FADE_DURATION = 180;
-const HOLD_ON_LAST_FRAME = 700;
-
 // 8 floating particles with randomized starting X and drift speeds
 const PARTICLES = Array.from({ length: 8 }, (_, i) => ({
   id: i,
@@ -25,8 +13,6 @@ const PARTICLES = Array.from({ length: 8 }, (_, i) => ({
 }));
 
 const SplashScreen = ({ onFinish }) => {
-  const [frameIndex, setFrameIndex] = useState(0);
-
   // Logo badge physics
   const logoScale = useRef(new Animated.Value(0.82)).current;
   const logoRotate = useRef(new Animated.Value(-4)).current;
@@ -338,7 +324,7 @@ const SplashScreen = ({ onFinish }) => {
           },
         ]}
       >
-        <Image source={FRAMES[frameIndex]} style={styles.logoImage} resizeMode="contain" />
+        <Image source={require('../assets/logo.png')} style={styles.logoImage} resizeMode="contain" />
       </Animated.View>
 
       {/* Layer 4: Staggered Typography Reveal */}
@@ -353,7 +339,7 @@ const SplashScreen = ({ onFinish }) => {
               },
             ]}
           >
-            TURF
+            NAMMA OORU
           </Animated.Text>
           <Animated.Text
             style={[
@@ -364,7 +350,7 @@ const SplashScreen = ({ onFinish }) => {
               },
             ]}
           >
-            VENDOR
+            TURF
           </Animated.Text>
         </View>
 
@@ -377,7 +363,7 @@ const SplashScreen = ({ onFinish }) => {
             },
           ]}
         >
-          Partner Portal & Facility Manager
+          PARTNER PORTAL • ARENA OPERATIONS
         </Animated.Text>
       </View>
 
