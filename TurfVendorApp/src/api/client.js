@@ -57,8 +57,6 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 
   try {
-    clearTimeout(timeoutId);
-
     // The server can return non-JSON (HTML error/404 pages, plain text, empty
     // bodies) when a route is missing, the server crashed, or a proxy/dev
     // server intercepted the request. Calling response.json() directly on
@@ -94,7 +92,6 @@ export const apiRequest = async (endpoint, options = {}) => {
 
     return payload;
   } catch (err) {
-    clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
       throw new Error('Request timed out. Please verify your backend server is reachable.');
     }
