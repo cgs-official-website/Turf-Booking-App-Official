@@ -141,53 +141,26 @@ const SplashScreen = ({ onFinish }) => {
     // 6. Eased Progress Bar Fill
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: (FRAMES.length * FRAME_DURATION) + HOLD_ON_LAST_FRAME - 150,
+      duration: 2100,
       easing: Easing.bezier(0.4, 0, 0.2, 1),
       useNativeDriver: false,
     }).start();
 
-    // 7. Sequential Frame Transition + Hero Moment on Frame 5
-    let holdTimer;
-    let i = 0;
-    const timer = setInterval(() => {
-      i += 1;
-      if (i >= FRAMES.length) {
-        clearInterval(timer);
+    // 7. Hero Moment: scale pop + emerald glow flash
+    const heroTimer = setTimeout(() => {
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(logoScale, { toValue: 1.08, duration: 180, easing: Easing.bezier(0.22, 1, 0.36, 1), useNativeDriver: true }),
+          Animated.timing(logoScale, { toValue: 1.0, duration: 240, easing: Easing.bezier(0.22, 1, 0.36, 1), useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(heroGlowOpacity, { toValue: 0.5, duration: 200, useNativeDriver: true }),
+          Animated.timing(heroGlowOpacity, { toValue: 0, duration: 280, useNativeDriver: true }),
+        ]),
+      ]).start();
+    }, 1500);
 
-        // Frame 5 "Hero Moment": scale pop + emerald glow flash
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(logoScale, { toValue: 1.08, duration: 180, easing: Easing.bezier(0.22, 1, 0.36, 1), useNativeDriver: true }),
-            Animated.timing(logoScale, { toValue: 1.0, duration: 240, easing: Easing.bezier(0.22, 1, 0.36, 1), useNativeDriver: true }),
-          ]),
-          Animated.sequence([
-            Animated.timing(heroGlowOpacity, { toValue: 0.5, duration: 200, useNativeDriver: true }),
-            Animated.timing(heroGlowOpacity, { toValue: 0, duration: 280, useNativeDriver: true }),
-          ]),
-        ]).start();
-
-        // Hold and trigger coordinated exit
-        holdTimer = setTimeout(() => {
-          triggerExitTransition();
-        }, HOLD_ON_LAST_FRAME);
-        return;
-      }
-
-      // Smooth Frame Crossfade
-      Animated.timing(logoOpacity, {
-        toValue: 0.25,
-        duration: FADE_DURATION / 2,
-        useNativeDriver: true,
-      }).start(() => {
-        setFrameIndex(i);
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: FADE_DURATION / 2,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, FRAME_DURATION);
-
+    // 8. Coordinated Exit Transition
     const triggerExitTransition = () => {
       Animated.parallel([
         Animated.timing(screenOpacity, {
@@ -212,14 +185,18 @@ const SplashScreen = ({ onFinish }) => {
       });
     };
 
-    // 8. Hard fallback safety timer (3.0 seconds max)
+    const exitTimer = setTimeout(() => {
+      triggerExitTransition();
+    }, 2400);
+
+    // 9. Hard fallback safety timer (3.0 seconds max)
     const fallbackTimer = setTimeout(() => {
       if (onFinish) onFinish();
     }, 3000);
 
     return () => {
-      clearInterval(timer);
-      clearTimeout(holdTimer);
+      clearTimeout(heroTimer);
+      clearTimeout(exitTimer);
       clearTimeout(fallbackTimer);
     };
   }, []);
