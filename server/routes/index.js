@@ -15,10 +15,25 @@ const wishlistRoutes = require('./wishlistRoutes');
 const { sendSuccess } = require('../utils/response');
 
 // Health Check
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
+  const { db } = require('../config/firebaseAdmin');
+  let dbOk = false;
+  let userCount = 0;
+  try {
+    if (db) {
+      const snap = await db.collection('users').limit(1).get();
+      dbOk = true;
+      userCount = snap.size;
+    }
+  } catch (e) {
+    dbOk = false;
+  }
+
   return sendSuccess(res, {
     status: 'ok',
+    version: '1.0.3',
     service: 'turf-booking-backend-v1',
+    firestore: dbOk ? 'connected' : 'error',
     timestamp: new Date().toISOString(),
   });
 });
