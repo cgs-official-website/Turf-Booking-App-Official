@@ -70,12 +70,12 @@ const adminController = {
   async getStats(req, res) {
     try {
       const [usersSnap, vendorsSnap, turfsSnap, bookingsSnap, matchesSnap, reportsSnap] = await Promise.all([
-        firestoreService.queryWithCursor('users', { limit: 500 }),
-        firestoreService.queryWithCursor('vendors', { limit: 500 }),
-        firestoreService.queryWithCursor('turfs', { limit: 500 }),
-        firestoreService.queryWithCursor('bookings', { limit: 1000 }),
-        firestoreService.queryWithCursor('matches', { limit: 500 }),
-        firestoreService.queryWithCursor('reports', { limit: 500 }),
+        firestoreService.queryWithCursor('users', { limit: 500, orderByField: null }),
+        firestoreService.queryWithCursor('vendors', { limit: 500, orderByField: null }),
+        firestoreService.queryWithCursor('turfs', { limit: 500, orderByField: null }),
+        firestoreService.queryWithCursor('bookings', { limit: 1000, orderByField: null }),
+        firestoreService.queryWithCursor('matches', { limit: 500, orderByField: null }),
+        firestoreService.queryWithCursor('reports', { limit: 500, orderByField: null }),
       ]);
 
       const users = deduplicateById(usersSnap.items);
@@ -91,7 +91,7 @@ const adminController = {
 
       const pendingKycs = vendors.filter((v) => v.kycStatus === 'pending').length;
       const activeTurfs = turfs.filter((t) => t.status === 'active').length;
-      const pendingTurfs = turfs.filter((t) => t.status === 'pending').length;
+      const pendingTurfs = turfs.filter((t) => t.status === 'pending' || t.status === 'draft').length;
 
       const confirmedBookings = bookings.filter((b) => b.status === 'confirmed').length;
       const completedBookings = bookings.filter((b) => b.status === 'completed').length;
@@ -100,6 +100,11 @@ const adminController = {
 
       const liveMatches = matches.filter((m) => m.status === 'live').length;
       const openReports = reports.filter((r) => r.status === 'open' || !r.status).length;
+
+      const sortByTime = (items) => [...items].sort((a, b) => {
+        const getT = (x) => (x.createdAt?._seconds ? x.createdAt._seconds * 1000 : new Date(x.createdAt || 0).getTime());
+        return getT(b) - getT(a);
+      });
 
       return sendSuccess(res, {
         stats: {
@@ -120,9 +125,9 @@ const adminController = {
           totalReports: reports.length,
           openReports,
         },
-        recentBookings: deduplicateById(bookings).slice(0, 10),
-        recentVendors: deduplicateById(vendors).slice(0, 5),
-        recentReports: deduplicateById(reports).slice(0, 5),
+        recentBookings: sortByTime(bookings).slice(0, 10),
+        recentVendors: sortByTime(vendors).slice(0, 5),
+        recentReports: sortByTime(reports).slice(0, 5),
       });
     } catch (err) {
       console.error('getStats error:', err);
@@ -151,6 +156,13 @@ const adminController = {
         let turf = null;
         if (v.turfId) {
           turf = await firestoreService.getDoc('turfs', v.turfId);
+        }
+        if (!turf) {
+          const turfQuery = await firestoreService.queryWithCursor('turfs', {
+            filters: [['vendorId', '==', v.uid || v.id]],
+            limit: 1,
+          });
+          turf = turfQuery?.items?.[0] || null;
         }
         return {
           ...v,
