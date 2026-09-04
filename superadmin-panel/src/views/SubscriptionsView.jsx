@@ -10,6 +10,7 @@ export const SubscriptionsView = () => {
   const { showAlert, showConfirm } = useModal();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -26,6 +27,7 @@ export const SubscriptionsView = () => {
 
   const fetchPlans = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await api.getSubscriptionPlans();
       if (res.success && res.data?.plans) {
@@ -35,6 +37,7 @@ export const SubscriptionsView = () => {
       }
     } catch (err) {
       console.error('Failed to fetch subscription plans:', err);
+      setError(err.message || 'Failed to fetch subscription plans.');
     } finally {
       setLoading(false);
     }
@@ -56,6 +59,8 @@ export const SubscriptionsView = () => {
     });
     setModalOpen(true);
   };
+
+  const handleOpenAdd = handleOpenCreate;
 
   const handleOpenEdit = (plan) => {
     setEditingPlan(plan);
