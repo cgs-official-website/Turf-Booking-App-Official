@@ -49,3 +49,7 @@ Thumbs.db
 .vscode/
 .history/
 
+# Markdown Documentation Files
+*.md
+
+
