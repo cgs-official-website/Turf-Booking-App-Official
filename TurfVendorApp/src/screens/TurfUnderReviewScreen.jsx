@@ -78,7 +78,7 @@ export default function TurfUnderReviewScreen({ navigation }) {
   const handleLogout = () => dispatch(logoutVendor());
 
   const handleEmailUs = () => {
-    Linking.openURL('mailto:support@zuna.com?subject=Turf%20Partner%20Verification%20Query');
+    Linking.openURL('mailto:info@teamcarrezza.com?subject=Turf%20Partner%20Verification%20Query');
   };
 
   const businessName = turfInfo?.name || vendor?.turfName || vendor?.businessName || 'Your Turf Facility';
