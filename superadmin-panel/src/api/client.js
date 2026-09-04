@@ -1,9 +1,9 @@
 // src/api/client.js
+export const PRODUCTION_API_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-    ? `${window.location.origin}/api/v1`
-    : 'https://turf-booking-app-official-production.up.railway.app/api/v1');
+  PRODUCTION_API_URL;
 
 class AdminApiClient {
   getToken() {
@@ -32,7 +32,13 @@ class AdminApiClient {
     };
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-    const data = await response.json().catch(() => ({}));
+    const raw = await response.text();
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      data = {};
+    }
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
@@ -42,7 +48,11 @@ class AdminApiClient {
           window.dispatchEvent(new Event('auth:unauthorized'));
         }
       }
-      throw new Error(data.error?.message || data.message || `Request failed with status ${response.status}`);
+      throw new Error(
+        data.error?.message ||
+        data.message ||
+        (response.status === 405 ? 'Endpoint method not allowed' : `Request failed with status ${response.status}`)
+      );
     }
 
     return data;
