@@ -18,7 +18,16 @@ import { NotFoundView } from './views/NotFoundView';
 
 function DashboardApp() {
   const { isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+
+  const getTabFromUrl = () => {
+    if (typeof window === 'undefined') return 'overview';
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (hash) return hash;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'overview';
+  };
+
+  const [activeTab, setActiveTab] = useState(getTabFromUrl);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [statsData, setStatsData] = useState({
     stats: {},
@@ -27,6 +36,21 @@ function DashboardApp() {
     recentReports: [],
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActiveTab(getTabFromUrl());
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const handleSelectTab = (tabId) => {
+    setActiveTab(tabId);
+    if (typeof window !== 'undefined') {
+      window.location.hash = `#/${tabId}`;
+    }
+  };
 
   const fetchStats = async () => {
     if (!isAuthenticated) return;
@@ -60,7 +84,7 @@ function DashboardApp() {
       {/* Sidebar Navigation (Drawer on mobile, Sticky on desktop) */}
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         pendingKycCount={statsData.stats?.pendingKycs || 0}
         openReportsCount={statsData.stats?.openReports || 0}
         isOpen={sidebarOpen}
