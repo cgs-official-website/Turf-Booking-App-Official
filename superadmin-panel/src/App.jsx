@@ -14,6 +14,7 @@ import { MatchesView } from './views/MatchesView';
 import { ReportsView } from './views/ReportsView';
 import { SubscriptionsView } from './views/SubscriptionsView';
 import { ReviewsView } from './views/ReviewsView';
+import { NotFoundView } from './views/NotFoundView';
 
 function DashboardApp() {
   const { isAuthenticated } = useAuth();
@@ -99,6 +100,10 @@ function DashboardApp() {
           {activeTab === 'reviews' && <ReviewsView />}
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
+
+          {!['overview', 'kyc', 'turfs', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'reports', 'subscriptions'].includes(activeTab) && (
+            <NotFoundView onNavigateHome={() => setActiveTab('overview')} />
+          )}
         </main>
       </div>
     </div>
