@@ -29,9 +29,10 @@ router.get('/turfs/pending', adminController.getPendingTurfs);
 router.post('/turfs/:turfId/approve', adminController.approveTurf);
 router.post('/turfs/:turfId/toggle-status', adminController.toggleTurfStatus);
 
-// Platform Bookings & Matches Monitoring
+// Platform Bookings, Matches & Reviews Monitoring
 router.get('/bookings', adminController.getAllBookings);
 router.get('/matches', adminController.getAllMatches);
+router.get('/reviews', adminController.getAllReviews);
 
 // Issue Reports & Support
 router.get('/reports', adminController.getAllReports);

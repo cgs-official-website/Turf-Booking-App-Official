@@ -541,6 +541,49 @@ const adminController = {
       notification: notif,
     });
   },
+
+  /**
+   * GET /api/v1/admin/reviews
+   * View all turf customer reviews (Read-only for Super Admin)
+   */
+  async getAllReviews(req, res) {
+    const { turfId, rating, limit = 50, cursor } = req.query;
+
+    const filters = [];
+    if (turfId) filters.push(['turfId', '==', turfId]);
+    if (rating) filters.push(['rating', '==', Number(rating)]);
+
+    const result = await firestoreService.queryWithCursor('reviews', {
+      filters,
+      orderByField: 'createdAt',
+      orderDirection: 'desc',
+      limit: Number(limit),
+      cursor,
+    });
+
+    // Enrich with turf details
+    const enrichedReviews = await Promise.all(
+      result.items.map(async (rev) => {
+        let turfName = rev.turfName || '';
+        let turfCity = rev.turfCity || '';
+        if (rev.turfId && (!turfName || !turfCity)) {
+          const turf = await firestoreService.getDoc('turfs', rev.turfId);
+          if (turf) {
+            turfName = turf.name || turf.title || turfName;
+            turfCity = turf.location?.city || turf.city || turfCity;
+          }
+        }
+        return {
+          ...rev,
+          turfName: turfName || 'Turf Facility',
+          turfCity: turfCity || 'Local Arena',
+        };
+      })
+    );
+
+    const uniqueReviews = deduplicateById(enrichedReviews);
+    return sendPaginated(res, uniqueReviews, result.nextCursor, { count: uniqueReviews.length });
+  },
 };
 
 module.exports = adminController;

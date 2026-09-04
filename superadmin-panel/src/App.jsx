@@ -13,6 +13,7 @@ import { UsersView } from './views/UsersView';
 import { MatchesView } from './views/MatchesView';
 import { ReportsView } from './views/ReportsView';
 import { SubscriptionsView } from './views/SubscriptionsView';
+import { ReviewsView } from './views/ReviewsView';
 
 function DashboardApp() {
   const { isAuthenticated } = useAuth();
@@ -95,7 +96,7 @@ function DashboardApp() {
           {activeTab === 'users' && <UsersView />}
 
           {activeTab === 'matches' && <MatchesView />}
-
+          {activeTab === 'reviews' && <ReviewsView />}
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
         </main>

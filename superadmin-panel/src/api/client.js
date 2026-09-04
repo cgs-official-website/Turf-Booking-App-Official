@@ -164,6 +164,15 @@ class AdminApiClient {
       method: 'DELETE',
     });
   }
+
+  getAllReviews(rating, turfId, cursor) {
+    const params = new URLSearchParams();
+    if (rating) params.set('rating', rating);
+    if (turfId) params.set('turfId', turfId);
+    if (cursor) params.set('cursor', cursor);
+    const qs = params.toString();
+    return this.request(`/admin/reviews${qs ? `?${qs}` : ''}`);
+  }
 }
 
 export const api = new AdminApiClient();

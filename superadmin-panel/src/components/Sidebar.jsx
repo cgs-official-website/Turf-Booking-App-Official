@@ -7,6 +7,7 @@ import {
   Users,
   UserCheck,
   Trophy,
+  Star,
   AlertTriangle,
   LogOut,
   ChevronRight,
@@ -43,8 +44,9 @@ export const Sidebar = ({
       ],
     },
     {
-      title: 'COMMUNITY & GAMES',
+      title: 'COMMUNITY & FEEDBACK',
       items: [
+        { id: 'reviews', label: 'Turf Reviews', icon: Star },
         { id: 'users', label: 'Players Directory', icon: Users },
         { id: 'matches', label: 'Matches & Scores', icon: Trophy },
       ],
