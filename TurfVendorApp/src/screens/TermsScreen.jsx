@@ -76,8 +76,8 @@ const TermsScreen = ({ navigation, route }) => {
     if (registrationSuccess) {
       dispatch(clearRegistrationSuccess());
       Alert.alert(
-        'Registration Successful',
-        'Your vendor account has been created. Please log in to proceed.',
+        'Registration Submitted',
+        'Registration submitted successfully. Your account is pending Superadmin approval.',
         [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }) }]
       );
     }

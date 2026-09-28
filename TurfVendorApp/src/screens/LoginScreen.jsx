@@ -29,7 +29,14 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (error && isFocused) {
-      Alert.alert('Login Failed', error);
+      const isPending = error.toLowerCase().includes('pending') || error.toLowerCase().includes('approval');
+      const isRejected = error.toLowerCase().includes('not approved') || error.toLowerCase().includes('rejected');
+      const title = isPending
+        ? 'Account Pending Approval'
+        : isRejected
+        ? 'Account Not Approved'
+        : 'Login Failed';
+      Alert.alert(title, error);
       dispatch(clearError());
     }
   }, [error, isFocused]);
@@ -169,7 +176,7 @@ const LoginScreen = ({ navigation }) => {
             activeOpacity={0.75}
           >
             <Feather name="plus-circle" size={16} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={[styles.registerBtnText, { color: colors.primary }]}>Register Your Turf</Text>
+            <Text style={[styles.registerBtnText, { color: colors.primary }]}>New Account</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

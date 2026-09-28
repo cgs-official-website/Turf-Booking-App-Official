@@ -46,8 +46,24 @@ export const loginVendor = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       const data = await loginVendorApi(credentials);
+      const vendor = data.vendor || data.profile;
+      const kycStatus = vendor?.kycStatus || 'pending';
+
+      if (kycStatus === 'pending') {
+        return rejectWithValue(
+          'Your account is pending Superadmin approval. You will be able to log in once your account has been approved.'
+        );
+      }
+
+      if (kycStatus === 'rejected') {
+        const reason = vendor?.rejectionReason ? `\nReason: ${vendor.rejectionReason}` : '';
+        return rejectWithValue(
+          `Your account registration was not approved.${reason}\nPlease contact support.`
+        );
+      }
+
       await AsyncStorage.setItem('vendorToken', data.token);
-      const turfApprovalAcknowledged = await getPersistedTurfAck(data.vendor?._id);
+      const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, turfApprovalAcknowledged };
     } catch (err) {
       return rejectWithValue(err.message);
@@ -78,7 +94,15 @@ export const bootstrapAuth = createAsyncThunk(
       const token = await AsyncStorage.getItem('vendorToken');
       if (!token) return null;
       const data = await getMeApi();
-      const turfApprovalAcknowledged = await getPersistedTurfAck(data.vendor?._id);
+      const vendor = data.vendor || data.profile;
+      const kycStatus = vendor?.kycStatus || 'pending';
+
+      if (kycStatus !== 'approved') {
+        await AsyncStorage.removeItem('vendorToken');
+        return rejectWithValue('Your account is pending Superadmin approval.');
+      }
+
+      const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, turfApprovalAcknowledged };
     } catch (err) {
       await AsyncStorage.removeItem('vendorToken');

@@ -56,7 +56,7 @@ const RegisterScreen = ({ navigation }) => {
     }
 
     const { confirmPassword, ...payload } = form;
-    navigation.navigate('Terms', { formData: payload, avatar });
+    navigation.navigate('Terms', { formData: { ...payload, avatar }, avatar });
   };
 
   return (

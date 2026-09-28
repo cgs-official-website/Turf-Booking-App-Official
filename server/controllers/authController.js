@@ -30,7 +30,7 @@ const authController = {
    * POST /api/v1/auth/register (Email + Password sign up)
    */
   async register(req, res) {
-    const { name, email, password, phone, role = 'user' } = req.body;
+    const { name, email, password, phone, role = 'user', avatar, photoURL } = req.body;
     if (!email || !password) {
       return sendError(res, 'Email and password are required', 400, 'MISSING_FIELDS');
     }
@@ -46,11 +46,12 @@ const authController = {
     const passwordHash = await hashOtp(password);
     const newDoc = {
       uid,
-      name: name || 'Turf Player',
+      name: name || (role === 'vendor' ? 'Turf Partner' : 'Turf Player'),
       email: cleanEmail,
       phone: phone || '',
       passwordHash,
       role,
+      avatar: avatar || photoURL || null,
       createdAt: new Date(),
     };
 
@@ -65,6 +66,16 @@ const authController = {
     }
 
     const profile = await firestoreService.setDoc(collectionName, uid, newDoc);
+
+    // Vendors must be approved by Superadmin before gaining an active session
+    if (role === 'vendor') {
+      return sendSuccess(res, {
+        message: 'Registration submitted successfully. Your account is pending Superadmin approval.',
+        profile,
+        vendor: profile,
+      });
+    }
+
     const token = generateSessionToken({ uid, role, email: cleanEmail, admin: false });
 
     return sendSuccess(res, {
@@ -72,7 +83,6 @@ const authController = {
       token,
       profile,
       user: profile,
-      vendor: profile,
     });
   },
 
@@ -100,10 +110,9 @@ const authController = {
       profile = existingQuery?.items?.[0] || null;
     }
 
-    if (!profile) {
-      // 2. Search in alternate collection (cross-role account)
-      const altDoc = await firestoreService.getDoc(altCollection, `user_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`) ||
-                     await firestoreService.getDoc(altCollection, `vendor_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`);
+    if (!profile && role !== 'vendor') {
+      // 2. Search in alternate collection (cross-role account for players only)
+      const altDoc = await firestoreService.getDoc(altCollection, `user_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`);
       if (altDoc) {
         profile = altDoc;
       } else {
@@ -116,23 +125,28 @@ const authController = {
     }
 
     if (!profile) {
-      // 3. Auto-provision account on first login
+      if (role === 'vendor') {
+        return sendError(
+          res,
+          'No vendor account found with this email. Please select "New Account" to register.',
+          404,
+          'ACCOUNT_NOT_FOUND'
+        );
+      }
+
+      // Auto-provision player account on first login
       const passwordHash = await hashOtp(password);
       const newDoc = {
         uid,
-        name: role === 'vendor' ? 'Turf Partner' : 'Turf Player',
+        name: 'Turf Player',
         email: cleanEmail,
-        phone: role === 'vendor' ? '9876543210' : '9123456780',
+        phone: '9123456780',
         passwordHash,
         role,
         createdAt: new Date(),
+        location: null,
+        wishlist: [],
       };
-      if (role === 'vendor') {
-        newDoc.kycStatus = 'approved';
-        newDoc.turfOnboardingComplete = true;
-        newDoc.turfApprovalAcknowledged = true;
-        newDoc.subscription = { active: true, planName: 'Pro Annual' };
-      }
       profile = await firestoreService.setDoc(collectionName, uid, newDoc);
     }
 
@@ -149,6 +163,30 @@ const authController = {
 
     if (!isMatch && !isDevPass) {
       return sendError(res, 'Invalid password. Please check your password or use Password@123', 401, 'INVALID_CREDENTIALS');
+    }
+
+    // Approval verification for vendor accounts
+    if (role === 'vendor') {
+      const status = profile.kycStatus || 'pending';
+      if (status === 'pending') {
+        return sendError(
+          res,
+          'Your account is pending Superadmin approval. You will be able to log in once your account has been approved.',
+          403,
+          'KYC_PENDING',
+          { kycStatus: 'pending', vendor: profile }
+        );
+      }
+      if (status === 'rejected') {
+        const reason = profile.rejectionReason ? ` Reason: ${profile.rejectionReason}` : '';
+        return sendError(
+          res,
+          `Your account registration was not approved.${reason} Please contact support.`,
+          403,
+          'KYC_REJECTED',
+          { kycStatus: 'rejected', rejectionReason: profile.rejectionReason, vendor: profile }
+        );
+      }
     }
 
     const token = generateSessionToken({
