@@ -1,0 +1,36 @@
+{
+  "hotspots": [
+    {
+      "label": "vendorController",
+      "risk": 0.61,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "turfController",
+      "risk": 0.381,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "authController",
+      "risk": 0.32,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "adminController",
+      "risk": 0.287,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "bookingController",
+      "risk": 0.272,
+      "type": "FUNCTION"
+    }
+  ],
+  "blast_radius": {
+    "sendError()": 4,
+    "now": 3,
+    "otpRateLimiter()": 3,
+    "errorHandler()": 2,
+    "requireAdmin()": 2
+  }
+}

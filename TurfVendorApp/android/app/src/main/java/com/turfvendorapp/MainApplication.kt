@@ -34,10 +34,32 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    createNotificationChannel()
     SoLoader.init(this, false)
     if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
       // If you opted-in for the New Architecture, we load the native entry point for this app.
       load()
+    }
+  }
+
+  private fun createNotificationChannel() {
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+      val channelId = "turf_notifications"
+      val name = "Turf Notifications"
+      val descriptionText = "Notifications for Turf bookings, requests, and updates"
+      val importance = android.app.NotificationManager.IMPORTANCE_HIGH
+      val channel = android.app.NotificationChannel(channelId, name, importance).apply {
+        description = descriptionText
+        enableLights(true)
+        enableVibration(true)
+        val audioAttributes = android.media.AudioAttributes.Builder()
+          .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+          .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+          .build()
+        setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI, audioAttributes)
+      }
+      val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+      notificationManager.createNotificationChannel(channel)
     }
   }
 }

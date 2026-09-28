@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const CANDIDATE_URLS = [
   'https://turf-booking-app-official-production.up.railway.app/api/v1',
   'http://localhost:5000/api/v1',
+  'http://192.168.0.30:5000/api/v1',
   'http://10.0.2.2:5000/api/v1',
   'http://192.168.0.50:5000/api/v1',
 ];

@@ -99,8 +99,15 @@ export const updateVendorProfile = createAsyncThunk(
   }
 );
 
+import { fcmHelper } from '../utils/fcmHelper';
+
 export const logoutVendor = createAsyncThunk('auth/logout', async (_, { getState }) => {
   const vendorId = getState().auth?.vendor?._id;
+  try {
+    await fcmHelper.unregisterDeviceToken();
+  } catch (err) {
+    console.warn('⚠️ Error unregistering vendor FCM token on logout:', err.message);
+  }
   await AsyncStorage.removeItem('vendorToken');
   await setPersistedTurfAck(vendorId, false);
 });

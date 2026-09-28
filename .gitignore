@@ -53,3 +53,13 @@ Thumbs.db
 *.md
 
 
+
+
+# Graphify Knowledge Graphs
+
+# Graphify Knowledge Graphs
+!graphify-out/**
+!*/graphify-out/**
+graphify-out/cache/**
+graphify-out/**/cache/**
+*/graphify-out/cache/**

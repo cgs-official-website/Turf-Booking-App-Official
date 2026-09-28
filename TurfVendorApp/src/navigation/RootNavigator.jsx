@@ -39,8 +39,11 @@ import TurfUnderReviewScreen from '../screens/TurfUnderReviewScreen';
 import TurfApprovedScreen from '../screens/TurfApprovedScreen';
 
 import { useTheme } from '../context/ThemeContext'; // ✅ replaced deprecated COLORS import
+import { createNavigationContainerRef } from '@react-navigation/native';
+import { fcmHelper } from '../utils/fcmHelper';
 
 const Stack = createNativeStackNavigator();
+export const navigationRef = createNavigationContainerRef();
 
 const RootNavigator = () => {
   const { colors } = useTheme(); // ✅ theme-aware colors
@@ -74,6 +77,20 @@ const RootNavigator = () => {
     }
   }, [bootstrapping, isAuthenticated, turfStatus, dispatch]);
 
+  // Register vendor device token and listen for push notifications
+  useEffect(() => {
+    if (isAuthenticated) {
+      fcmHelper.registerDeviceToken();
+
+      const cleanupListeners = fcmHelper.setupNotificationListeners(navigationRef);
+      return () => {
+        if (typeof cleanupListeners === 'function') {
+          cleanupListeners();
+        }
+      };
+    }
+  }, [isAuthenticated]);
+
   if (!splashDone) {
     return <SplashScreen onFinish={() => setSplashDone(true)} />;
   }
@@ -89,7 +106,7 @@ const RootNavigator = () => {
     isAuthenticated && !needsOnboarding && isApproved && !turfApprovalAcknowledged;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.card },   // ✅ theme-aware, was COLORS.white

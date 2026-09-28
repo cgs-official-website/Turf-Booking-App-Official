@@ -27,25 +27,34 @@ import MatchScreen           from '../screens/MatchScreen';
 import TossScreen            from '../screens/TossScreen';
 import ScorecardScreen       from '../screens/ScorecardScreen';
 
+import { createNavigationContainerRef } from '@react-navigation/native';
+
 const Stack = createStackNavigator();
+export const navigationRef = createNavigationContainerRef();
 
 export default function RootNavigator() {
   const { token, user, bootstrapped, splashDone, locationSet } = useSelector((s) => s.auth);
 
   useEffect(() => {
     if (token) {
-      fcmHelper.requestPermission().then(() => {
-        const deviceId = `fcm_${Platform.OS}_${user?.id || user?._id || 'device'}`;
-        fcmHelper.registerDeviceToken(deviceId);
-      });
+      // Register device FCM token with backend
+      fcmHelper.registerDeviceToken();
+
+      // Listen for foreground notifications, background taps, quit state opens, and token refreshes
+      const cleanupListeners = fcmHelper.setupNotificationListeners(navigationRef);
+      return () => {
+        if (typeof cleanupListeners === 'function') {
+          cleanupListeners();
+        }
+      };
     }
-  }, [token, user]);
+  }, [token]);
 
   // Wait for BOTH bootstrapAuth (data ready) AND splash animation (visual ready)
   const showSplash = !bootstrapped || !splashDone;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{ headerShown: false, cardStyle: { backgroundColor: '#fff' } }}
       >

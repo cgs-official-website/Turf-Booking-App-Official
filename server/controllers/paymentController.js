@@ -51,32 +51,41 @@ const paymentController = {
       await cacheService.invalidateDashboard(booking.vendorId);
     }
 
-    // Send FCM push notifications safely in background
-    (async () => {
-      // 1. To User
-      if (booking.userId) {
-        await notificationService.sendNotification({
-          recipientId: booking.userId,
-          recipientRole: 'user',
-          title: 'Booking Confirmed! 🏟️',
-          body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
-          type: 'booking',
-          data: { bookingId },
-        });
-      }
+    // Send FCM push notifications safely in background (guarded against duplicate sends)
+    if (!booking.notificationSent) {
+      (async () => {
+        // Resolve vendorId strictly for the booked turf
+        let vendorId = booking.vendorId;
+        if (!vendorId && booking.turfId) {
+          const turf = await firestoreService.getDoc('turfs', booking.turfId);
+          vendorId = turf?.vendorId;
+        }
 
-      // 2. To Vendor
-      if (booking.vendorId) {
-        await notificationService.sendNotification({
-          recipientId: booking.vendorId,
-          recipientRole: 'vendor',
-          title: 'New Booking Received! 💰',
-          body: `New booking for ${booking.date} at ${booking.startTime} (₹${booking.amount || booking.totalAmount || ''}).`,
-          type: 'booking',
-          data: { bookingId },
-        });
-      }
-    })().catch((err) => console.warn('⚠️ Push notification dispatch warning:', err.message));
+        // 1. To User
+        if (booking.userId) {
+          await notificationService.sendNotification({
+            recipientId: booking.userId,
+            recipientRole: 'user',
+            title: 'Booking Confirmed! 🏟️',
+            body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
+            type: 'booking',
+            data: { bookingId },
+          });
+        }
+
+        // 2. To Vendor associated with the booked turf
+        if (vendorId) {
+          await notificationService.sendNotification({
+            recipientId: vendorId,
+            recipientRole: 'vendor',
+            title: 'New Booking Received! 💰',
+            body: `New booking for ${booking.date} at ${booking.startTime} (₹${booking.amount || booking.totalAmount || ''}).`,
+            type: 'booking',
+            data: { bookingId },
+          });
+        }
+      })().catch((err) => console.warn('⚠️ Push notification dispatch warning:', err.message));
+    }
 
     return sendSuccess(res, {
       booking: confirmedBooking,
@@ -116,7 +125,7 @@ const paymentController = {
 
           if (result.items.length > 0) {
             const booking = result.items[0];
-            if (booking.status !== 'confirmed') {
+            if (booking.status !== 'confirmed' && !booking.notificationSent) {
               await firestoreService.updateDoc('bookings', booking.id, {
                 status: 'confirmed',
                 razorpayPaymentId: paymentId || '',
@@ -130,12 +139,29 @@ const paymentController = {
               }
 
               // Send background notifications if not already sent
-              if (booking.vendorId) {
+              let vendorId = booking.vendorId;
+              if (!vendorId && booking.turfId) {
+                const turf = await firestoreService.getDoc('turfs', booking.turfId);
+                vendorId = turf?.vendorId;
+              }
+
+              if (vendorId) {
                 await notificationService.sendNotification({
-                  recipientId: booking.vendorId,
+                  recipientId: vendorId,
                   recipientRole: 'vendor',
                   title: 'New Booking Received! 💰',
                   body: `New booking for ${booking.date} at ${booking.startTime}.`,
+                  type: 'booking',
+                  data: { bookingId: booking.id },
+                });
+              }
+
+              if (booking.userId) {
+                await notificationService.sendNotification({
+                  recipientId: booking.userId,
+                  recipientRole: 'user',
+                  title: 'Booking Confirmed! 🏟️',
+                  body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
                   type: 'booking',
                   data: { bookingId: booking.id },
                 });

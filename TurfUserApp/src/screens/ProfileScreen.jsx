@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout, toggleTheme } from '../redux/authSlice';
+import { fcmHelper } from '../utils/fcmHelper';
 import { SPACING, RADIUS, FONT } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
 import { getImageUrl } from '../api/client';
@@ -80,7 +81,14 @@ export default function ProfileScreen({ navigation }) {
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out of your player account?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log out', style: 'destructive', onPress: () => dispatch(logout()) },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: async () => {
+          await fcmHelper.unregisterDeviceToken();
+          dispatch(logout());
+        },
+      },
     ]);
   };
 

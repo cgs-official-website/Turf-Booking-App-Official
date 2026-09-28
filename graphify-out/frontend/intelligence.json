@@ -1,0 +1,36 @@
+{
+  "hotspots": [
+    {
+      "label": "SlotsScreen()",
+      "risk": 0.582,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "ScorecardScreen()",
+      "risk": 0.483,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "TurfProfileScreen()",
+      "risk": 0.394,
+      "type": "FUNCTION"
+    },
+    {
+      "label": "vendorSlice",
+      "risk": 0.365,
+      "type": "STATE_STORE"
+    },
+    {
+      "label": "UsersView()",
+      "risk": 0.335,
+      "type": "FUNCTION"
+    }
+  ],
+  "blast_radius": {
+    "useTheme()": 69,
+    "apiRequest()": 38,
+    "AdminApiClient": 24,
+    "getImageUrl()": 10,
+    "ApiClient": 10
+  }
+}

@@ -5,7 +5,6 @@ import {
   ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import {
   fetchMyTurfs, setActiveTurf, fetchSlotCalendar, toggleFreezeSlot,
   addSlot, deleteSlot,
@@ -195,29 +194,12 @@ const SlotsScreen = ({ navigation }) => {
   };
 
   const openDatePicker = () => {
-    try {
-      if (Platform.OS === 'android' && DateTimePickerAndroid) {
-        DateTimePickerAndroid.open({
-          value: selectedDate,
-          mode: 'date',
-          onChange: (event, picked) => {
-            if (event.type === 'dismissed' || !picked) return;
-            setSelectedDate(picked);
-            setSelectedSlots(new Set());
-          },
-        });
-      } else {
-        setShowDatePicker(true);
-      }
-    } catch {
-      // Safe fallback if native module is not registered
-      setShowDatePicker(false);
-    }
+    setShowDatePicker(true);
   };
 
-  const onDateChange = (event, picked) => {
+  const onDateChange = (picked) => {
     setShowDatePicker(false);
-    if (event.type === 'dismissed' || !picked) return;
+    if (!picked) return;
     setSelectedDate(picked);
     setSelectedSlots(new Set());
   };
@@ -639,6 +621,20 @@ const SlotsScreen = ({ navigation }) => {
         colors={colors}
         styles={styles}
       />
+
+      {/* Date Picker Modal */}
+      <DatePickerModal
+        visible={showDatePicker}
+        onClose={() => setShowDatePicker(false)}
+        selectedDate={selectedDate}
+        onSelectDate={(d) => {
+          setSelectedDate(d);
+          setSelectedSlots(new Set());
+          setShowDatePicker(false);
+        }}
+        colors={colors}
+        isDark={isDark}
+      />
     </View>
   );
 };
@@ -737,6 +733,264 @@ const SlotTemplateModal = ({ visible, onClose, activeTurf, onChanged, colors, st
     </Modal>
   );
 };
+
+const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors, isDark }) => {
+  const [viewYear, setViewYear] = useState(() => (selectedDate || new Date()).getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => (selectedDate || new Date()).getMonth());
+
+  useEffect(() => {
+    if (visible && selectedDate) {
+      setViewYear(selectedDate.getFullYear());
+      setViewMonth(selectedDate.getMonth());
+    }
+  }, [visible, selectedDate]);
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayIndex = new Date(viewYear, viewMonth, 1).getDay();
+
+  const todayStr = toDateStr(new Date());
+  const selectedStr = selectedDate ? toDateStr(selectedDate) : '';
+
+  const cells = [];
+  for (let i = 0; i < firstDayIndex; i++) {
+    cells.push({ key: `blank-${i}`, day: null });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cellDate = new Date(viewYear, viewMonth, d);
+    const cellDateStr = toDateStr(cellDate);
+    const isPast = cellDateStr < todayStr;
+    const isToday = cellDateStr === todayStr;
+    const isSelected = cellDateStr === selectedStr;
+    cells.push({
+      key: `day-${d}`,
+      day: d,
+      date: cellDate,
+      isPast,
+      isToday,
+      isSelected,
+    });
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity
+        style={calModalStyles.overlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[
+            calModalStyles.card,
+            {
+              backgroundColor: colors.surface || (isDark ? '#1F2937' : '#FFFFFF'),
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+            },
+          ]}
+        >
+          {/* Header */}
+          <View style={calModalStyles.header}>
+            <TouchableOpacity onPress={prevMonth} style={calModalStyles.navBtn} activeOpacity={0.7}>
+              <Feather name="chevron-left" size={20} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[calModalStyles.title, { color: colors.text }]}>
+              {monthNames[viewMonth]} {viewYear}
+            </Text>
+            <TouchableOpacity onPress={nextMonth} style={calModalStyles.navBtn} activeOpacity={0.7}>
+              <Feather name="chevron-right" size={20} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Weekday headers */}
+          <View style={calModalStyles.weekRow}>
+            {dayLabels.map((l, idx) => (
+              <Text
+                key={l}
+                style={[
+                  calModalStyles.weekLabel,
+                  { color: idx === 0 || idx === 6 ? (colors.primary || '#10B981') : colors.textSecondary },
+                ]}
+              >
+                {l}
+              </Text>
+            ))}
+          </View>
+
+          {/* Days Grid */}
+          <View style={calModalStyles.grid}>
+            {cells.map((c) => {
+              if (!c.day) {
+                return <View key={c.key} style={calModalStyles.cell} />;
+              }
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[
+                    calModalStyles.cell,
+                    c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#10B981' }],
+                    c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#10B981' }],
+                  ]}
+                  onPress={() => onSelectDate(c.date)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      calModalStyles.cellText,
+                      { color: colors.text },
+                      c.isSelected && calModalStyles.selectedCellText,
+                      c.isToday && !c.isSelected && { color: colors.primary || '#10B981', fontWeight: '700' },
+                      c.isPast && !c.isSelected && { color: colors.textSecondary, opacity: 0.45 },
+                    ]}
+                  >
+                    {c.day}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Footer Actions */}
+          <View style={calModalStyles.footer}>
+            <TouchableOpacity
+              onPress={() => onSelectDate(new Date())}
+              style={[calModalStyles.footerBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F3F4F6' }]}
+              activeOpacity={0.7}
+            >
+              <Text style={[calModalStyles.footerBtnText, { color: colors.primary || '#10B981' }]}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[calModalStyles.footerBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F3F4F6' }]}
+              activeOpacity={0.7}
+            >
+              <Text style={[calModalStyles.footerBtnText, { color: colors.textSecondary }]}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+const calModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  navBtn: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  weekLabel: {
+    width: 38,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+  },
+  cell: {
+    width: 38,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 3,
+    borderRadius: 19,
+  },
+  cellText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  selectedCell: {
+    elevation: 3,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  selectedCellText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  todayCell: {
+    borderWidth: 1.5,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128,128,128,0.15)',
+  },
+  footerBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  footerBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+});
 
 const getStyles = (colors, isDark) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },

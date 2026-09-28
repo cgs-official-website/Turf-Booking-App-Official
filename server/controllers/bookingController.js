@@ -179,9 +179,15 @@ const bookingController = {
         data: { bookingId: id, screen: 'Bookings' },
       });
 
-      if (booking.vendorId) {
+      let vendorId = booking.vendorId;
+      if (!vendorId && booking.turfId) {
+        const turf = await firestoreService.getDoc('turfs', booking.turfId);
+        vendorId = turf?.vendorId;
+      }
+
+      if (vendorId) {
         await notificationService.sendNotification({
-          recipientId: booking.vendorId,
+          recipientId: vendorId,
           recipientRole: 'vendor',
           title: '🏟️ New Hand Cash Request!',
           body: `New booking request for ${booking.sport} on ${booking.date} (${booking.startTime} - ${booking.endTime}). Collect ₹${booking.amount} at the pitch. Please review and accept.`,
@@ -318,9 +324,15 @@ const bookingController = {
     }
 
     // Notify Vendor
-    if (booking.vendorId) {
+    let vendorId = booking.vendorId;
+    if (!vendorId && booking.turfId) {
+      const turf = await firestoreService.getDoc('turfs', booking.turfId);
+      vendorId = turf?.vendorId;
+    }
+
+    if (vendorId) {
       await notificationService.sendNotification({
-        recipientId: booking.vendorId,
+        recipientId: vendorId,
         recipientRole: 'vendor',
         title: 'Booking Cancelled ❌',
         body: `Booking for ${booking.date} at ${booking.startTime} has been cancelled.`,
