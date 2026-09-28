@@ -389,7 +389,7 @@ const vendorController = {
         await notificationService.sendNotification({
           recipientId: booking.userId,
           recipientRole: 'user',
-          title: 'Booking Confirmed! 🏟️',
+          title: 'Booking Confirmed!',
           body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime} - ${booking.endTime}) is confirmed.`,
           type: 'booking',
           data: { bookingId: id },

@@ -66,7 +66,7 @@ const paymentController = {
           await notificationService.sendNotification({
             recipientId: booking.userId,
             recipientRole: 'user',
-            title: 'Booking Confirmed! 🏟️',
+            title: 'Booking Confirmed!',
             body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
             type: 'booking',
             data: { bookingId },
@@ -78,7 +78,7 @@ const paymentController = {
           await notificationService.sendNotification({
             recipientId: vendorId,
             recipientRole: 'vendor',
-            title: 'New Booking Received! 💰',
+            title: 'New Booking Received!',
             body: `New booking for ${booking.date} at ${booking.startTime} (₹${booking.amount || booking.totalAmount || ''}).`,
             type: 'booking',
             data: { bookingId },
@@ -149,7 +149,7 @@ const paymentController = {
                 await notificationService.sendNotification({
                   recipientId: vendorId,
                   recipientRole: 'vendor',
-                  title: 'New Booking Received! 💰',
+                  title: 'New Booking Received!',
                   body: `New booking for ${booking.date} at ${booking.startTime}.`,
                   type: 'booking',
                   data: { bookingId: booking.id },
@@ -160,7 +160,7 @@ const paymentController = {
                 await notificationService.sendNotification({
                   recipientId: booking.userId,
                   recipientRole: 'user',
-                  title: 'Booking Confirmed! 🏟️',
+                  title: 'Booking Confirmed!',
                   body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
                   type: 'booking',
                   data: { bookingId: booking.id },

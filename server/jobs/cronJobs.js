@@ -40,7 +40,7 @@ const initCronJobs = () => {
           await notificationService.sendNotification({
             recipientId: booking.userId,
             recipientRole: 'user',
-            title: 'How was your game? 🏟️',
+            title: 'How was your game?',
             body: `Your session at ${booking.turfName || 'the turf'} is complete. Rate your experience!`,
             type: 'booking',
             data: { bookingId: booking.id, action: 'rate' },

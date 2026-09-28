@@ -59,6 +59,18 @@ const notificationService = {
   }) {
     if (!recipientId) return null;
 
+    // Sanitize title & body to remove emojis and keep text clean and professional
+    const cleanText = (str) => {
+      if (!str || typeof str !== 'string') return '';
+      return str
+        .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{200D}\u{FE0F}]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const finalTitle = cleanText(title) || 'Notification';
+    const finalBody = cleanText(body) || '';
+
     // 1. Create In-App Notification document in Firestore
     let notificationDoc = null;
     try {
@@ -66,8 +78,8 @@ const notificationService = {
         notificationDoc = await firestoreService.createDoc('notifications', {
           recipientId,
           recipientRole,
-          title,
-          body,
+          title: finalTitle,
+          body: finalBody,
           type,
           data,
           read: false,
@@ -101,13 +113,15 @@ const notificationService = {
       const message = {
         tokens: fcmTokens,
         notification: {
-          title,
-          body,
+          title: finalTitle,
+          body: finalBody,
         },
         data: stringData,
         android: {
           priority: 'high',
           notification: {
+            icon: 'ic_notification',
+            color: '#00B761',
             sound: 'default',
             channelId: 'turf_notifications',
           },

@@ -173,7 +173,7 @@ const bookingController = {
       await notificationService.sendNotification({
         recipientId: uid,
         recipientRole: 'user',
-        title: '⏳ Hand Cash Request Submitted',
+        title: 'Hand Cash Request Submitted',
         body: `Your request for ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime} - ${booking.endTime}) has been submitted. The pitch owner will review and confirm.`,
         type: 'booking',
         data: { bookingId: id, screen: 'Bookings' },
@@ -189,7 +189,7 @@ const bookingController = {
         await notificationService.sendNotification({
           recipientId: vendorId,
           recipientRole: 'vendor',
-          title: '🏟️ New Hand Cash Request!',
+          title: 'New Hand Cash Request!',
           body: `New booking request for ${booking.sport} on ${booking.date} (${booking.startTime} - ${booking.endTime}). Collect ₹${booking.amount} at the pitch. Please review and accept.`,
           type: 'booking',
           data: { bookingId: id, screen: 'Bookings' },
@@ -334,7 +334,7 @@ const bookingController = {
       await notificationService.sendNotification({
         recipientId: vendorId,
         recipientRole: 'vendor',
-        title: 'Booking Cancelled ❌',
+        title: 'Booking Cancelled',
         body: `Booking for ${booking.date} at ${booking.startTime} has been cancelled.`,
         type: 'booking',
         data: { bookingId: id },

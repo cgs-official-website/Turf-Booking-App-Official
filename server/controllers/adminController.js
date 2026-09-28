@@ -369,7 +369,7 @@ const adminController = {
     await notificationService.sendNotification({
       recipientId: uid,
       recipientRole: 'vendor',
-      title: 'KYC & Turf Approved! 🎉',
+      title: 'KYC & Turf Approved!',
       body: 'Your KYC documents and turf listing have been approved by Super Admin. You can now choose a subscription plan!',
       type: 'kyc',
       data: { kycStatus: 'approved' },
@@ -409,7 +409,7 @@ const adminController = {
     await notificationService.sendNotification({
       recipientId: uid,
       recipientRole: 'vendor',
-      title: 'Verification Update ⚠️',
+      title: 'Verification Update',
       body: `Your KYC verification was not approved: ${reason || 'Please re-upload valid documents.'}`,
       type: 'kyc',
       data: { kycStatus: 'rejected' },
