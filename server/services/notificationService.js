@@ -146,7 +146,8 @@ const notificationService = {
             const errorCode = resp.error?.code;
             if (
               errorCode === 'messaging/invalid-registration-token' ||
-              errorCode === 'messaging/registration-token-not-registered'
+              errorCode === 'messaging/registration-token-not-registered' ||
+              errorCode === 'messaging/invalid-argument'
             ) {
               deadTokens.push(fcmTokens[idx]);
             }
