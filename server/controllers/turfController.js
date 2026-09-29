@@ -421,18 +421,7 @@ const turfController = {
 
     let slotOverrides = { blockedSlots: [], priceOverrides: {} };
     try {
-      if (firestoreService.db) {
-        const overrideSnap = await firestoreService.db
-          .collection('turfs')
-          .doc(turfId)
-          .collection('slotOverrides')
-          .doc(date)
-          .get();
-
-        if (overrideSnap.exists) {
-          slotOverrides = overrideSnap.data();
-        }
-      }
+      slotOverrides = await firestoreService.getSlotOverrides(turfId, date);
     } catch (err) {
       console.warn('Error reading slot overrides:', err.message);
     }

@@ -1,15 +1,20 @@
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
-const admin = require('firebase-admin');
 const dotenv = require('dotenv');
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
+const { query, pool } = require('../config/db');
+const { initSchema } = require('./initPostgres');
+
 const LOCAL_DB_PATH = path.join(__dirname, '../data/local_db.json');
 
 async function resetAndSeed() {
-  console.log('🔄 Starting Database Reset & Fresh Seeding...');
+  console.log('🔄 Starting PostgreSQL Database Reset & Fresh Seeding...');
+
+  // Ensure schema exists
+  await initSchema();
 
   const passwordHash = await bcrypt.hash('Password@123', 10);
 
@@ -109,34 +114,28 @@ async function resetAndSeed() {
   fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(freshDb, null, 2), 'utf8');
   console.log('✅ Local Database JSON file reset with clean seed data');
 
-  // 2. Reset Firestore collections if initialized
+  // 2. Clear and Seed Railway PostgreSQL
   try {
-    const { db } = require('../config/firebaseAdmin');
-    if (db) {
-      const collectionsToClear = ['bookings', 'reviews', 'matches', 'reports', 'otps', 'notifications', 'subscriptions'];
+    const firestoreService = require('../services/firestoreService');
 
-      for (const colName of collectionsToClear) {
-        const snap = await db.collection(colName).limit(100).get();
-        if (snap.size > 0) {
-          const batch = db.batch();
-          snap.docs.forEach((doc) => batch.delete(doc.ref));
-          await batch.commit();
-          console.log(`🧹 Cleaned Firestore collection: ${colName} (${snap.size} docs removed)`);
-        }
-      }
-
-      // Seed core users, vendors, and turfs in Firestore
-      await db.collection('users').doc('user_admin_zuna_com').set(freshDb.users.user_admin_zuna_com);
-      await db.collection('users').doc('user_9876543210').set(freshDb.users.user_9876543210);
-      await db.collection('vendors').doc('vendor_vendor_turf_com').set(freshDb.vendors.vendor_vendor_turf_com);
-      await db.collection('turfs').doc('turf_arena_01').set(freshDb.turfs.turf_arena_01);
-      console.log('✅ Fresh Firestore seed records created');
+    // Clean ephemeral collections
+    const collectionsToClear = ['bookings', 'reviews', 'matches', 'reports', 'otps', 'notifications', 'subscriptions'];
+    for (const col of collectionsToClear) {
+      await query('DELETE FROM documents WHERE collection = $1', [col]);
+      console.log(`🧹 Cleaned PostgreSQL collection: ${col}`);
     }
+
+    // Seed core users, vendors, and turfs in PostgreSQL
+    await firestoreService.setDoc('users', 'user_admin_zuna_com', freshDb.users.user_admin_zuna_com);
+    await firestoreService.setDoc('users', 'user_9876543210', freshDb.users.user_9876543210);
+    await firestoreService.setDoc('vendors', 'vendor_vendor_turf_com', freshDb.vendors.vendor_vendor_turf_com);
+    await firestoreService.setDoc('turfs', 'turf_arena_01', freshDb.turfs.turf_arena_01);
+    console.log('✅ Fresh Railway PostgreSQL seed records created successfully!');
   } catch (err) {
-    console.warn('⚠️ Firestore reset skipped (offline mode):', err.message);
+    console.warn('⚠️ PostgreSQL seed warning:', err.message);
   }
 
-  console.log('\n🎉 Fresh Database Ready!');
+  console.log('\n🎉 Fresh Railway PostgreSQL Database Ready!');
   console.log('----------------------------------------------------');
   console.log('👑 Super Admin: admin@zuna.com / Password@123');
   console.log('🏟️ Vendor:      vendor@turf.com / Password@123');
@@ -144,4 +143,13 @@ async function resetAndSeed() {
   console.log('----------------------------------------------------');
 }
 
-resetAndSeed();
+if (require.main === module) {
+  resetAndSeed()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
+
+module.exports = { resetAndSeed };

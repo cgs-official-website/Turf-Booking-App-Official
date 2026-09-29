@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const { auth } = require('../config/firebaseAdmin');
 const firestoreService = require('../services/firestoreService');
 const notificationService = require('../services/notificationService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
@@ -514,10 +513,6 @@ const adminController = {
    */
   async setAdminClaim(req, res) {
     const { uid, admin } = setAdminClaimSchema.parse(req.body);
-
-    if (auth) {
-      await auth.setCustomUserClaims(uid, { admin });
-    }
 
     await firestoreService.setDoc('users', uid, { role: 'admin', admin }, true);
 

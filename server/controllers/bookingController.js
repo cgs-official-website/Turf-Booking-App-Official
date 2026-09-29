@@ -27,25 +27,26 @@ const bookingController = {
     let bookingId = null;
 
     try {
-      await firestoreService.runTransaction(async (transaction) => {
-        const bookingsRef = firestoreService.db.collection('bookings');
-
-        // Query active bookings for this turf, date & startTime
-        const clashQuery = await transaction.get(
-          bookingsRef
-            .where('turfId', '==', turfId)
-            .where('date', '==', date)
-            .where('startTime', '==', startTime)
+      await firestoreService.runTransaction(async (client) => {
+        // Query active bookings with FOR UPDATE lock on matching turf, date, and startTime
+        const clashQuery = await client.query(
+          `SELECT id, data FROM documents
+           WHERE collection = 'bookings'
+             AND data->>'turfId' = $1
+             AND data->>'date' = $2
+             AND data->>'startTime' = $3
+           FOR UPDATE`,
+          [turfId, date, startTime]
         );
 
         // Filter for active locks
-        for (const doc of clashQuery.docs) {
-          const b = doc.data();
+        for (const row of clashQuery.rows) {
+          const b = row.data;
           if (['pending', 'confirmed'].includes(b.status)) {
             throw new Error('SLOT_ALREADY_BOOKED');
           }
           if (b.status === 'reserved') {
-            const resAt = b.reservedAt?.toDate ? b.reservedAt.toDate() : new Date(b.reservedAt);
+            const resAt = new Date(b.reservedAt);
             if (now.getTime() - resAt.getTime() < 5 * 60 * 1000) {
               throw new Error('SLOT_CURRENTLY_HELD');
             }
@@ -53,10 +54,8 @@ const bookingController = {
         }
 
         // Create new reservation document
-        const newBookingRef = bookingsRef.doc();
-        bookingId = newBookingRef.id;
-
-        transaction.set(newBookingRef, {
+        bookingId = `booking_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const bookingPayload = {
           id: bookingId,
           userId: uid,
           turfId,
@@ -70,11 +69,17 @@ const bookingController = {
           sport: sport || (turf.sportTypes ? turf.sportTypes[0] : 'General'),
           amount: price,
           status: 'reserved',
-          reservedAt: now,
-          expiresAt,
-          createdAt: now,
-          updatedAt: now,
-        });
+          reservedAt: now.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        };
+
+        await client.query(
+          `INSERT INTO documents (collection, id, data, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5)`,
+          ['bookings', bookingId, JSON.stringify(bookingPayload), now.toISOString(), now.toISOString()]
+        );
       });
 
       // Bust slot cache

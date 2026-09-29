@@ -1,12 +1,11 @@
-const { db, messaging } = require('../config/firebaseAdmin');
 const firestoreService = require('./firestoreService');
 
 /**
- * Production Firebase Cloud Messaging (FCM) & In-App Notification Service
+ * In-App Notification Service (PostgreSQL Backed)
  */
 const notificationService = {
   /**
-   * Register device FCM token for user or vendor
+   * Register device notification token for user or vendor
    */
   async registerToken({ recipientId, recipientRole = 'user', token }) {
     if (!recipientId || !token) return null;
@@ -17,17 +16,17 @@ const notificationService = {
       currentTokens.add(token);
       await firestoreService.setDoc(collectionName, recipientId, {
         fcmTokens: Array.from(currentTokens),
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       }, true);
       return true;
     } catch (err) {
-      console.warn(`⚠️ Failed to register FCM token for ${recipientId}:`, err.message);
+      console.warn(`⚠️ Failed to register token for ${recipientId}:`, err.message);
       return false;
     }
   },
 
   /**
-   * Remove/detach device FCM token on logout
+   * Remove/detach device token on logout
    */
   async removeToken({ recipientId, recipientRole = 'user', token }) {
     if (!recipientId || !token) return null;
@@ -37,11 +36,11 @@ const notificationService = {
       const currentTokens = (userDoc?.fcmTokens || []).filter((t) => t !== token);
       await firestoreService.setDoc(collectionName, recipientId, {
         fcmTokens: currentTokens,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       }, true);
       return true;
     } catch (err) {
-      console.warn(`⚠️ Failed to remove FCM token for ${recipientId}:`, err.message);
+      console.warn(`⚠️ Failed to remove token for ${recipientId}:`, err.message);
       return false;
     }
   },
@@ -71,99 +70,21 @@ const notificationService = {
     const finalTitle = cleanText(title) || 'Notification';
     const finalBody = cleanText(body) || '';
 
-    // 1. Create In-App Notification document in Firestore
+    // 1. Create In-App Notification record in PostgreSQL
     let notificationDoc = null;
     try {
-      if (db) {
-        notificationDoc = await firestoreService.createDoc('notifications', {
-          recipientId,
-          recipientRole,
-          title: finalTitle,
-          body: finalBody,
-          type,
-          data,
-          read: false,
-          createdAt: new Date(),
-        });
-      }
+      notificationDoc = await firestoreService.createDoc('notifications', {
+        recipientId,
+        recipientRole,
+        title: finalTitle,
+        body: finalBody,
+        type,
+        data,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
     } catch (err) {
       console.warn('⚠️ In-app notification save warning:', err.message);
-    }
-
-    // 2. Dispatch FCM Push Notification
-    try {
-      if (!messaging || !db) return notificationDoc;
-
-      const collectionName = recipientRole === 'vendor' ? 'vendors' : 'users';
-      const userDoc = await firestoreService.getDoc(collectionName, recipientId);
-      const fcmTokens = Array.isArray(userDoc?.fcmTokens) ? userDoc.fcmTokens : [];
-
-      if (fcmTokens.length === 0) {
-        return notificationDoc;
-      }
-
-      const stringData = {
-        type: String(type),
-        notificationId: notificationDoc?.id || '',
-        ...Object.fromEntries(
-          Object.entries(data).map(([k, v]) => [k, String(v ?? '')])
-        ),
-      };
-
-      const message = {
-        tokens: fcmTokens,
-        notification: {
-          title: finalTitle,
-          body: finalBody,
-        },
-        data: stringData,
-        android: {
-          priority: 'high',
-          notification: {
-            icon: 'ic_notification',
-            color: '#00B761',
-            sound: 'default',
-            channelId: 'turf_notifications',
-          },
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-            },
-          },
-        },
-      };
-
-      const response = await messaging.sendEachForMulticast(message);
-      console.log(`📡 FCM push dispatched to ${recipientRole} ${recipientId} (${response.successCount} sent, ${response.failureCount} failed)`);
-
-      // 3. Stale token cleanup
-      if (response.failureCount > 0) {
-        const deadTokens = [];
-        response.responses.forEach((resp, idx) => {
-          if (!resp.success) {
-            const errorCode = resp.error?.code;
-            if (
-              errorCode === 'messaging/invalid-registration-token' ||
-              errorCode === 'messaging/registration-token-not-registered' ||
-              errorCode === 'messaging/invalid-argument'
-            ) {
-              deadTokens.push(fcmTokens[idx]);
-            }
-          }
-        });
-
-        if (deadTokens.length > 0) {
-          const validTokens = fcmTokens.filter((t) => !deadTokens.includes(t));
-          await firestoreService.setDoc(collectionName, recipientId, {
-            fcmTokens: validTokens,
-          }, true);
-          console.log(`🧹 Cleaned ${deadTokens.length} stale FCM tokens for ${recipientId}`);
-        }
-      }
-    } catch (err) {
-      console.warn(`⚠️ FCM push dispatch warning for ${recipientId}:`, err.message);
     }
 
     return notificationDoc;

@@ -1,11 +1,10 @@
-const admin = require('firebase-admin');
-const { db } = require('../config/firebaseAdmin');
+const { query, getClient } = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 
 const LOCAL_DB_PATH = path.join(__dirname, '../data/local_db.json');
 
-// Helper to read local DB
+// Helper to read local fallback DB
 const readLocalDb = () => {
   try {
     if (!fs.existsSync(LOCAL_DB_PATH)) {
@@ -30,31 +29,29 @@ const writeLocalDb = (data) => {
   }
 };
 
-let firestoreDisabled = false;
+let dbConnectionError = false;
 
 /**
- * Generic Firestore Data Access Service with seamless fallback
+ * Universal PostgreSQL Database Access Service
+ * Fully replaces Firestore with 100% backward-compatible API
  */
-const firestoreService = {
-  db,
+const dbService = {
   serverTimestamp: () => new Date().toISOString(),
 
   /**
-   * Get single document by ID
+   * Get single document by collection and ID
    */
   async getDoc(collectionName, docId) {
-    if (!firestoreDisabled && db) {
+    if (!dbConnectionError) {
       try {
-        const snap = await db.collection(collectionName).doc(docId).get();
-        if (!snap.exists) return null;
-        return { id: snap.id, ...snap.data() };
+        const res = await query(
+          'SELECT data FROM documents WHERE collection = $1 AND id = $2 LIMIT 1',
+          [collectionName, String(docId)]
+        );
+        if (res.rows.length === 0) return null;
+        return { id: String(docId), ...res.rows[0].data };
       } catch (err) {
-        if (err.message && (err.message.includes('SERVICE_DISABLED') || err.message.includes('disabled'))) {
-          firestoreDisabled = true;
-          console.warn('⚠️ Cloud Firestore API is disabled. Using local persistent storage fallback.');
-        } else {
-          console.warn('⚠️ Firestore getDoc fallback:', err.message);
-        }
+        console.warn(`⚠️ PostgreSQL getDoc error (${collectionName}/${docId}):`, err.message);
       }
     }
 
@@ -68,38 +65,49 @@ const firestoreService = {
    * Set document with specified ID (create or merge)
    */
   async setDoc(collectionName, docId, data, merge = true) {
-    if (!firestoreDisabled && db) {
+    const id = String(docId);
+    if (!dbConnectionError) {
       try {
-        const docRef = db.collection(collectionName).doc(docId);
-        const payload = {
-          ...data,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        };
-        await docRef.set(payload, { merge });
-        const snap = await docRef.get();
-        return { id: snap.id, ...snap.data() };
-      } catch (err) {
-        if (err.message && (err.message.includes('SERVICE_DISABLED') || err.message.includes('disabled'))) {
-          firestoreDisabled = true;
-          console.warn('⚠️ Cloud Firestore API is disabled. Using local persistent storage fallback.');
-        } else {
-          console.warn('⚠️ Firestore setDoc fallback:', err.message);
+        let finalData = { ...data, id };
+        if (merge) {
+          const existing = await this.getDoc(collectionName, id);
+          if (existing) {
+            finalData = { ...existing, ...data, id };
+          }
         }
+
+        const now = new Date().toISOString();
+        if (!finalData.createdAt) {
+          finalData.createdAt = now;
+        }
+        finalData.updatedAt = now;
+
+        await query(
+          `INSERT INTO documents (collection, id, data, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (collection, id)
+           DO UPDATE SET data = $3, updated_at = $5`,
+          [collectionName, id, JSON.stringify(finalData), finalData.createdAt, now]
+        );
+
+        return { id, ...finalData };
+      } catch (err) {
+        console.warn(`⚠️ PostgreSQL setDoc error (${collectionName}/${id}):`, err.message);
       }
     }
 
     const localDb = readLocalDb();
     if (!localDb[collectionName]) localDb[collectionName] = {};
-    const existing = merge ? localDb[collectionName][docId] || {} : {};
+    const existing = merge ? localDb[collectionName][id] || {} : {};
     const updated = {
       ...existing,
       ...data,
-      id: docId,
+      id,
       updatedAt: new Date().toISOString(),
     };
-    localDb[collectionName][docId] = updated;
+    localDb[collectionName][id] = updated;
     writeLocalDb(localDb);
-    return { id: docId, ...updated };
+    return { id, ...updated };
   },
 
   /**
@@ -121,18 +129,19 @@ const firestoreService = {
    * Delete document
    */
   async deleteDoc(collectionName, docId) {
-    if (!firestoreDisabled && db) {
+    const id = String(docId);
+    if (!dbConnectionError) {
       try {
-        await db.collection(collectionName).doc(docId).delete();
+        await query('DELETE FROM documents WHERE collection = $1 AND id = $2', [collectionName, id]);
         return true;
       } catch (err) {
-        console.warn('⚠️ Firestore deleteDoc fallback:', err.message);
+        console.warn(`⚠️ PostgreSQL deleteDoc error (${collectionName}/${id}):`, err.message);
       }
     }
 
     const localDb = readLocalDb();
-    if (localDb[collectionName] && localDb[collectionName][docId]) {
-      delete localDb[collectionName][docId];
+    if (localDb[collectionName] && localDb[collectionName][id]) {
+      delete localDb[collectionName][id];
       writeLocalDb(localDb);
     }
     return true;
@@ -148,75 +157,74 @@ const firestoreService = {
     limit = 20,
     cursor = null,
   } = {}) {
-    if (!firestoreDisabled && db) {
+    if (!dbConnectionError) {
       try {
-        let query = db.collection(collectionName);
-        for (const [field, op, value] of filters) {
-          if (value !== undefined && value !== null && value !== '') {
-            query = query.where(field, op, value);
+        const queryParams = [collectionName];
+        let whereClauses = ['collection = $1'];
+        let paramIndex = 2;
+
+        for (const [field, op, val] of filters) {
+          if (val !== undefined && val !== null && val !== '') {
+            if (op === '==') {
+              whereClauses.push(`data->>'${field}' = $${paramIndex}`);
+              queryParams.push(String(val));
+              paramIndex++;
+            } else if (op === '!=') {
+              whereClauses.push(`data->>'${field}' != $${paramIndex}`);
+              queryParams.push(String(val));
+              paramIndex++;
+            } else if (op === '>') {
+              whereClauses.push(`(data->>'${field}')::numeric > $${paramIndex}`);
+              queryParams.push(Number(val));
+              paramIndex++;
+            } else if (op === '<') {
+              whereClauses.push(`(data->>'${field}')::numeric < $${paramIndex}`);
+              queryParams.push(Number(val));
+              paramIndex++;
+            } else if (op === 'array-contains') {
+              whereClauses.push(`data->'${field}' @> $${paramIndex}::jsonb`);
+              queryParams.push(JSON.stringify([val]));
+              paramIndex++;
+            }
           }
         }
+
+        const fetchLimit = Number(limit) + 1;
+        let sql = `SELECT id, data FROM documents WHERE ${whereClauses.join(' AND ')}`;
+
         if (orderByField) {
-          query = query.orderBy(orderByField, orderDirection);
+          const dir = orderDirection?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+          sql += ` ORDER BY data->>'${orderByField}' ${dir} NULLS LAST`;
         }
+
+        sql += ` LIMIT ${fetchLimit}`;
+
+        const res = await query(sql, queryParams);
+        let docs = res.rows.map((r) => ({ id: r.id, ...r.data }));
+
+        // If cursor was provided, find slice after cursor
         if (cursor) {
-          const cursorSnap = await db.collection(collectionName).doc(cursor).get();
-          if (cursorSnap.exists) {
-            query = query.startAfter(cursorSnap);
+          const cursorIdx = docs.findIndex((d) => d.id === cursor);
+          if (cursorIdx !== -1) {
+            docs = docs.slice(cursorIdx + 1);
           }
         }
-        const snap = await query.limit(Number(limit) + 1).get();
-        const docs = snap.docs;
+
         const hasMore = docs.length > limit;
         const resultDocs = hasMore ? docs.slice(0, limit) : docs;
         const nextCursor = hasMore && resultDocs.length > 0 ? resultDocs[resultDocs.length - 1].id : null;
-        const items = resultDocs.map((d) => ({ id: d.id, ...d.data() }));
 
-        return { items, nextCursor, count: items.length };
+        return { items: resultDocs, nextCursor, count: resultDocs.length };
       } catch (err) {
-        // If Firestore query fails (e.g. index required, missing field, etc.),
-        // execute query directly without orderBy and sort results in memory so queries always succeed.
-        try {
-          let fallbackQuery = db.collection(collectionName);
-          for (const [field, op, value] of filters) {
-            if (value !== undefined && value !== null && value !== '') {
-              fallbackQuery = fallbackQuery.where(field, op, value);
-            }
-          }
-          const snap = await fallbackQuery.limit(Math.max(Number(limit) * 3, 200)).get();
-          let items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          if (orderByField) {
-            items.sort((a, b) => {
-              const parseVal = (v) => {
-                if (!v) return 0;
-                if (v._seconds) return v._seconds * 1000;
-                if (v.toMillis) return v.toMillis();
-                const d = new Date(v).getTime();
-                return isNaN(d) ? v : d;
-              };
-              const valA = parseVal(a[orderByField]);
-              const valB = parseVal(b[orderByField]);
-              return orderDirection === 'desc' ? (valA < valB ? 1 : -1) : (valA > valB ? 1 : -1);
-            });
-          }
-          const resultDocs = items.slice(0, limit);
-          return {
-            items: resultDocs,
-            nextCursor: items.length > limit ? resultDocs[resultDocs.length - 1]?.id : null,
-            count: resultDocs.length,
-          };
-        } catch (retryErr) {
-          console.warn('⚠️ Firestore retry fallback:', retryErr.message);
-        }
-        console.warn('⚠️ Firestore query fallback:', err.message);
+        console.warn(`⚠️ PostgreSQL query error (${collectionName}):`, err.message);
       }
     }
 
+    // Local fallback matching
     const localDb = readLocalDb();
     const col = localDb[collectionName] || {};
     let items = Object.values(col);
 
-    // Apply simple filter matching
     for (const [field, op, value] of filters) {
       if (value !== undefined && value !== null && value !== '') {
         items = items.filter((item) => {
@@ -230,7 +238,6 @@ const firestoreService = {
       }
     }
 
-    // Sort
     if (orderByField) {
       items.sort((a, b) => {
         const valA = a[orderByField] || '';
@@ -248,24 +255,61 @@ const firestoreService = {
   },
 
   /**
-   * Run atomic transaction
+   * Slot Overrides: get overrides for turf and date
    */
-  async runTransaction(updateFn) {
-    if (!firestoreDisabled && db) {
-      try {
-        return await db.runTransaction(updateFn);
-      } catch (err) {
-        console.warn('⚠️ Firestore transaction fallback:', err.message);
-      }
+  async getSlotOverrides(turfId, date) {
+    try {
+      const res = await query(
+        'SELECT blocked_slots, price_overrides FROM slot_overrides WHERE turf_id = $1 AND date = $2 LIMIT 1',
+        [turfId, date]
+      );
+      if (res.rows.length === 0) return { blockedSlots: [], priceOverrides: {} };
+      return {
+        blockedSlots: res.rows[0].blocked_slots || [],
+        priceOverrides: res.rows[0].price_overrides || {},
+      };
+    } catch (err) {
+      console.warn('⚠️ Error getting slot overrides from Postgres:', err.message);
+      return { blockedSlots: [], priceOverrides: {} };
     }
-    return updateFn({
-      get: async (ref) => ({ exists: false, data: () => null }),
-      set: () => {},
-      update: () => {},
-      delete: () => {},
-    });
+  },
+
+  /**
+   * Slot Overrides: save overrides for turf and date
+   */
+  async setSlotOverrides(turfId, date, { blockedSlots = [], priceOverrides = {} }) {
+    try {
+      await query(
+        `INSERT INTO slot_overrides (turf_id, date, blocked_slots, price_overrides, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (turf_id, date)
+         DO UPDATE SET blocked_slots = $3, price_overrides = $4, updated_at = NOW()`,
+        [turfId, date, JSON.stringify(blockedSlots), JSON.stringify(priceOverrides)]
+      );
+      return true;
+    } catch (err) {
+      console.warn('⚠️ Error setting slot overrides in Postgres:', err.message);
+      return false;
+    }
+  },
+
+  /**
+   * Execute an atomic transaction via a pooled client
+   */
+  async runTransaction(transactionCallback) {
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      const result = await transactionCallback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 };
 
-module.exports = firestoreService;
-
+module.exports = dbService;

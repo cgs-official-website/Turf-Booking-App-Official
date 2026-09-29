@@ -434,14 +434,7 @@ const vendorController = {
 
     const parsed = slotOverrideSchema.parse({ blockedSlots, priceOverrides });
 
-    if (firestoreService.db) {
-      await firestoreService.db
-        .collection('turfs')
-        .doc(turfId)
-        .collection('slotOverrides')
-        .doc(date)
-        .set(parsed, { merge: true });
-    }
+    await firestoreService.setSlotOverrides(turfId, date, parsed);
 
     // Invalidate slot cache for this date
     await cacheService.invalidateSlots(turfId, date);

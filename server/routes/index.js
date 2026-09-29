@@ -16,15 +16,13 @@ const { sendSuccess } = require('../utils/response');
 
 // Health Check
 router.get('/health', async (req, res) => {
-  const { db } = require('../config/firebaseAdmin');
+  const { query } = require('../config/db');
   let dbOk = false;
   let userCount = 0;
   try {
-    if (db) {
-      const snap = await db.collection('users').limit(1).get();
-      dbOk = true;
-      userCount = snap.size;
-    }
+    const resCount = await query("SELECT count(*) as count FROM documents WHERE collection = 'users'");
+    dbOk = true;
+    userCount = parseInt(resCount.rows[0]?.count || 0, 10);
   } catch (e) {
     dbOk = false;
   }
@@ -33,7 +31,9 @@ router.get('/health', async (req, res) => {
     status: 'ok',
     version: '1.0.3',
     service: 'turf-booking-backend-v1',
-    firestore: dbOk ? 'connected' : 'error',
+    database: 'Railway PostgreSQL',
+    postgres: dbOk ? 'connected' : 'error',
+    totalUsers: userCount,
     timestamp: new Date().toISOString(),
   });
 });

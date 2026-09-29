@@ -1,4 +1,3 @@
-const { db } = require('../config/firebaseAdmin');
 const { sendError } = require('../utils/response');
 
 /**
@@ -23,23 +22,21 @@ const requireRole = (allowedRoles = [], options = {}) => {
     // Vendor specific checks if requested
     if (role === 'vendor' && (options.requireApprovedKyc || options.requireActiveSubscription)) {
       try {
-        if (db) {
-          const vendorDoc = await db.collection('vendors').doc(uid).get();
-          if (!vendorDoc.exists) {
-            return sendError(res, 'Vendor profile not found', 404, 'VENDOR_NOT_FOUND');
-          }
-          const vendor = vendorDoc.data();
-
-          if (options.requireApprovedKyc && vendor.kycStatus !== 'approved') {
-            return sendError(res, 'Vendor KYC is pending admin approval', 403, 'KYC_NOT_APPROVED');
-          }
-
-          if (options.requireActiveSubscription && !vendor.subscription?.active) {
-            return sendError(res, 'Active subscription required to perform this action', 403, 'SUBSCRIPTION_REQUIRED');
-          }
-
-          req.vendorData = vendor;
+        const firestoreService = require('../services/firestoreService');
+        const vendor = await firestoreService.getDoc('vendors', uid);
+        if (!vendor) {
+          return sendError(res, 'Vendor profile not found', 404, 'VENDOR_NOT_FOUND');
         }
+
+        if (options.requireApprovedKyc && vendor.kycStatus !== 'approved') {
+          return sendError(res, 'Vendor KYC is pending admin approval', 403, 'KYC_NOT_APPROVED');
+        }
+
+        if (options.requireActiveSubscription && !vendor.subscription?.active) {
+          return sendError(res, 'Active subscription required to perform this action', 403, 'SUBSCRIPTION_REQUIRED');
+        }
+
+        req.vendorData = vendor;
       } catch (err) {
         console.error('requireRole vendor check error:', err.message);
       }
