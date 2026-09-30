@@ -122,7 +122,6 @@ export default function HomeScreen({ navigation }) {
       if (sport)                params.sport = sport;
       if (activeFilters.sort)   params.sort  = activeFilters.sort;
       if (activeFilters.time)   params.time  = activeFilters.time;
-      if (location && location !== 'Current Location') params.location = location;
       const res = await turfsApi.getTurfs(params);
       setTurfs(res.turfs || res.items || []);
     } catch {

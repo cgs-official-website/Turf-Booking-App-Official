@@ -4,7 +4,7 @@ import {
   Switch, Alert, Image, Dimensions,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout, toggleTheme } from '../redux/authSlice';
+import { logout, toggleTheme, toggleNotifications } from '../redux/authSlice';
 import { fcmHelper } from '../utils/fcmHelper';
 import { SPACING, RADIUS, FONT } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
@@ -209,7 +209,7 @@ export default function ProfileScreen({ navigation }) {
             colors={C}
             toggle
             toggleVal={notifOn}
-            onToggle={() => {}}
+            onToggle={() => dispatch(toggleNotifications())}
           />
           <MenuItem
             icon={dark ? 'moon' : 'sun'}

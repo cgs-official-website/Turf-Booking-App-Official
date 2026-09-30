@@ -62,16 +62,20 @@ export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { getS
   try {
     const token = await AsyncStorage.getItem('token');
     const savedLocation = await AsyncStorage.getItem('userLocation');
-    if (!token) return { token: null, user: null, location: savedLocation };
+    const notifSaved = await AsyncStorage.getItem('notificationsOn');
+    const notificationsOn = notifSaved !== null ? JSON.parse(notifSaved) : true;
+    if (!token) return { token: null, user: null, location: savedLocation, notificationsOn };
     const { auth } = getState();
-    if (auth.user) return { token, user: auth.user, location: savedLocation };
+    if (auth.user) return { token, user: auth.user, location: savedLocation, notificationsOn };
     const res = await authApi.getMe();
     const payload = res?.data || res;
-    return { token, user: payload?.user || payload?.profile || payload, location: savedLocation };
+    return { token, user: payload?.user || payload?.profile || payload, location: savedLocation, notificationsOn };
   } catch (e) {
     await AsyncStorage.removeItem('token');
     const savedLocation = await AsyncStorage.getItem('userLocation');
-    return { token: null, user: null, location: savedLocation };
+    const notifSaved = await AsyncStorage.getItem('notificationsOn');
+    const notificationsOn = notifSaved !== null ? JSON.parse(notifSaved) : true;
+    return { token: null, user: null, location: savedLocation, notificationsOn };
   }
 });
 
@@ -88,8 +92,13 @@ const authSlice = createSlice({
     location:                  null,   // string: city name or address
     locationPermissionGranted: false,
     darkMode:                  false,
+    notificationsOn:           true,
   },
   reducers: {
+    toggleNotifications: (state) => {
+      state.notificationsOn = !state.notificationsOn;
+      AsyncStorage.setItem('notificationsOn', JSON.stringify(state.notificationsOn));
+    },
     setAuth: (state, action) => {
       state.token = action.payload.token;
       state.user  = action.payload.user || action.payload.profile;
@@ -176,6 +185,9 @@ const authSlice = createSlice({
         s.token        = a.payload?.token;
         s.user         = a.payload?.user;
         s.bootstrapped = true;
+        if (a.payload?.notificationsOn !== undefined) {
+          s.notificationsOn = a.payload.notificationsOn;
+        }
         if (a.payload?.location) {
           s.location    = a.payload.location;
           s.locationSet = true;
@@ -189,6 +201,7 @@ const authSlice = createSlice({
 export const {
   setAuth, updateUser, setLocation,
   setLocationPermission, logout, toggleTheme, setSplashDone,
+  toggleNotifications,
 } = authSlice.actions;
 
 export default authSlice.reducer;

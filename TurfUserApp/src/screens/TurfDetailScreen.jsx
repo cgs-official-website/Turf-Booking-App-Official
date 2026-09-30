@@ -52,7 +52,7 @@ const openMap = (address, lat, lng) => {
 
 const shareTurf = async (turf) => {
   try {
-    const price = turf.pricing?.baseRate || turf.price || turf.pricePerHour || 800;
+    const price = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
     await Share.share({
       title: turf.name,
       message: `🏟️ ${turf.name}\n📍 ${turf.address || turf.location?.address || turf.city || 'Tamil Nadu'}\n💰 ₹${price}/hour\n\nBook your slot now on Turf Booking App!`,
@@ -107,7 +107,7 @@ export default function TurfDetailScreen({ route, navigation }) {
   const address      = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
   const sports       = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
   const amenities    = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
-  const pricePerHour = turf.pricing?.baseRate || turf.price || turf.pricePerHour || 800;
+  const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
   const ratingAvg    = typeof turf.rating === 'object' ? (turf.rating.avg || 4.8) : (Number(turf.rating) || 4.8);
   const reviewCount  = typeof turf.rating === 'object' ? (turf.rating.count || reviews.length || 24) : (turf.reviewsCount || reviews.length || 24);
   const openTiming   = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';

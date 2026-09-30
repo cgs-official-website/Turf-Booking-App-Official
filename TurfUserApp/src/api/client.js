@@ -7,7 +7,8 @@ import { Platform } from 'react-native';
 
 export const PRODUCTION_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL      = 'http://localhost:5000/api/v1';
-export const LAN_URL        = 'http://192.168.0.70:5000/api/v1';
+export const LAN_URL        = 'http://10.48.78.39:5000/api/v1';
+export const LAN_URL_OLD    = 'http://192.168.0.70:5000/api/v1';
 export const EMULATOR_URL   = 'http://10.0.2.2:5000/api/v1';
 
 export const BASE_URL = LOCAL_URL;
@@ -17,6 +18,7 @@ export const SERVER_ORIGIN = 'http://localhost:5000';
 const CANDIDATE_URLS = [
   LOCAL_URL,
   LAN_URL,
+  LAN_URL_OLD,
   Platform.OS === 'android' ? EMULATOR_URL : null,
   // PRODUCTION_URL, // re-enable for release
 ].filter(Boolean);

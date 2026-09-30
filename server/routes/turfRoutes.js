@@ -11,6 +11,7 @@ router.get('/meta/filters', turfController.getTurfLocations);
 router.get('/', turfController.getTurfs);
 router.get('/:turfId', turfController.getTurfById);
 router.get('/:turfId/slots', turfController.getAvailableSlots);
+router.get('/:turfId/availability', turfController.getAvailableSlots);
 router.get('/:turfId/reviews', turfController.getTurfReviews);
 
 // Authenticated User Wishlist Toggle

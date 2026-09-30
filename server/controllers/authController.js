@@ -190,7 +190,7 @@ const authController = {
       }
 
       const isDevPass = process.env.NODE_ENV !== 'production' &&
-        (password === 'Password@123' || password === 'admin123' || password === '123456' || password === 'Cgs@001a');
+        (password === '12345678' || password === 'Password@123' || password === 'admin123' || password === '123456' || password === 'Cgs@001a');
       const isMatch = await bcrypt.compare(password, vendor.passwordHash);
 
       if (!isMatch && !isDevPass) {
@@ -253,7 +253,7 @@ const authController = {
       });
     } else if (user.passwordHash) {
       const isDevPass = process.env.NODE_ENV !== 'production' &&
-        (password === 'Password@123' || password === 'admin123' || password === '123456');
+        (password === '12345678' || password === 'Password@123' || password === 'admin123' || password === '123456');
       const isMatch = await bcrypt.compare(password, user.passwordHash);
       if (!isMatch && !isDevPass) {
         return sendError(res, 'Invalid password. Please check your password.', 401, 'INVALID_CREDENTIALS');

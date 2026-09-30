@@ -269,7 +269,17 @@ const bookingService = {
 
     const { dateObj } = validateBookingInput(payload);
     const courtNumber = resolveCourtNumber(turf, payload.courtNumber);
-    const price = turf.pricing?.baseRate || 800;
+    const hourlyRate = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+    let durationHours = 1;
+    if (payload.startTime && payload.endTime) {
+      const [sh, sm] = payload.startTime.split(':').map(Number);
+      const [eh, em] = payload.endTime.split(':').map(Number);
+      const diffMins = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+      if (diffMins > 0) {
+        durationHours = Math.max(1, Math.round(diffMins / 60));
+      }
+    }
+    const price = hourlyRate * durationHours;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
     const bookingId = generateBookingId();

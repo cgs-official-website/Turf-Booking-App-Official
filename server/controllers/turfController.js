@@ -85,17 +85,21 @@ const turfController = {
       const searchTerm = (search || q || '').trim();
       const locationTerm = (location || city || '').trim();
 
-      // Base query: Only return ACTIVE turfs for public listing
+      // Base query: Return active and pending turfs (exclude suspended, inactive, deleted)
       const where = {
-        status: 'active',
+        status: { in: ['active', 'pending'] },
       };
 
       // City / Location filter
       if (locationTerm && locationTerm.toLowerCase() !== 'current location') {
-        where.OR = [
-          { city: { contains: locationTerm, mode: 'insensitive' } },
-          { name: { contains: locationTerm, mode: 'insensitive' } },
-        ];
+        const cleanLoc = locationTerm.split(',')[0].trim();
+        if (cleanLoc) {
+          where.OR = [
+            { city: { contains: cleanLoc, mode: 'insensitive' } },
+            { name: { contains: cleanLoc, mode: 'insensitive' } },
+            { address: { contains: cleanLoc, mode: 'insensitive' } },
+          ];
+        }
       }
 
       // Keyword Search filter
@@ -304,7 +308,7 @@ const turfController = {
       }
 
       const slotConfig = turf.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 };
-      const baseRate = Number(turf.pricePerHour || 800);
+      const baseRate = Number(turf.pricePerHour ?? turf.price ?? 500);
 
       // Read slot overrides from Postgres slot_overrides table
       let slotOverrides = { blockedSlots: [], priceOverrides: {} };
@@ -361,6 +365,8 @@ const turfController = {
           slotKey,
           startTime,
           endTime,
+          start: startTime,
+          end: endTime,
           price,
           available: !isBlocked && !isBooked,
           isBlocked,
