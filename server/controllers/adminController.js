@@ -78,19 +78,20 @@ const adminController = {
    */
   async getStats(req, res) {
     try {
-      const [usersSnap, vendorsSnap, turfsSnap, bookingStats, recentBookingsResult, matchesSnap, reportsSnap] = await Promise.all([
-        firestoreService.queryWithCursor('users', { limit: 500, orderByField: null }),
-        firestoreService.queryWithCursor('vendors', { limit: 500, orderByField: null }),
-        firestoreService.queryWithCursor('turfs', { limit: 500, orderByField: null }),
+      const [users, vendors, turfs, bookingStats, recentBookingsResult, matchesSnap, reportsSnap] = await Promise.all([
+        prisma.user.findMany({ select: { id: true, status: true, createdAt: true } }),
+        prisma.vendor.findMany({ select: { id: true, kycStatus: true, createdAt: true } }),
+        prisma.turf.findMany({ select: { id: true, name: true, status: true, createdAt: true } }),
         bookingService.getAdminStats(),
         bookingService.getAllBookingsAdmin({ limit: 10 }),
         firestoreService.queryWithCursor('matches', { limit: 500, orderByField: null }),
         firestoreService.queryWithCursor('reports', { limit: 500, orderByField: null }),
       ]);
 
-      const users = deduplicateById(usersSnap.items);
-      const vendors = deduplicateById(vendorsSnap.items);
-      const turfs = deduplicateById(turfsSnap.items);
+      const staticTurfNames = ['gaming', 'zone', 'elite turf', 'elite'];
+      const liveTurfs = turfs.filter(
+        (t) => !staticTurfNames.includes((t.name || '').trim().toLowerCase())
+      );
       const matches = deduplicateById(matchesSnap.items);
       const reports = deduplicateById(reportsSnap.items);
 
@@ -102,8 +103,8 @@ const adminController = {
       const totalBookings = bookingStats.totalBookings;
 
       const pendingKycs = vendors.filter((v) => v.kycStatus === 'pending').length;
-      const activeTurfs = turfs.filter((t) => t.status === 'active').length;
-      const pendingTurfs = turfs.filter((t) => t.status === 'pending' || t.status === 'draft').length;
+      const activeTurfs = liveTurfs.filter((t) => t.status === 'active').length;
+      const pendingTurfs = liveTurfs.filter((t) => t.status === 'pending').length;
 
       const liveMatches = matches.filter((m) => m.status === 'live').length;
       const openReports = reports.filter((r) => r.status === 'open' || !r.status).length;
@@ -281,7 +282,12 @@ const adminController = {
         nextCursor = nextItem.id;
       }
 
-      const formatted = turfs.map(formatTurf);
+      const staticTurfNames = ['gaming', 'zone', 'elite turf', 'elite'];
+      const liveTurfs = turfs.filter(
+        (t) => !staticTurfNames.includes((t.name || '').trim().toLowerCase())
+      );
+
+      const formatted = liveTurfs.map(formatTurf);
 
       return sendPaginated(res, formatted, nextCursor, {
         count: formatted.length,

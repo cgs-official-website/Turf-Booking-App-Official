@@ -160,7 +160,12 @@ const turfController = {
         nextCursor = nextItem.id;
       }
 
-      const formatted = turfs.map(formatTurf);
+      const staticTurfNames = ['gaming', 'zone', 'elite turf', 'elite'];
+      const liveTurfs = turfs.filter(
+        (t) => !staticTurfNames.includes((t.name || '').trim().toLowerCase())
+      );
+
+      const formatted = liveTurfs.map(formatTurf);
 
       return sendPaginated(res, formatted, nextCursor, {
         count: formatted.length,

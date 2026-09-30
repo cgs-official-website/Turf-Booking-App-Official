@@ -11,11 +11,17 @@ export const TurfsView = ({ onUpdateStats }) => {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
 
+  const STATIC_TURF_NAMES = ['gaming', 'zone', 'elite turf', 'elite'];
+
   const loadTurfs = async () => {
     setLoading(true);
     try {
       const res = await api.getAllTurfs(statusFilter);
-      setTurfs(res.data?.items || []);
+      const rawTurfs = res.data?.items || res.data?.turfs || [];
+      const liveTurfs = rawTurfs.filter(
+        (t) => !STATIC_TURF_NAMES.includes((t.name || '').trim().toLowerCase())
+      );
+      setTurfs(liveTurfs);
     } catch (err) {
       console.error('Failed to load turfs:', err);
     } finally {
@@ -44,6 +50,8 @@ export const TurfsView = ({ onUpdateStats }) => {
   };
 
   const filteredTurfs = turfs.filter((t) => {
+    const nameLower = (t.name || '').trim().toLowerCase();
+    if (STATIC_TURF_NAMES.includes(nameLower)) return false;
     const q = search.toLowerCase();
     return (
       (t.name || '').toLowerCase().includes(q) ||
