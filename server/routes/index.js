@@ -16,13 +16,12 @@ const { sendSuccess } = require('../utils/response');
 
 // Health Check
 router.get('/health', async (req, res) => {
-  const { query } = require('../config/db');
+  const prisma = require('../config/prisma');
   let dbOk = false;
   let userCount = 0;
   try {
-    const resCount = await query("SELECT count(*) as count FROM documents WHERE collection = 'users'");
+    userCount = await prisma.user.count();
     dbOk = true;
-    userCount = parseInt(resCount.rows[0]?.count || 0, 10);
   } catch (e) {
     dbOk = false;
   }

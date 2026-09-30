@@ -1,4 +1,4 @@
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
 const bookingService = require('../services/bookingService');
 const { BookingError } = bookingService;
 const razorpayService = require('../services/razorpayService');
@@ -59,7 +59,7 @@ const paymentController = {
       (async () => {
         let vendorId = confirmedBooking.vendorId;
         if (!vendorId && confirmedBooking.turfId) {
-          const turf = await firestoreService.getDoc('turfs', confirmedBooking.turfId);
+          const turf = await prisma.turf.findUnique({ where: { id: confirmedBooking.turfId } });
           vendorId = turf?.vendorId;
         }
 
@@ -141,7 +141,7 @@ const paymentController = {
             // Send background notifications
             let vendorId = booking.vendorId;
             if (!vendorId && booking.turfId) {
-              const turf = await firestoreService.getDoc('turfs', booking.turfId);
+              const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
               vendorId = turf?.vendorId;
             }
 

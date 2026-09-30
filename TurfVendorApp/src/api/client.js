@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Before release, restore the Railway URL as the first entry and remove localhost.
 const CANDIDATE_URLS = [
   'http://localhost:5000/api/v1',
+  'http://192.168.0.70:5000/api/v1',
   // 'https://turf-booking-app-official-production.up.railway.app/api/v1', // re-enable for release
 ];
 

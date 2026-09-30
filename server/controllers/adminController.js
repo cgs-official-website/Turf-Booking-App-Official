@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const firestoreService = require('../services/firestoreService');
 const bookingService = require('../services/bookingService');
 const notificationService = require('../services/notificationService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
@@ -78,22 +77,17 @@ const adminController = {
    */
   async getStats(req, res) {
     try {
-      const [users, vendors, turfs, bookingStats, recentBookingsResult, matchesSnap, reportsSnap] = await Promise.all([
+      const [users, vendors, turfs, bookingStats, recentBookingsResult, matches, reports] = await Promise.all([
         prisma.user.findMany({ select: { id: true, status: true, createdAt: true } }),
         prisma.vendor.findMany({ select: { id: true, kycStatus: true, createdAt: true } }),
         prisma.turf.findMany({ select: { id: true, name: true, status: true, createdAt: true } }),
         bookingService.getAdminStats(),
         bookingService.getAllBookingsAdmin({ limit: 10 }),
-        firestoreService.queryWithCursor('matches', { limit: 500, orderByField: null }),
-        firestoreService.queryWithCursor('reports', { limit: 500, orderByField: null }),
+        prisma.match.findMany({ select: { id: true, status: true, createdAt: true } }),
+        prisma.report.findMany({ select: { id: true, status: true, createdAt: true } }),
       ]);
 
-      const staticTurfNames = ['gaming', 'zone', 'elite turf', 'elite'];
-      const liveTurfs = turfs.filter(
-        (t) => !staticTurfNames.includes((t.name || '').trim().toLowerCase())
-      );
-      const matches = deduplicateById(matchesSnap.items);
-      const reports = deduplicateById(reportsSnap.items);
+      const liveTurfs = turfs;
 
       const totalRevenue = bookingStats.totalRevenue;
       const confirmedBookings = bookingStats.confirmedCount;
@@ -110,7 +104,7 @@ const adminController = {
       const openReports = reports.filter((r) => r.status === 'open' || !r.status).length;
 
       const sortByTime = (items) => [...items].sort((a, b) => {
-        const getT = (x) => (x.createdAt?._seconds ? x.createdAt._seconds * 1000 : new Date(x.createdAt || 0).getTime());
+        const getT = (x) => new Date(x.createdAt || 0).getTime();
         return getT(b) - getT(a);
       });
 
@@ -147,39 +141,26 @@ const adminController = {
    * GET /api/v1/admin/vendors/pending
    */
   async getPendingVendors(req, res) {
-    const { limit = 50, cursor } = req.query;
+    const { limit = 50 } = req.query;
 
-    const result = await firestoreService.queryWithCursor('vendors', {
-      filters: [['kycStatus', '==', 'pending']],
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+    try {
+      const vendors = await prisma.vendor.findMany({
+        where: { kycStatus: 'pending' },
+        include: { turfs: true, kycDocuments: true },
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+      });
 
-    const uniqueVendors = deduplicateById(result.items);
+      const enrichedItems = vendors.map((v) => ({
+        ...v,
+        turf: v.turfs?.[0] || null,
+      }));
 
-    const enrichedItems = await Promise.all(
-      uniqueVendors.map(async (v) => {
-        let turf = null;
-        if (v.turfId) {
-          turf = await firestoreService.getDoc('turfs', v.turfId);
-        }
-        if (!turf) {
-          const turfQuery = await firestoreService.queryWithCursor('turfs', {
-            filters: [['vendorId', '==', v.uid || v.id]],
-            limit: 1,
-          });
-          turf = turfQuery?.items?.[0] || null;
-        }
-        return {
-          ...v,
-          turf,
-        };
-      })
-    );
-
-    return sendPaginated(res, deduplicateById(enrichedItems), result.nextCursor, { count: enrichedItems.length });
+      return sendPaginated(res, enrichedItems, null, { count: enrichedItems.length });
+    } catch (err) {
+      console.error('getPendingVendors error:', err);
+      return sendError(res, 'Failed to fetch pending vendors', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -187,38 +168,31 @@ const adminController = {
    * List all vendors with optional status filter
    */
   async getAllVendors(req, res) {
-    const { status, limit = 50, cursor } = req.query;
+    const { status, limit = 50 } = req.query;
 
-    const filters = [];
-    if (status) {
-      filters.push(['kycStatus', '==', status]);
+    try {
+      const where = {};
+      if (status) {
+        where.kycStatus = status;
+      }
+
+      const vendors = await prisma.vendor.findMany({
+        where,
+        include: { turfs: true },
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+      });
+
+      const enrichedItems = vendors.map((v) => ({
+        ...v,
+        turf: v.turfs?.[0] || null,
+      }));
+
+      return sendPaginated(res, enrichedItems, null, { count: enrichedItems.length });
+    } catch (err) {
+      console.error('getAllVendors error:', err);
+      return sendError(res, 'Failed to fetch vendors', 500, 'FETCH_FAILED');
     }
-
-    const result = await firestoreService.queryWithCursor('vendors', {
-      filters,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
-
-    const uniqueVendors = deduplicateById(result.items);
-
-    const enrichedItems = await Promise.all(
-      uniqueVendors.map(async (v) => {
-        let turf = null;
-        if (v.turfId) {
-          turf = await firestoreService.getDoc('turfs', v.turfId);
-        }
-        return {
-          ...v,
-          turf,
-        };
-      })
-    );
-
-    const finalVendors = deduplicateById(enrichedItems);
-    return sendPaginated(res, finalVendors, result.nextCursor, { count: finalVendors.length });
   },
 
   /**
@@ -226,17 +200,19 @@ const adminController = {
    * List all registered customer users
    */
   async getAllUsers(req, res) {
-    const { limit = 50, cursor } = req.query;
+    const { limit = 50 } = req.query;
 
-    const result = await firestoreService.queryWithCursor('users', {
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+    try {
+      const users = await prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+      });
 
-    const uniqueUsers = deduplicateById(result.items);
-    return sendPaginated(res, uniqueUsers, result.nextCursor, { count: uniqueUsers.length });
+      return sendPaginated(res, users, null, { count: users.length });
+    } catch (err) {
+      console.error('getAllUsers error:', err);
+      return sendError(res, 'Failed to fetch users', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -282,12 +258,7 @@ const adminController = {
         nextCursor = nextItem.id;
       }
 
-      const staticTurfNames = ['gaming', 'zone', 'elite turf', 'elite'];
-      const liveTurfs = turfs.filter(
-        (t) => !staticTurfNames.includes((t.name || '').trim().toLowerCase())
-      );
-
-      const formatted = liveTurfs.map(formatTurf);
+      const formatted = turfs.map(formatTurf);
 
       return sendPaginated(res, formatted, nextCursor, {
         count: formatted.length,
@@ -330,21 +301,24 @@ const adminController = {
    * Monitor all community matches & live scorecards
    */
   async getAllMatches(req, res) {
-    const { status, limit = 50, cursor } = req.query;
+    const { status, limit = 50 } = req.query;
 
-    const filters = [];
-    if (status) filters.push(['status', '==', status]);
+    try {
+      const where = {};
+      if (status) where.status = status;
 
-    const result = await firestoreService.queryWithCursor('matches', {
-      filters,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+      const matches = await prisma.match.findMany({
+        where,
+        include: { turf: true, players: true },
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+      });
 
-    const uniqueMatches = deduplicateById(result.items);
-    return sendPaginated(res, uniqueMatches, result.nextCursor, { count: uniqueMatches.length });
+      return sendPaginated(res, matches, null, { count: matches.length });
+    } catch (err) {
+      console.error('getAllMatches error:', err);
+      return sendError(res, 'Failed to fetch matches', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -352,21 +326,24 @@ const adminController = {
    * List all vendor/user issue reports
    */
   async getAllReports(req, res) {
-    const { status, limit = 50, cursor } = req.query;
+    const { status, limit = 50 } = req.query;
 
-    const filters = [];
-    if (status) filters.push(['status', '==', status]);
+    try {
+      const where = {};
+      if (status) where.status = status;
 
-    const result = await firestoreService.queryWithCursor('reports', {
-      filters,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+      const reports = await prisma.report.findMany({
+        where,
+        include: { vendor: true },
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+      });
 
-    const uniqueReports = deduplicateById(result.items);
-    return sendPaginated(res, uniqueReports, result.nextCursor, { count: uniqueReports.length });
+      return sendPaginated(res, reports, null, { count: reports.length });
+    } catch (err) {
+      console.error('getAllReports error:', err);
+      return sendError(res, 'Failed to fetch reports', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -377,13 +354,20 @@ const adminController = {
     const { id } = req.params;
     const { status, resolutionNote } = req.body;
 
-    const updated = await firestoreService.updateDoc('reports', id, {
-      status: status || 'resolved',
-      resolutionNote: resolutionNote || '',
-      resolvedAt: new Date(),
-    });
+    try {
+      const updated = await prisma.report.update({
+        where: { id },
+        data: {
+          status: status || 'resolved',
+          updatedAt: new Date(),
+        },
+      });
 
-    return sendSuccess(res, { report: updated });
+      return sendSuccess(res, { report: updated });
+    } catch (err) {
+      console.error('updateReportStatus error:', err);
+      return sendError(res, 'Failed to update report status', 500, 'UPDATE_FAILED');
+    }
   },
 
   /**
@@ -392,41 +376,49 @@ const adminController = {
   async approveVendor(req, res) {
     const { uid } = req.params;
 
-    const vendor = await firestoreService.getDoc('vendors', uid);
-    if (!vendor) {
-      return sendError(res, 'Vendor not found', 404, 'NOT_FOUND');
+    try {
+      const vendor = await prisma.vendor.findUnique({ where: { id: uid } });
+      if (!vendor) {
+        return sendError(res, 'Vendor not found', 404, 'NOT_FOUND');
+      }
+
+      const updatedVendor = await prisma.vendor.update({
+        where: { id: uid },
+        data: {
+          kycStatus: 'approved',
+          reviewedAt: new Date(),
+          rejectionReason: null,
+        },
+      });
+
+      // Auto-approve vendor's turf if in pending
+      await prisma.turf.updateMany({
+        where: { vendorId: uid, status: 'pending' },
+        data: {
+          status: 'active',
+          reviewedAt: new Date(),
+          rejectionReason: null,
+        },
+      });
+
+      // Send push notification to vendor
+      await notificationService.sendNotification({
+        recipientId: uid,
+        recipientRole: 'vendor',
+        title: 'KYC & Turf Approved!',
+        body: 'Your KYC documents and turf listing have been approved by Super Admin. You can now choose a subscription plan!',
+        type: 'kyc',
+        data: { kycStatus: 'approved' },
+      });
+
+      return sendSuccess(res, {
+        vendor: updatedVendor,
+        message: 'Vendor and turf approved successfully',
+      });
+    } catch (err) {
+      console.error('approveVendor error:', err);
+      return sendError(res, 'Failed to approve vendor', 500, 'APPROVE_FAILED');
     }
-
-    const updatedVendor = await firestoreService.updateDoc('vendors', uid, {
-      kycStatus: 'approved',
-      reviewedAt: new Date(),
-      rejectionReason: null,
-    });
-
-    // Auto-approve vendor's turf if in pending
-    await prisma.turf.updateMany({
-      where: { vendorId: uid, status: 'pending' },
-      data: {
-        status: 'active',
-        reviewedAt: new Date(),
-        rejectionReason: null,
-      },
-    });
-
-    // Send push notification to vendor
-    await notificationService.sendNotification({
-      recipientId: uid,
-      recipientRole: 'vendor',
-      title: 'KYC & Turf Approved!',
-      body: 'Your KYC documents and turf listing have been approved by Super Admin. You can now choose a subscription plan!',
-      type: 'kyc',
-      data: { kycStatus: 'approved' },
-    });
-
-    return sendSuccess(res, {
-      vendor: updatedVendor,
-      message: 'Vendor and turf approved successfully',
-    });
   },
 
   /**
@@ -436,39 +428,47 @@ const adminController = {
     const { uid } = req.params;
     const { reason } = adminReviewSchema.parse(req.body);
 
-    const vendor = await firestoreService.getDoc('vendors', uid);
-    if (!vendor) {
-      return sendError(res, 'Vendor not found', 404, 'NOT_FOUND');
+    try {
+      const vendor = await prisma.vendor.findUnique({ where: { id: uid } });
+      if (!vendor) {
+        return sendError(res, 'Vendor not found', 404, 'NOT_FOUND');
+      }
+
+      const updatedVendor = await prisma.vendor.update({
+        where: { id: uid },
+        data: {
+          kycStatus: 'rejected',
+          rejectionReason: reason || 'Documents did not pass verification',
+          reviewedAt: new Date(),
+        },
+      });
+
+      await prisma.turf.updateMany({
+        where: { vendorId: uid },
+        data: {
+          status: 'rejected',
+          rejectionReason: reason || 'Vendor verification failed',
+          reviewedAt: new Date(),
+        },
+      });
+
+      await notificationService.sendNotification({
+        recipientId: uid,
+        recipientRole: 'vendor',
+        title: 'Verification Update',
+        body: `Your KYC verification was not approved: ${reason || 'Please re-upload valid documents.'}`,
+        type: 'kyc',
+        data: { kycStatus: 'rejected' },
+      });
+
+      return sendSuccess(res, {
+        vendor: updatedVendor,
+        message: 'Vendor rejected with reason',
+      });
+    } catch (err) {
+      console.error('rejectVendor error:', err);
+      return sendError(res, 'Failed to reject vendor', 500, 'REJECT_FAILED');
     }
-
-    const updatedVendor = await firestoreService.updateDoc('vendors', uid, {
-      kycStatus: 'rejected',
-      rejectionReason: reason || 'Documents did not pass verification',
-      reviewedAt: new Date(),
-    });
-
-    await prisma.turf.updateMany({
-      where: { vendorId: uid },
-      data: {
-        status: 'rejected',
-        rejectionReason: reason || 'Vendor verification failed',
-        reviewedAt: new Date(),
-      },
-    });
-
-    await notificationService.sendNotification({
-      recipientId: uid,
-      recipientRole: 'vendor',
-      title: 'Verification Update',
-      body: `Your KYC verification was not approved: ${reason || 'Please re-upload valid documents.'}`,
-      type: 'kyc',
-      data: { kycStatus: 'rejected' },
-    });
-
-    return sendSuccess(res, {
-      vendor: updatedVendor,
-      message: 'Vendor rejected with reason',
-    });
   },
 
   /**
@@ -640,21 +640,29 @@ const adminController = {
    */
   async updateUser(req, res) {
     const { uid } = req.params;
-    const existing = await firestoreService.getDoc('users', uid);
-    if (!existing) {
-      return sendError(res, 'Player account not found', 404, 'NOT_FOUND');
+    try {
+      const existing = await prisma.user.findUnique({ where: { id: uid } });
+      if (!existing) {
+        return sendError(res, 'Player account not found', 404, 'NOT_FOUND');
+      }
+
+      const { name, email, phone, location, status } = req.body;
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (email !== undefined) updateData.email = email;
+      if (phone !== undefined) updateData.phone = phone;
+      if (location !== undefined) updateData.location = location;
+      if (status !== undefined) updateData.status = status;
+
+      const updated = await prisma.user.update({
+        where: { id: uid },
+        data: updateData,
+      });
+      return sendSuccess(res, { user: updated, profile: updated });
+    } catch (err) {
+      console.error('updateUser error:', err);
+      return sendError(res, 'Failed to update user', 500, 'UPDATE_FAILED');
     }
-
-    const { name, email, phone, location, role } = req.body;
-    const updateData = {};
-    if (name !== undefined) updateData.name = name;
-    if (email !== undefined) updateData.email = email;
-    if (phone !== undefined) updateData.phone = phone;
-    if (location !== undefined) updateData.location = location;
-    if (role !== undefined) updateData.role = role;
-
-    const updated = await firestoreService.setDoc('users', uid, updateData, true);
-    return sendSuccess(res, { user: updated, profile: updated });
   },
 
   /**
@@ -663,8 +671,13 @@ const adminController = {
    */
   async deleteUser(req, res) {
     const { uid } = req.params;
-    await firestoreService.deleteDoc('users', uid);
-    return sendSuccess(res, { message: 'Player removed successfully' });
+    try {
+      await prisma.user.delete({ where: { id: uid } });
+      return sendSuccess(res, { message: 'Player removed successfully' });
+    } catch (err) {
+      console.error('deleteUser error:', err);
+      return sendError(res, 'Failed to delete user', 500, 'DELETE_FAILED');
+    }
   },
 
   /**
@@ -673,11 +686,22 @@ const adminController = {
   async setAdminClaim(req, res) {
     const { uid, admin } = setAdminClaimSchema.parse(req.body);
 
-    await firestoreService.setDoc('users', uid, { role: 'admin', admin }, true);
+    try {
+      const existing = await prisma.superAdmin.findUnique({ where: { id: uid } });
+      if (existing) {
+        await prisma.superAdmin.update({
+          where: { id: uid },
+          data: { role: admin ? 'admin' : 'superadmin' },
+        });
+      }
 
-    return sendSuccess(res, {
-      message: `Admin claim set to ${admin} for UID: ${uid}`,
-    });
+      return sendSuccess(res, {
+        message: `Admin claim set to ${admin} for UID: ${uid}`,
+      });
+    } catch (err) {
+      console.error('setAdminClaim error:', err);
+      return sendError(res, 'Failed to set admin claim', 500, 'SET_CLAIM_FAILED');
+    }
   },
 
   /**
@@ -713,42 +737,31 @@ const adminController = {
    * View all turf customer reviews (Read-only for Super Admin)
    */
   async getAllReviews(req, res) {
-    const { turfId, rating, limit = 50, cursor } = req.query;
+    const { turfId, rating, limit = 50 } = req.query;
 
-    const filters = [];
-    if (turfId) filters.push(['turfId', '==', turfId]);
-    if (rating) filters.push(['rating', '==', Number(rating)]);
+    try {
+      const where = {};
+      if (turfId) where.turfId = turfId;
+      if (rating) where.rating = Number(rating);
 
-    const result = await firestoreService.queryWithCursor('reviews', {
-      filters,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+      const reviews = await prisma.review.findMany({
+        where,
+        include: { turf: true },
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+      });
 
-    // Enrich with turf details
-    const enrichedReviews = await Promise.all(
-      result.items.map(async (rev) => {
-        let turfName = rev.turfName || '';
-        let turfCity = rev.turfCity || '';
-        if (rev.turfId && (!turfName || !turfCity)) {
-          const turf = await firestoreService.getDoc('turfs', rev.turfId);
-          if (turf) {
-            turfName = turf.name || turf.title || turfName;
-            turfCity = turf.location?.city || turf.city || turfCity;
-          }
-        }
-        return {
-          ...rev,
-          turfName: turfName || 'Turf Facility',
-          turfCity: turfCity || 'Local Arena',
-        };
-      })
-    );
+      const enrichedReviews = reviews.map((rev) => ({
+        ...rev,
+        turfName: rev.turf?.name || 'Turf Facility',
+        turfCity: rev.turf?.city || 'Local Arena',
+      }));
 
-    const uniqueReviews = deduplicateById(enrichedReviews);
-    return sendPaginated(res, uniqueReviews, result.nextCursor, { count: uniqueReviews.length });
+      return sendPaginated(res, enrichedReviews, null, { count: enrichedReviews.length });
+    } catch (err) {
+      console.error('getAllReviews error:', err);
+      return sendError(res, 'Failed to fetch reviews', 500, 'FETCH_FAILED');
+    }
   },
 };
 

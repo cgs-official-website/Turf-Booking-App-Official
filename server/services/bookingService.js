@@ -1,5 +1,4 @@
 const prisma = require('../config/prisma');
-const firestoreService = require('./firestoreService');
 const { query } = require('../config/db');
 
 /**
@@ -203,18 +202,18 @@ async function batchGetDocs(collectionName, ids) {
   if (uniqueIds.length === 0) return docMap;
 
   try {
-    const res = await query(
-      'SELECT id, data FROM documents WHERE collection = $1 AND id = ANY($2::text[])',
-      [collectionName, uniqueIds]
-    );
-    for (const r of res.rows) {
-      docMap.set(r.id, { id: r.id, ...r.data });
+    if (collectionName === 'turfs') {
+      const records = await prisma.turf.findMany({ where: { id: { in: uniqueIds } } });
+      for (const r of records) docMap.set(r.id, r);
+    } else if (collectionName === 'users') {
+      const records = await prisma.user.findMany({ where: { id: { in: uniqueIds } } });
+      for (const r of records) docMap.set(r.id, r);
+    } else if (collectionName === 'vendors') {
+      const records = await prisma.vendor.findMany({ where: { id: { in: uniqueIds } } });
+      for (const r of records) docMap.set(r.id, r);
     }
   } catch (err) {
-    for (const id of uniqueIds) {
-      const doc = await firestoreService.getDoc(collectionName, id);
-      if (doc) docMap.set(id, doc);
-    }
+    console.warn(`batchGetDocs error for ${collectionName}:`, err.message);
   }
   return docMap;
 }
@@ -228,7 +227,7 @@ async function populateRelations(row, { needTurf = true, needUser = false } = {}
 
   if (needTurf && row.turfId) {
     try {
-      turf = await firestoreService.getDoc('turfs', row.turfId);
+      turf = await prisma.turf.findUnique({ where: { id: row.turfId } });
     } catch (err) {
       turf = null;
     }
@@ -236,7 +235,7 @@ async function populateRelations(row, { needTurf = true, needUser = false } = {}
 
   if (needUser && row.userId) {
     try {
-      user = await firestoreService.getDoc('users', row.userId);
+      user = await prisma.user.findUnique({ where: { id: row.userId } });
     } catch (err) {
       user = null;
     }

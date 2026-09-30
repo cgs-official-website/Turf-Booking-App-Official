@@ -1,4 +1,4 @@
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
 const razorpayService = require('../services/razorpayService');
 const cacheService = require('../services/cacheService');
 const notificationService = require('../services/notificationService');
@@ -34,13 +34,9 @@ const bookingController = {
       const parsed = reserveSlotSchema.parse(req.body);
       const { turfId, date } = parsed;
 
-      const turf = await firestoreService.getDoc('turfs', turfId);
+      const turf = await prisma.turf.findUnique({ where: { id: turfId } });
       if (!turf) {
         return sendError(res, 'Turf not found', 404, 'TURF_NOT_FOUND');
-      }
-
-      if (!turf.vendorId && turf.vendor_id) {
-        turf.vendorId = turf.vendor_id;
       }
 
       const booking = await bookingService.reserveSlot(turf, req.user, parsed);
@@ -320,36 +316,40 @@ const bookingController = {
       }
 
       const turfId = parsed.turfId || booking.turfId;
-      const userProfile = await firestoreService.getDoc('users', uid);
+      const userProfile = await prisma.user.findUnique({ where: { id: uid } });
 
-      const reviewDoc = await firestoreService.createDoc('reviews', {
-        bookingId: id,
-        turfId,
-        userId: uid,
-        userName: userProfile?.name || booking.userName || 'Turf Player',
-        userPhoto: userProfile?.photoURL || userProfile?.avatar || '',
-        rating: Number(rating) || 5,
-        comment: comment || '',
-        createdAt: new Date().toISOString(),
+      const reviewId = `rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const reviewDoc = await prisma.review.create({
+        data: {
+          id: reviewId,
+          bookingId: id,
+          turfId,
+          userId: uid,
+          userName: userProfile?.name || booking.userName || 'Turf Player',
+          userPhoto: userProfile?.avatar || '',
+          rating: Number(rating) || 5,
+          comment: comment || '',
+        },
       });
 
       // Update booking review fields via bookingService
       await bookingService.attachReview(id, req.user, { reviewId: reviewDoc.id });
 
-      // Recalculate turf rating summary on documents
+      // Recalculate turf rating summary
       if (turfId) {
-        const allReviewsSnap = await firestoreService.queryWithCursor('reviews', {
-          filters: [['turfId', '==', turfId]],
-          limit: 100,
+        const allReviews = await prisma.review.findMany({
+          where: { turfId },
+          select: { rating: true },
         });
-        const allReviews = allReviewsSnap.items || [];
         const totalRatings = allReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
-        const avgRating = allReviews.length > 0 ? Number((totalRatings / allReviews.length).toFixed(1)) : rating;
+        const avgRating = allReviews.length > 0 ? Number((totalRatings / allReviews.length).toFixed(1)) : Number(rating);
 
-        await firestoreService.updateDoc('turfs', turfId, {
-          rating: { avg: avgRating, count: allReviews.length },
-          ratingAvg: avgRating,
-          reviewsCount: allReviews.length,
+        await prisma.turf.update({
+          where: { id: turfId },
+          data: {
+            ratingAvg: avgRating,
+            reviewsCount: allReviews.length,
+          },
         });
       }
 
