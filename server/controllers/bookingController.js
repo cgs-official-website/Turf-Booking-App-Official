@@ -159,14 +159,44 @@ const bookingController = {
             data: { bookingId: id, screen: 'Bookings' },
           });
 
-          if (booking.vendorId) {
+          // Resolve vendorId and turf details for vendor notification
+          let vendorId = booking.vendorId;
+          let turfName = booking.turfName || booking.turf?.name;
+          let turfType = booking.turfType || booking.sport || (Array.isArray(booking.turf?.sports) && booking.turf.sports[0]);
+
+          if ((!vendorId || !turfName || !turfType) && booking.turfId) {
+            const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
+            if (turf) {
+              if (!vendorId) vendorId = turf.vendorId;
+              if (!turfName) turfName = turf.name;
+              if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
+            }
+          }
+
+          turfName = turfName || 'Turf';
+          turfType = turfType || 'Standard';
+          const timeSlot = `${booking.startTime} - ${booking.endTime}`;
+          const notifText = `New Booking: ${turfName} - ${turfType}, ${booking.date}, ${timeSlot}`;
+
+          if (vendorId) {
             await notificationService.sendNotification({
-              recipientId: booking.vendorId,
+              recipientId: vendorId,
               recipientRole: 'vendor',
-              title: 'New Hand Cash Request!',
-              body: `New booking request for ${booking.sport} on ${booking.date} (${booking.startTime} - ${booking.endTime}). Collect ₹${booking.amount} at the pitch. Please review and accept.`,
+              title: notifText,
+              body: notifText,
               type: 'booking',
-              data: { bookingId: id, screen: 'Bookings' },
+              data: {
+                bookingId: String(id),
+                screen: 'BookingDetail',
+                type: 'booking',
+                notificationText: notifText,
+                turfName,
+                turfType,
+                date: booking.date,
+                timeSlot,
+                amount: String(booking.amount || booking.totalAmount || ''),
+                paymentStatus: booking.paymentStatus || 'pending',
+              },
             });
           }
         } catch (notifErr) {

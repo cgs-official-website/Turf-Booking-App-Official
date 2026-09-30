@@ -12,6 +12,7 @@ const notificationRoutes = require('./notificationRoutes');
 const placesRoutes = require('./placesRoutes');
 const adminRoutes = require('./adminRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
+const enquiryRoutes = require('./enquiryRoutes');
 const { sendSuccess } = require('../utils/response');
 
 // Health Check
@@ -50,5 +51,7 @@ router.use('/matches', matchRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/places', placesRoutes);
 router.use('/admin', adminRoutes);
+router.use('/enquiries', enquiryRoutes);
+router.use('/vendor-enquiries', enquiryRoutes);
 
 module.exports = router;

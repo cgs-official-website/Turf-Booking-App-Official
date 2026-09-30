@@ -20,6 +20,7 @@ import TurfCard from '../components/TurfCard';
 import SectionHeader from '../components/SectionHeader';
 import { TurfCardSkeleton } from '../components/SkeletonLoader';
 import FilterBottomSheet from './FilterBottomSheet';
+import NearbyTurfsModal from '../components/NearbyTurfsModal';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const SPORTS = [
@@ -111,6 +112,7 @@ export default function HomeScreen({ navigation }) {
   const [loading,       setLoading]       = useState(true);
   const [unread,        setUnread]        = useState(0);
   const [filterVisible, setFilterVisible] = useState(false);
+  const [nearbyModalVisible, setNearbyModalVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState({ sort: null, time: null });
 
   const load = useCallback(async () => {
@@ -196,17 +198,29 @@ export default function HomeScreen({ navigation }) {
                 </Text>
                 <Feather name="smile" size={13} color={C.primary} style={{ marginLeft: 5 }} />
               </View>
-              <TouchableOpacity
-                style={styles.locationRow}
-                onPress={() => navigation.navigate('Location')}
-                activeOpacity={0.7}
-              >
-                <Feather name="map-pin" size={14} color={C.primary} style={{ marginRight: 4 }} />
-                <Text style={[styles.locationText, { color: C.text }]} numberOfLines={1}>
-                  {displayLocation}
-                </Text>
-                <Feather name="chevron-down" size={14} color={C.primary} style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
+              <View style={styles.locationContainer}>
+                {/* Location Icon: Tap to get current location & show turfs within 5 km */}
+                <TouchableOpacity
+                  style={styles.locationIconBtn}
+                  onPress={() => setNearbyModalVisible(true)}
+                  activeOpacity={0.65}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Feather name="map-pin" size={14} color={C.primary} style={{ marginRight: 4 }} />
+                </TouchableOpacity>
+
+                {/* Location Text & Chevron: Keep existing behavior to open Location Screen */}
+                <TouchableOpacity
+                  style={styles.locationRow}
+                  onPress={() => navigation.navigate('Location')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.locationText, { color: C.text }]} numberOfLines={1}>
+                    {displayLocation}
+                  </Text>
+                  <Feather name="chevron-down" size={14} color={C.primary} style={{ marginLeft: 2 }} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Notification Bell */}
@@ -405,6 +419,12 @@ export default function HomeScreen({ navigation }) {
         onApply={handleApplyFilter}
         initialFilters={activeFilters}
       />
+
+      <NearbyTurfsModal
+        visible={nearbyModalVisible}
+        onClose={() => setNearbyModalVisible(false)}
+        navigation={navigation}
+      />
     </View>
   );
 }
@@ -424,10 +444,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  locationRow: {
+  locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
+  },
+  locationIconBtn: {
+    paddingVertical: 4,
+    paddingRight: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   locationText: {
     ...FONT.h3,

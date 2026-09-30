@@ -231,6 +231,8 @@ model Turf {
   city            String         @map("city") @db.VarChar(128)
   lat             Float?         @map("lat")
   lng             Float?         @map("lng")
+  latitude        Float?         @map("latitude")
+  longitude       Float?         @map("longitude")
   slotConfig      Json?          @map("slot_config")
   logo            String?        @map("logo") @db.Text
   images          String[]       @default([]) @map("images")

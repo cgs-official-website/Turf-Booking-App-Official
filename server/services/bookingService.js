@@ -189,7 +189,10 @@ function toApi(row, { turf, user } = {}) {
     turfName,
     turfAddress,
     turf: resolvedTurf,
+    turfType: row.sport || (resolvedTurf?.sports && resolvedTurf.sports[0]) || 'Standard',
     user: user || null,
+    userName: user?.name || null,
+    userPhone: user?.phone || null,
   };
 }
 

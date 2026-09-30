@@ -167,7 +167,7 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Footer: Register New Turf */}
+        {/* Footer: Register New Turf & Vendor Enquiry */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>New partner with a sports facility?</Text>
           <TouchableOpacity
@@ -176,7 +176,19 @@ const LoginScreen = ({ navigation }) => {
             activeOpacity={0.75}
           >
             <Feather name="plus-circle" size={16} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={[styles.registerBtnText, { color: colors.primary }]}>New Account</Text>
+            <Text style={[styles.registerBtnText, { color: colors.primary }]}>Create New Account</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('VendorEnquiry')}
+            style={[
+              styles.registerBtn,
+              { borderColor: colors.border, backgroundColor: colors.card, marginTop: 12 },
+            ]}
+            activeOpacity={0.75}
+          >
+            <Feather name="message-square" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.registerBtnText, { color: colors.primary }]}>Vendor Enquiry</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

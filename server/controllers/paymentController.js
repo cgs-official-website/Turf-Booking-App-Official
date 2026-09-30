@@ -75,15 +75,42 @@ const paymentController = {
           });
         }
 
-        // 2. To Vendor associated with the booked turf
+        // 2. To Vendor associated with the booked turf only
         if (vendorId) {
+          let turfName = confirmedBooking.turfName || confirmedBooking.turf?.name;
+          let turfType = confirmedBooking.turfType || confirmedBooking.sport || (Array.isArray(confirmedBooking.turf?.sports) && confirmedBooking.turf.sports[0]);
+
+          if ((!turfName || !turfType) && confirmedBooking.turfId) {
+            const turf = await prisma.turf.findUnique({ where: { id: confirmedBooking.turfId } });
+            if (turf) {
+              if (!turfName) turfName = turf.name;
+              if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
+            }
+          }
+
+          turfName = turfName || 'Turf';
+          turfType = turfType || 'Standard';
+          const timeSlot = `${confirmedBooking.startTime} - ${confirmedBooking.endTime}`;
+          const notifText = `New Booking: ${turfName} - ${turfType}, ${confirmedBooking.date}, ${timeSlot}`;
+
           await notificationService.sendNotification({
             recipientId: vendorId,
             recipientRole: 'vendor',
-            title: 'New Booking Received!',
-            body: `New booking for ${confirmedBooking.date} at ${confirmedBooking.startTime} (₹${confirmedBooking.amount || confirmedBooking.totalAmount || ''}).`,
+            title: notifText,
+            body: notifText,
             type: 'booking',
-            data: { bookingId },
+            data: {
+              bookingId: String(bookingId),
+              screen: 'BookingDetail',
+              type: 'booking',
+              notificationText: notifText,
+              turfName,
+              turfType,
+              date: confirmedBooking.date,
+              timeSlot,
+              amount: String(confirmedBooking.amount || confirmedBooking.totalAmount || ''),
+              paymentStatus: confirmedBooking.paymentStatus || 'success',
+            },
           });
         }
       })().catch((err) => console.warn('⚠️ Push notification dispatch warning:', err.message));
@@ -146,13 +173,40 @@ const paymentController = {
             }
 
             if (vendorId) {
+              let turfName = booking.turfName || booking.turf?.name;
+              let turfType = booking.turfType || booking.sport || (Array.isArray(booking.turf?.sports) && booking.turf.sports[0]);
+
+              if ((!turfName || !turfType) && booking.turfId) {
+                const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
+                if (turf) {
+                  if (!turfName) turfName = turf.name;
+                  if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
+                }
+              }
+
+              turfName = turfName || 'Turf';
+              turfType = turfType || 'Standard';
+              const timeSlot = `${booking.startTime} - ${booking.endTime}`;
+              const notifText = `New Booking: ${turfName} - ${turfType}, ${booking.date}, ${timeSlot}`;
+
               await notificationService.sendNotification({
                 recipientId: vendorId,
                 recipientRole: 'vendor',
-                title: 'New Booking Received!',
-                body: `New booking for ${booking.date} at ${booking.startTime}.`,
+                title: notifText,
+                body: notifText,
                 type: 'booking',
-                data: { bookingId: booking.id },
+                data: {
+                  bookingId: String(booking.id),
+                  screen: 'BookingDetail',
+                  type: 'booking',
+                  notificationText: notifText,
+                  turfName,
+                  turfType,
+                  date: booking.date,
+                  timeSlot,
+                  amount: String(booking.amount || booking.totalAmount || ''),
+                  paymentStatus: booking.paymentStatus || 'success',
+                },
               });
             }
 

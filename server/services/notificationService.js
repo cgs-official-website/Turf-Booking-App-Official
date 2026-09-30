@@ -88,10 +88,109 @@ const notificationService = {
           isRead: false,
         },
       });
+
+      // Dispatch FCM Push Notification to registered devices
+      try {
+        const deviceTokens = await prisma.deviceToken.findMany({
+          where: {
+            ownerId: recipientId,
+            ownerType: recipientRole,
+          },
+          select: { token: true },
+        });
+
+        if (deviceTokens.length > 0) {
+          const tokens = deviceTokens.map((t) => t.token).filter(Boolean);
+          await this.sendFcmPush({
+            tokens,
+            title: finalTitle,
+            body: finalBody,
+            data: {
+              ...data,
+              notificationId: notifId,
+              title: finalTitle,
+              body: finalBody,
+              type: String(type || 'general'),
+            },
+          });
+        }
+      } catch (pushErr) {
+        console.warn('⚠️ FCM push dispatch warning:', pushErr.message);
+      }
+
       return notif;
     } catch (err) {
       console.warn('⚠️ In-app notification save warning:', err.message);
       return null;
+    }
+  },
+
+  /**
+   * Dispatch push notification via FCM to device tokens
+   */
+  async sendFcmPush({ tokens = [], title, body, data = {} }) {
+    if (!tokens.length) return;
+
+    const fcmServerKey = process.env.FCM_SERVER_KEY || process.env.FIREBASE_SERVER_KEY;
+    const https = require('https');
+
+    for (const token of tokens) {
+      try {
+        if (fcmServerKey) {
+          const payload = JSON.stringify({
+            to: token,
+            priority: 'high',
+            notification: {
+              title,
+              body,
+              sound: 'default',
+              android_channel_id: 'turf_notifications',
+            },
+            data: {
+              ...data,
+              title,
+              body,
+            },
+          });
+
+          const req = https.request(
+            'https://fcm.googleapis.com/fcm/send',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `key=${fcmServerKey}`,
+                'Content-Length': Buffer.byteLength(payload),
+              },
+            },
+            (res) => {
+              let resData = '';
+              res.on('data', (chunk) => { resData += chunk; });
+              res.on('end', async () => {
+                if (res.statusCode === 200) {
+                  try {
+                    const parsed = JSON.parse(resData);
+                    if (parsed.results && parsed.results[0]?.error) {
+                      const errName = parsed.results[0].error;
+                      if (errName === 'NotRegistered' || errName === 'InvalidRegistration') {
+                        await prisma.deviceToken.deleteMany({ where: { token } }).catch(() => {});
+                      }
+                    }
+                  } catch {}
+                }
+              });
+            }
+          );
+
+          req.on('error', (e) => console.warn('⚠️ FCM send request error:', e.message));
+          req.write(payload);
+          req.end();
+        } else {
+          console.log(`📱 [FCM Push Ready] Notification to token (${token.slice(0, 12)}...): "${title}"`);
+        }
+      } catch (err) {
+        console.warn('⚠️ Error sending to token:', err.message);
+      }
     }
   },
 
