@@ -1,23 +1,29 @@
-const firestoreService = require('./firestoreService');
+const prisma = require('../config/prisma');
 
 /**
- * In-App Notification Service (PostgreSQL Backed)
+ * In-App Notification Service (Prisma & PostgreSQL Backed)
  */
 const notificationService = {
   /**
-   * Register device notification token for user or vendor
+   * Register device notification token for user or vendor.
+   * Upsert by token: a token moving to another account safely reassigns ownership.
    */
   async registerToken({ recipientId, recipientRole = 'user', token }) {
     if (!recipientId || !token) return null;
-    const collectionName = recipientRole === 'vendor' ? 'vendors' : 'users';
     try {
-      const userDoc = await firestoreService.getDoc(collectionName, recipientId);
-      const currentTokens = new Set(userDoc?.fcmTokens || []);
-      currentTokens.add(token);
-      await firestoreService.setDoc(collectionName, recipientId, {
-        fcmTokens: Array.from(currentTokens),
-        updatedAt: new Date().toISOString(),
-      }, true);
+      await prisma.deviceToken.upsert({
+        where: { token },
+        update: {
+          ownerType: recipientRole,
+          ownerId: recipientId,
+          updatedAt: new Date(),
+        },
+        create: {
+          token,
+          ownerType: recipientRole,
+          ownerId: recipientId,
+        },
+      });
       return true;
     } catch (err) {
       console.warn(`⚠️ Failed to register token for ${recipientId}:`, err.message);
@@ -28,19 +34,18 @@ const notificationService = {
   /**
    * Remove/detach device token on logout
    */
-  async removeToken({ recipientId, recipientRole = 'user', token }) {
-    if (!recipientId || !token) return null;
-    const collectionName = recipientRole === 'vendor' ? 'vendors' : 'users';
+  async removeToken({ recipientId, token }) {
+    if (!token) return null;
     try {
-      const userDoc = await firestoreService.getDoc(collectionName, recipientId);
-      const currentTokens = (userDoc?.fcmTokens || []).filter((t) => t !== token);
-      await firestoreService.setDoc(collectionName, recipientId, {
-        fcmTokens: currentTokens,
-        updatedAt: new Date().toISOString(),
-      }, true);
+      await prisma.deviceToken.deleteMany({
+        where: {
+          token,
+          ...(recipientId ? { ownerId: recipientId } : {}),
+        },
+      });
       return true;
     } catch (err) {
-      console.warn(`⚠️ Failed to remove token for ${recipientId}:`, err.message);
+      console.warn('⚠️ Failed to remove token:', err.message);
       return false;
     }
   },
@@ -58,7 +63,6 @@ const notificationService = {
   }) {
     if (!recipientId) return null;
 
-    // Sanitize title & body to remove emojis and keep text clean and professional
     const cleanText = (str) => {
       if (!str || typeof str !== 'string') return '';
       return str
@@ -70,24 +74,25 @@ const notificationService = {
     const finalTitle = cleanText(title) || 'Notification';
     const finalBody = cleanText(body) || '';
 
-    // 1. Create In-App Notification record in PostgreSQL
-    let notificationDoc = null;
     try {
-      notificationDoc = await firestoreService.createDoc('notifications', {
-        recipientId,
-        recipientRole,
-        title: finalTitle,
-        body: finalBody,
-        type,
-        data,
-        read: false,
-        createdAt: new Date().toISOString(),
+      const notifId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const notif = await prisma.notification.create({
+        data: {
+          id: notifId,
+          recipientId,
+          recipientType: recipientRole === 'vendor' ? 'vendor' : (recipientRole === 'admin' ? 'admin' : 'user'),
+          title: finalTitle,
+          body: finalBody,
+          type: ['general', 'booking', 'kyc', 'match'].includes(type) ? type : 'general',
+          data: data || {},
+          isRead: false,
+        },
       });
+      return notif;
     } catch (err) {
       console.warn('⚠️ In-app notification save warning:', err.message);
+      return null;
     }
-
-    return notificationDoc;
   },
 
   /**

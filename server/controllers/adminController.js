@@ -1,11 +1,15 @@
 const jwt = require('jsonwebtoken');
 const firestoreService = require('../services/firestoreService');
+const bookingService = require('../services/bookingService');
 const notificationService = require('../services/notificationService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { adminReviewSchema, setAdminClaimSchema } = require('../utils/validators');
 
-const SUPERADMIN_EMAIL = 'admin@zuna.com';
-const SUPERADMIN_PASSWORD = 'Cgs@001a';
+const bcrypt = require('bcryptjs');
+const prisma = require('../config/prisma');
+const cacheService = require('../services/cacheService');
+const { formatTurf } = require('./turfController');
+
 const JWT_SECRET = process.env.JWT_SECRET || 'default_jwt_secret_change_in_production';
 
 function deduplicateById(items, keyExtractor = (item) => item.id || item._id || item.uid || item.email || item.phone) {
@@ -23,7 +27,7 @@ function deduplicateById(items, keyExtractor = (item) => item.id || item._id || 
 const adminController = {
   /**
    * POST /api/v1/admin/login
-   * Hardcoded Super Admin Authentication
+   * Relational Super Admin Authentication via PostgreSQL
    */
   async login(req, res) {
     const { email, password } = req.body;
@@ -33,18 +37,24 @@ const adminController = {
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const validEmails = [SUPERADMIN_EMAIL.toLowerCase(), 'superadmin@gmail.com', 'admin@turf.com'];
-    const validPasswords = [SUPERADMIN_PASSWORD, 'Password@123', 'admin123', 'SuperAdmin@123'];
+    const admin = await prisma.superAdmin.findUnique({
+      where: { email: cleanEmail },
+    });
 
-    if (!validEmails.includes(cleanEmail) || !validPasswords.includes(password)) {
+    if (!admin || !admin.isActive) {
+      return sendError(res, 'Invalid Super Admin credentials', 401, 'INVALID_CREDENTIALS');
+    }
+
+    const isMatch = await bcrypt.compare(password, admin.passwordHash);
+    if (!isMatch) {
       return sendError(res, 'Invalid Super Admin credentials', 401, 'INVALID_CREDENTIALS');
     }
 
     const token = jwt.sign(
       {
-        uid: 'superadmin_zuna',
-        email: SUPERADMIN_EMAIL,
-        role: 'admin',
+        uid: admin.id,
+        email: admin.email,
+        role: admin.role === 'superadmin' ? 'superadmin' : 'admin',
         admin: true,
       },
       JWT_SECRET,
@@ -54,10 +64,10 @@ const adminController = {
     return sendSuccess(res, {
       token,
       admin: {
-        uid: 'superadmin_zuna',
-        name: 'Super Admin',
-        email: SUPERADMIN_EMAIL,
-        role: 'admin',
+        uid: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
       },
     });
   },
@@ -68,11 +78,12 @@ const adminController = {
    */
   async getStats(req, res) {
     try {
-      const [usersSnap, vendorsSnap, turfsSnap, bookingsSnap, matchesSnap, reportsSnap] = await Promise.all([
+      const [usersSnap, vendorsSnap, turfsSnap, bookingStats, recentBookingsResult, matchesSnap, reportsSnap] = await Promise.all([
         firestoreService.queryWithCursor('users', { limit: 500, orderByField: null }),
         firestoreService.queryWithCursor('vendors', { limit: 500, orderByField: null }),
         firestoreService.queryWithCursor('turfs', { limit: 500, orderByField: null }),
-        firestoreService.queryWithCursor('bookings', { limit: 1000, orderByField: null }),
+        bookingService.getAdminStats(),
+        bookingService.getAllBookingsAdmin({ limit: 10 }),
         firestoreService.queryWithCursor('matches', { limit: 500, orderByField: null }),
         firestoreService.queryWithCursor('reports', { limit: 500, orderByField: null }),
       ]);
@@ -80,22 +91,19 @@ const adminController = {
       const users = deduplicateById(usersSnap.items);
       const vendors = deduplicateById(vendorsSnap.items);
       const turfs = deduplicateById(turfsSnap.items);
-      const bookings = deduplicateById(bookingsSnap.items);
       const matches = deduplicateById(matchesSnap.items);
       const reports = deduplicateById(reportsSnap.items);
 
-      const totalRevenue = bookings
-        .filter((b) => ['confirmed', 'completed'].includes(b.status))
-        .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+      const totalRevenue = bookingStats.totalRevenue;
+      const confirmedBookings = bookingStats.confirmedCount;
+      const completedBookings = bookingStats.completedCount;
+      const pendingBookings = bookingStats.pendingCount;
+      const cancelledBookings = bookingStats.cancelledCount;
+      const totalBookings = bookingStats.totalBookings;
 
       const pendingKycs = vendors.filter((v) => v.kycStatus === 'pending').length;
       const activeTurfs = turfs.filter((t) => t.status === 'active').length;
       const pendingTurfs = turfs.filter((t) => t.status === 'pending' || t.status === 'draft').length;
-
-      const confirmedBookings = bookings.filter((b) => b.status === 'confirmed').length;
-      const completedBookings = bookings.filter((b) => b.status === 'completed').length;
-      const pendingBookings = bookings.filter((b) => b.status === 'pending' || b.status === 'reserved').length;
-      const cancelledBookings = bookings.filter((b) => b.status === 'cancelled').length;
 
       const liveMatches = matches.filter((m) => m.status === 'live').length;
       const openReports = reports.filter((r) => r.status === 'open' || !r.status).length;
@@ -113,7 +121,7 @@ const adminController = {
           activeTurfs,
           pendingTurfs,
           pendingKycs,
-          totalBookings: bookings.length,
+          totalBookings,
           confirmedBookings,
           completedBookings,
           pendingBookings,
@@ -124,7 +132,7 @@ const adminController = {
           totalReports: reports.length,
           openReports,
         },
-        recentBookings: sortByTime(bookings).slice(0, 10),
+        recentBookings: recentBookingsResult.items,
         recentVendors: sortByTime(vendors).slice(0, 5),
         recentReports: sortByTime(reports).slice(0, 5),
       });
@@ -235,23 +243,55 @@ const adminController = {
    * List all turfs across all vendors with status filter
    */
   async getAllTurfs(req, res) {
-    const { status, limit = 50, cursor } = req.query;
+    try {
+      const { status, limit = 100, cursor } = req.query;
+      const take = Math.min(Number(limit) || 100, 200);
 
-    const filters = [];
-    if (status) {
-      filters.push(['status', '==', status]);
+      const where = {};
+      if (status && status !== 'all') {
+        where.status = status;
+      }
+
+      const queryOptions = {
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: take + 1,
+        include: {
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      };
+
+      if (cursor) {
+        queryOptions.cursor = { id: cursor };
+        queryOptions.skip = 1;
+      }
+
+      const turfs = await prisma.turf.findMany(queryOptions);
+
+      let nextCursor = null;
+      if (turfs.length > take) {
+        const nextItem = turfs.pop();
+        nextCursor = nextItem.id;
+      }
+
+      const formatted = turfs.map(formatTurf);
+
+      return sendPaginated(res, formatted, nextCursor, {
+        count: formatted.length,
+        items: formatted,
+        turfs: formatted,
+      });
+    } catch (err) {
+      console.error('getAllTurfs error:', err);
+      return sendError(res, 'Failed to fetch turfs', 500, 'FETCH_FAILED');
     }
-
-    const result = await firestoreService.queryWithCursor('turfs', {
-      filters,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
-
-    const uniqueTurfs = deduplicateById(result.items);
-    return sendPaginated(res, uniqueTurfs, result.nextCursor, { count: uniqueTurfs.length });
   },
 
   /**
@@ -259,22 +299,24 @@ const adminController = {
    * Monitor all real-time platform bookings
    */
   async getAllBookings(req, res) {
-    const { status, date, limit = 50, cursor } = req.query;
+    const { status, turfId, limit = 50, cursor } = req.query;
 
-    const filters = [];
-    if (status) filters.push(['status', '==', status]);
-    if (date) filters.push(['date', '==', date]);
+    try {
+      const result = await bookingService.getAllBookingsAdmin({
+        status,
+        turfId,
+        limit: Number(limit) || 50,
+        cursor,
+      });
 
-    const result = await firestoreService.queryWithCursor('bookings', {
-      filters,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
-
-    const uniqueBookings = deduplicateById(result.items);
-    return sendPaginated(res, uniqueBookings, result.nextCursor, { count: uniqueBookings.length });
+      return sendPaginated(res, result.items, result.nextCursor, {
+        count: result.items.length,
+        bookings: result.items,
+      });
+    } catch (err) {
+      console.error('getAllBookings error:', err);
+      return sendError(res, 'Failed to fetch platform bookings', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -356,13 +398,14 @@ const adminController = {
     });
 
     // Auto-approve vendor's turf if in pending
-    if (vendor.turfId) {
-      await firestoreService.updateDoc('turfs', vendor.turfId, {
+    await prisma.turf.updateMany({
+      where: { vendorId: uid, status: 'pending' },
+      data: {
         status: 'active',
         reviewedAt: new Date(),
         rejectionReason: null,
-      });
-    }
+      },
+    });
 
     // Send push notification to vendor
     await notificationService.sendNotification({
@@ -398,12 +441,14 @@ const adminController = {
       reviewedAt: new Date(),
     });
 
-    if (vendor.turfId) {
-      await firestoreService.updateDoc('turfs', vendor.turfId, {
+    await prisma.turf.updateMany({
+      where: { vendorId: uid },
+      data: {
         status: 'rejected',
         rejectionReason: reason || 'Vendor verification failed',
-      });
-    }
+        reviewedAt: new Date(),
+      },
+    });
 
     await notificationService.sendNotification({
       recipientId: uid,
@@ -424,36 +469,82 @@ const adminController = {
    * GET /api/v1/admin/turfs/pending
    */
   async getPendingTurfs(req, res) {
-    const { limit = 50, cursor } = req.query;
+    try {
+      const { limit = 50, cursor } = req.query;
+      const take = Math.min(Number(limit) || 50, 100);
 
-    const result = await firestoreService.queryWithCursor('turfs', {
-      filters: [['status', '==', 'pending']],
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+      const queryOptions = {
+        where: { status: 'pending' },
+        orderBy: { createdAt: 'desc' },
+        take: take + 1,
+        include: {
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      };
 
-    return sendPaginated(res, result.items, result.nextCursor, { count: result.items.length });
+      if (cursor) {
+        queryOptions.cursor = { id: cursor };
+        queryOptions.skip = 1;
+      }
+
+      const turfs = await prisma.turf.findMany(queryOptions);
+
+      let nextCursor = null;
+      if (turfs.length > take) {
+        const nextItem = turfs.pop();
+        nextCursor = nextItem.id;
+      }
+
+      const formatted = turfs.map(formatTurf);
+
+      return sendPaginated(res, formatted, nextCursor, {
+        count: formatted.length,
+        items: formatted,
+      });
+    } catch (err) {
+      console.error('getPendingTurfs error:', err);
+      return sendError(res, 'Failed to fetch pending turfs', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
    * POST /api/v1/admin/turfs/:turfId/approve
    */
   async approveTurf(req, res) {
-    const { turfId } = req.params;
+    try {
+      const { turfId } = req.params;
 
-    const turf = await firestoreService.getDoc('turfs', turfId);
-    if (!turf) {
-      return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+      const turf = await prisma.turf.findUnique({ where: { id: turfId } });
+      if (!turf) {
+        return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+      }
+
+      const updatedTurf = await prisma.turf.update({
+        where: { id: turfId },
+        data: {
+          status: 'active',
+          reviewedAt: new Date(),
+          rejectionReason: null,
+        },
+      });
+
+      await cacheService.del(`turf:${turfId}`);
+
+      return sendSuccess(res, {
+        turf: formatTurf(updatedTurf),
+        message: 'Turf approved successfully',
+      });
+    } catch (err) {
+      console.error('approveTurf error:', err);
+      return sendError(res, 'Failed to approve turf', 500, 'APPROVE_FAILED');
     }
-
-    const updatedTurf = await firestoreService.updateDoc('turfs', turfId, {
-      status: 'active',
-      reviewedAt: new Date(),
-    });
-
-    return sendSuccess(res, { turf: updatedTurf });
   },
 
   /**
@@ -461,18 +552,80 @@ const adminController = {
    * Activate or suspend a turf
    */
   async toggleTurfStatus(req, res) {
-    const { turfId } = req.params;
-    const turf = await firestoreService.getDoc('turfs', turfId);
-    if (!turf) {
-      return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+    try {
+      const { turfId } = req.params;
+
+      const turf = await prisma.turf.findUnique({ where: { id: turfId } });
+      if (!turf) {
+        return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+      }
+
+      const nextStatus = turf.status === 'active' ? 'suspended' : 'active';
+      const updatedTurf = await prisma.turf.update({
+        where: { id: turfId },
+        data: {
+          status: nextStatus,
+          reviewedAt: new Date(),
+        },
+      });
+
+      await cacheService.del(`turf:${turfId}`);
+
+      return sendSuccess(res, {
+        turf: formatTurf(updatedTurf),
+        status: nextStatus,
+        message: `Turf status changed to ${nextStatus}`,
+      });
+    } catch (err) {
+      console.error('toggleTurfStatus error:', err);
+      return sendError(res, 'Failed to toggle turf status', 500, 'UPDATE_FAILED');
     }
+  },
 
-    const nextStatus = turf.status === 'active' ? 'suspended' : 'active';
-    const updatedTurf = await firestoreService.updateDoc('turfs', turfId, {
-      status: nextStatus,
-    });
+  /**
+   * DELETE /api/v1/admin/turfs/:turfId
+   * Super Admin delete turf — refuses if turf has associated bookings
+   */
+  async deleteTurfAdmin(req, res) {
+    try {
+      const { turfId } = req.params;
 
-    return sendSuccess(res, { turf: updatedTurf, status: nextStatus });
+      const turf = await prisma.turf.findUnique({
+        where: { id: turfId },
+      });
+
+      if (!turf) {
+        return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+      }
+
+      const bookingCount = await prisma.booking.count({
+        where: { turfId },
+      });
+
+      if (bookingCount > 0) {
+        return sendError(
+          res,
+          `Cannot delete turf '${turf.name}' because it has ${bookingCount} existing booking(s). Please suspend the turf instead.`,
+          400,
+          'TURF_HAS_BOOKINGS',
+          { bookingCount, turfId, turfName: turf.name }
+        );
+      }
+
+      await prisma.turf.delete({
+        where: { id: turfId },
+      });
+
+      await cacheService.del(`turf:${turfId}`);
+
+      return sendSuccess(res, {
+        message: `Turf '${turf.name}' deleted successfully`,
+        turfId,
+      });
+    } catch (err) {
+      console.error('deleteTurfAdmin error:', err);
+      return sendError(res, 'Failed to delete turf', 500, 'DELETE_FAILED');
+    }
   },
 
   /**

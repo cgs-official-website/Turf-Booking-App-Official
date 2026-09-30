@@ -1,16 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// DEV ONLY: localhost only, so the app can't silently fall back to Railway.
+// Before release, restore the Railway URL as the first entry and remove localhost.
 const CANDIDATE_URLS = [
-  'https://turf-booking-app-official-production.up.railway.app/api/v1',
   'http://localhost:5000/api/v1',
-  'http://192.168.0.30:5000/api/v1',
-  'http://10.0.2.2:5000/api/v1',
-  'http://192.168.0.50:5000/api/v1',
+  // 'https://turf-booking-app-official-production.up.railway.app/api/v1', // re-enable for release
 ];
 
 export const BASE_URL = CANDIDATE_URLS[0];
-export const FALLBACK_URL = CANDIDATE_URLS[1];
-export const SERVER_ORIGIN = 'https://turf-booking-app-official-production.up.railway.app';
+export const FALLBACK_URL = CANDIDATE_URLS[0];
+export const SERVER_ORIGIN = 'http://localhost:5000';
 
 export const getImageUrl = (path) => {
   if (!path) return null;

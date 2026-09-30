@@ -14,8 +14,8 @@ export const BASE_URL = PRODUCTION_URL;
 export const SERVER_ORIGIN = 'https://turf-booking-app-official-production.up.railway.app';
 
 const CANDIDATE_URLS = [
-  PRODUCTION_URL,
   LOCAL_URL,
+  PRODUCTION_URL,
   LAN_URL,
   Platform.OS === 'android' ? EMULATOR_URL : null,
 ].filter(Boolean);
@@ -29,7 +29,7 @@ export const getImageUrl = (path) => {
 
 class ApiClient {
   constructor() {
-    this.activeBaseUrl = PRODUCTION_URL;
+    this.activeBaseUrl = LOCAL_URL;
   }
 
   async getToken() {

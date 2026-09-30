@@ -1,0 +1,491 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  reserved
+  pending
+  confirmed
+  rejected
+  cancelled
+  completed
+  expired
+  @@map("booking_status")
+}
+
+enum PaymentStatus {
+  pending
+  success
+  failed
+  refunded
+  @@map("payment_status")
+}
+
+enum KycStatus {
+  pending
+  approved
+  rejected
+  suspended
+  @@map("kyc_status")
+}
+
+enum TurfStatus {
+  active
+  inactive
+  pending
+  suspended
+  rejected
+  @@map("turf_status")
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+  @@map("user_status")
+}
+
+enum AdminRole {
+  admin
+  superadmin
+  @@map("admin_role")
+}
+
+enum VendorSubscriptionStatus {
+  created
+  active
+  expired
+  cancelled
+  @@map("vendor_subscription_status")
+}
+
+enum PaymentPurpose {
+  booking
+  vendor_subscription
+  @@map("payment_purpose")
+}
+
+enum PaymentRecordStatus {
+  created
+  captured
+  failed
+  refunded
+  partially_refunded
+  @@map("payment_record_status")
+}
+
+enum NotificationRecipientType {
+  user
+  vendor
+  admin
+  @@map("notification_recipient_type")
+}
+
+enum NotificationType {
+  general
+  booking
+  kyc
+  match
+  @@map("notification_type")
+}
+
+enum KycDocType {
+  aadhaar
+  pan
+  gst
+  eb_bill
+  @@map("kyc_doc_type")
+}
+
+enum KycDocStatus {
+  pending
+  approved
+  rejected
+  @@map("kyc_doc_status")
+}
+
+
+enum MatchStatus {
+  created
+  live
+  completed
+  @@map("match_status")
+}
+
+enum ReportStatus {
+  open
+  in_progress
+  resolved
+  @@map("report_status")
+}
+
+// -------------------------------------------------------------
+// Legacy & Existing System Tables (Untouched, maintained for safety)
+// -------------------------------------------------------------
+
+model Document {
+  collection String    @map("collection") @db.VarChar
+  id         String    @map("id") @db.VarChar
+  data       Json      @map("data")
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([collection, id])
+  @@index([collection], map: "idx_documents_collection")
+  @@map("documents")
+}
+
+model SlotOverride {
+  turfId         String    @map("turf_id") @db.VarChar
+  date           String    @map("date") @db.VarChar
+  blockedSlots   Json?     @default("[]") @map("blocked_slots")
+  priceOverrides Json?     @default("{}") @map("price_overrides")
+  updatedAt      DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([turfId, date])
+  @@index([turfId, date], map: "idx_slot_overrides_turf_date")
+  @@map("slot_overrides")
+}
+
+model Booking {
+  bookingId     String        @id @map("booking_id") @db.VarChar(255)
+  userId        String        @map("user_id") @db.VarChar(255)
+  vendorId      String        @map("vendor_id") @db.VarChar(255)
+  turfId        String        @map("turf_id") @db.VarChar(255)
+  slotId        String?       @map("slot_id") @db.VarChar(255)
+  bookingDate   DateTime      @map("booking_date") @db.Date
+  startTime     String        @map("start_time") @db.VarChar(5)
+  endTime       String        @map("end_time") @db.VarChar(5)
+  totalAmount   Decimal       @map("total_amount") @db.Decimal(10, 2)
+  bookingStatus BookingStatus @default(pending) @map("booking_status")
+  paymentStatus PaymentStatus @default(pending) @map("payment_status")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  courtNumber        Int       @default(1) @map("court_number")
+  sport              String?   @db.VarChar(64)
+  paymentMethod      String?   @map("payment_method") @db.VarChar(16)
+  razorpayOrderId    String?   @map("razorpay_order_id") @db.VarChar(64)
+  razorpayPaymentId  String?   @map("razorpay_payment_id") @db.VarChar(64)
+  holdExpiresAt      DateTime? @map("hold_expires_at") @db.Timestamptz(6)
+  requestedAt        DateTime? @map("requested_at") @db.Timestamptz(6)
+  rejectionReason    String?   @map("rejection_reason")
+  cancellationReason String?   @map("cancellation_reason")
+  isReviewed         Boolean   @default(false) @map("is_reviewed")
+  reviewId           String?   @map("review_id") @db.VarChar(255)
+
+  payments           Payment[]
+
+  // NOTE: A partial unique index exists on the live PostgreSQL table:
+  // CREATE UNIQUE INDEX "bookings_active_slot_key" ON "bookings"("turf_id","court_number","booking_date","start_time")
+  // WHERE "booking_status" IN ('reserved','pending','confirmed');
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([vendorId, bookingStatus, createdAt(sort: Desc)])
+  @@index([turfId, bookingDate, startTime])
+  @@index([razorpayOrderId])
+  @@map("bookings")
+}
+
+// -------------------------------------------------------------
+// New Relational Entities
+// -------------------------------------------------------------
+
+model Vendor {
+  id                       String               @id @map("id") @db.VarChar(255)
+  name                     String               @map("name") @db.VarChar(255)
+  email                    String               @unique @map("email") @db.VarChar(255)
+  phone                    String?              @map("phone") @db.VarChar(32)
+  passwordHash             String               @map("password_hash") @db.VarChar(255)
+  kycStatus                KycStatus            @default(pending) @map("kyc_status")
+  subscription             Json?                @map("subscription")
+  turfOnboardingComplete   Boolean              @default(false) @map("turf_onboarding_complete")
+  turfApprovalAcknowledged Boolean              @default(false) @map("turf_approval_acknowledged")
+  rejectionReason          String?              @map("rejection_reason")
+  reviewedAt               DateTime?            @map("reviewed_at") @db.Timestamptz(6)
+  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  turfs                    Turf[]
+  subscriptions            VendorSubscription[]
+  kycDocuments             VendorKycDocument[]
+  reports                  Report[]
+
+  @@map("vendors")
+}
+
+model Turf {
+  id              String         @id @map("id") @db.VarChar(255)
+  vendorId        String         @map("vendor_id") @db.VarChar(255)
+  vendor          Vendor         @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  name            String         @map("name") @db.VarChar(255)
+  description     String?        @map("description") @db.Text
+  sports          String[]       @default([]) @map("sports")
+  pricePerHour    Decimal        @map("price_per_hour") @db.Decimal(10, 2)
+  courtCount      Int            @default(1) @map("court_count")
+  location        Json?          @map("location")
+  city            String         @map("city") @db.VarChar(128)
+  lat             Float?         @map("lat")
+  lng             Float?         @map("lng")
+  slotConfig      Json?          @map("slot_config")
+  logo            String?        @map("logo") @db.Text
+  images          String[]       @default([]) @map("images")
+  amenities       String[]       @default([]) @map("amenities")
+  ratingAvg       Float          @default(0) @map("rating_avg")
+  reviewsCount    Int            @default(0) @map("reviews_count")
+  status          TurfStatus     @default(active) @map("status")
+  rejectionReason String?        @map("rejection_reason")
+  reviewedAt      DateTime?      @map("reviewed_at") @db.Timestamptz(6)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  wishlistItems   WishlistItem[]
+  reviews         Review[]
+  matches         Match[]
+
+  @@index([vendorId])
+  @@index([city])
+  @@index([status])
+  @@map("turfs")
+}
+
+model User {
+  id            String         @id @map("id") @db.VarChar(255)
+  name          String         @map("name") @db.VarChar(255)
+  email         String?        @unique @map("email") @db.VarChar(255)
+  phone         String?        @unique @map("phone") @db.VarChar(32)
+  passwordHash  String?        @map("password_hash") @db.VarChar(255)
+  avatar        String?        @map("avatar") @db.Text
+  location      Json?          @map("location")
+  status        UserStatus     @default(active) @map("status")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  wishlistItems WishlistItem[]
+
+  @@map("users")
+}
+
+model WishlistItem {
+  userId    String   @map("user_id") @db.VarChar(255)
+  turfId    String   @map("turf_id") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  turf      Turf     @relation(fields: [turfId], references: [id], onDelete: Cascade)
+
+  @@id([userId, turfId])
+  @@index([turfId])
+  @@map("wishlist_items")
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid()) @map("id") @db.VarChar(255)
+  ownerType String   @map("owner_type") @db.VarChar(32)
+  ownerId   String   @map("owner_id") @db.VarChar(255)
+  token     String   @unique @map("token") @db.VarChar(512)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ownerType, ownerId])
+  @@map("device_tokens")
+}
+
+model SuperAdmin {
+  id              String              @id @map("id") @db.VarChar(255)
+  name            String              @map("name") @db.VarChar(255)
+  email           String              @unique @map("email") @db.VarChar(255)
+  passwordHash    String              @map("password_hash") @db.VarChar(255)
+  role            AdminRole           @default(admin) @map("role")
+  isActive        Boolean             @default(true) @map("is_active")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  reviewedKycDocs VendorKycDocument[]
+
+  @@map("superadmins")
+}
+
+// -------------------------------------------------------------
+// Migration 003 Entities
+// -------------------------------------------------------------
+
+model Review {
+  id        String   @id @map("id") @db.VarChar(255)
+  bookingId String   @unique @map("booking_id") @db.VarChar(255)
+  turfId    String   @map("turf_id") @db.VarChar(255)
+  turf      Turf     @relation(fields: [turfId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id") @db.VarChar(255)
+  userName  String   @map("user_name") @db.VarChar(255)
+  userPhoto String?  @map("user_photo") @db.Text
+  rating    Int      @map("rating")
+  comment   String?  @map("comment") @db.Text
+  hidden    Boolean  @default(false) @map("hidden")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([turfId])
+  @@index([turfId, hidden])
+  @@index([userId])
+  @@map("reviews")
+}
+
+model SubscriptionPlan {
+  id            String               @id @map("id") @db.VarChar(255)
+  name          String               @map("name") @db.VarChar(255)
+  description   String?              @map("description") @db.Text
+  price         Decimal              @map("price") @db.Decimal(10, 2)
+  durationDays  Int                  @map("duration_days")
+  features      Json                 @default("[]") @map("features")
+  popular       Boolean              @default(false) @map("popular")
+  isActive      Boolean              @default(true) @map("is_active")
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subscriptions VendorSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model VendorSubscription {
+  id                 String                   @id @map("id") @db.VarChar(255)
+  vendorId           String                   @map("vendor_id") @db.VarChar(255)
+  vendor             Vendor                   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  planId             String                   @map("plan_id") @db.VarChar(255)
+  plan               SubscriptionPlan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planName           String                   @map("plan_name") @db.VarChar(255)
+  amount             Decimal                  @map("amount") @db.Decimal(10, 2)
+  durationDays       Int                      @map("duration_days")
+  status             VendorSubscriptionStatus @default(created) @map("status")
+  razorpayOrderId    String?                  @map("razorpay_order_id") @db.VarChar(255)
+  razorpayPaymentId  String?                  @map("razorpay_payment_id") @db.VarChar(255)
+  startsAt           DateTime?                @map("starts_at") @db.Timestamptz(6)
+  expiresAt          DateTime?                @map("expires_at") @db.Timestamptz(6)
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  payments           Payment[]
+
+  @@index([vendorId, status])
+  @@index([expiresAt])
+  @@map("vendor_subscriptions")
+}
+
+model Payment {
+  id                     String               @id @map("id") @db.VarChar(255)
+  purpose                PaymentPurpose       @map("purpose")
+  bookingId              String?              @map("booking_id") @db.VarChar(255)
+  booking                Booking?             @relation(fields: [bookingId], references: [bookingId], onDelete: Restrict)
+  vendorSubscriptionId   String?              @map("vendor_subscription_id") @db.VarChar(255)
+  vendorSubscription     VendorSubscription?  @relation(fields: [vendorSubscriptionId], references: [id], onDelete: SetNull)
+  userId                 String?              @map("user_id") @db.VarChar(255)
+  vendorId               String?              @map("vendor_id") @db.VarChar(255)
+  razorpayOrderId        String               @unique @map("razorpay_order_id") @db.VarChar(255)
+  razorpayPaymentId      String?              @unique @map("razorpay_payment_id") @db.VarChar(255)
+  amount                 Decimal              @map("amount") @db.Decimal(10, 2)
+  currency               String               @default("INR") @map("currency") @db.VarChar(16)
+  status                 PaymentRecordStatus  @default(created) @map("status")
+  refundAmount           Decimal              @default(0.00) @map("refund_amount") @db.Decimal(10, 2)
+  rawPayload             Json?                @map("raw_payload")
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([bookingId])
+  @@index([vendorSubscriptionId])
+  @@index([userId])
+  @@index([vendorId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Notification {
+  id            String                    @id @map("id") @db.VarChar(255)
+  recipientType NotificationRecipientType @map("recipient_type")
+  recipientId   String                    @map("recipient_id") @db.VarChar(255)
+  title         String                    @map("title") @db.VarChar(255)
+  body          String                    @map("body") @db.Text
+  type          NotificationType          @default(general) @map("type")
+  data          Json                      @default("{}") @map("data")
+  isRead        Boolean                   @default(false) @map("is_read")
+  readAt        DateTime?                 @map("read_at") @db.Timestamptz(6)
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([recipientType, recipientId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model VendorKycDocument {
+  id              String        @id @map("id") @db.VarChar(255)
+  vendorId        String        @map("vendor_id") @db.VarChar(255)
+  vendor          Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  docType         KycDocType    @map("doc_type")
+  fileUrl         String        @map("file_url") @db.Text
+  status          KycDocStatus  @default(pending) @map("status")
+  rejectionReason String?       @map("rejection_reason") @db.Text
+  reviewedBy      String?       @map("reviewed_by") @db.VarChar(255)
+  superAdmin      SuperAdmin?   @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?     @map("reviewed_at") @db.Timestamptz(6)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([vendorId, docType])
+  @@index([status])
+  @@index([vendorId])
+  @@map("vendor_kyc_documents")
+}
+
+
+model Match {
+  id                String       @id @map("id") @db.VarChar(255)
+  createdBy         String       @map("created_by") @db.VarChar(255)
+  creatorName       String       @map("creator_name") @db.VarChar(255)
+  joinCode          String       @unique @map("join_code") @db.VarChar(6)
+  place             String       @map("place") @db.VarChar(255)
+  sport             String       @map("sport") @db.VarChar(64)
+  matchDate         String       @map("match_date") @db.Text
+  matchTime         String       @map("match_time") @db.Text
+  playWithStrangers Boolean      @default(false) @map("play_with_strangers")
+  turfId            String?      @map("turf_id") @db.VarChar(255)
+  turf              Turf?        @relation(fields: [turfId], references: [id], onDelete: SetNull)
+  bookingId         String?      @map("booking_id") @db.VarChar(255)
+  teams             Json         @map("teams")
+  toss              Json?        @map("toss")
+  scorecard         Json         @map("scorecard")
+  status            MatchStatus  @default(created) @map("status")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  players           MatchPlayer[]
+
+  @@index([createdBy])
+  @@index([status])
+  @@map("matches")
+}
+
+model MatchPlayer {
+  matchId  String   @map("match_id") @db.VarChar(255)
+  match    Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId   String   @map("user_id") @db.VarChar(255)
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  @@id([matchId, userId])
+  @@index([userId])
+  @@map("match_players")
+}
+
+model Report {
+  id          String       @id @map("id") @db.VarChar(255)
+  vendorId    String       @map("vendor_id") @db.VarChar(255)
+  vendor      Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  issueType   String       @map("issue_type") @db.VarChar(128)
+  description String       @map("description") @db.Text
+  status      ReportStatus @default(open) @map("status")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([vendorId, status])
+  @@map("reports")
+}

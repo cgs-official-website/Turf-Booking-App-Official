@@ -51,6 +51,11 @@ Thumbs.db
 
 # Markdown Documentation Files
 *.md
+!README.md
+!MIGRATION_WORKFLOW.md
+
+# Screenshots & Artifacts
+vendor_screen.png
 
 
 
