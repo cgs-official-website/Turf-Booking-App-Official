@@ -47,9 +47,25 @@ router.use('/payments', paymentRoutes);
 router.use('/vendor', vendorRoutes);
 router.use('/vendor/subscriptions', subscriptionRoutes);
 router.use('/subscription', subscriptionRoutes);
+router.use('/subscriptions', subscriptionRoutes);
 router.use('/matches', matchRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/places', placesRoutes);
 router.use('/admin', adminRoutes);
+
+// Public Reviews Stream (Directly from database)
+router.get('/reviews', async (req, res) => {
+  const firestoreService = require('../services/firestoreService');
+  try {
+    const result = await firestoreService.queryWithCursor('reviews', {
+      orderByField: 'createdAt',
+      orderDirection: 'desc',
+      limit: 12,
+    });
+    return sendSuccess(res, { reviews: result.items || [] });
+  } catch (err) {
+    return sendSuccess(res, { reviews: [] });
+  }
+});
 
 module.exports = router;

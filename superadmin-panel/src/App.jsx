@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { ModalProvider } from './context/ModalContext';
 import { api } from './api/client';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -15,14 +18,16 @@ import { ReportsView } from './views/ReportsView';
 import { SubscriptionsView } from './views/SubscriptionsView';
 import { ReviewsView } from './views/ReviewsView';
 import { NotFoundView } from './views/NotFoundView';
+import { Landing } from './pages/Landing/Landing';
 
 function DashboardApp() {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   const getTabFromUrl = () => {
     if (typeof window === 'undefined') return 'overview';
     const hash = window.location.hash.replace(/^#\/?/, '').trim();
-    if (hash) return hash;
+    if (hash && hash !== 'admin') return hash;
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'overview';
   };
@@ -39,7 +44,8 @@ function DashboardApp() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      setActiveTab(getTabFromUrl());
+      const tab = getTabFromUrl();
+      if (tab) setActiveTab(tab);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -76,12 +82,12 @@ function DashboardApp() {
   }, [isAuthenticated]);
 
   if (!isAuthenticated) {
-    return <LoginView />;
+    return <LoginView onNavigateHome={() => navigate('/')} />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
-      {/* Sidebar Navigation (Drawer on mobile, Sticky on desktop) */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row transition-colors duration-200">
+      {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
@@ -111,15 +117,10 @@ function DashboardApp() {
           )}
 
           {activeTab === 'kyc' && <KycReviewView onUpdateStats={fetchStats} />}
-
           {activeTab === 'turfs' && <TurfsView onUpdateStats={fetchStats} />}
-
           {activeTab === 'bookings' && <BookingsView />}
-
           {activeTab === 'vendors' && <VendorsView />}
-
           {activeTab === 'users' && <UsersView />}
-
           {activeTab === 'matches' && <MatchesView />}
           {activeTab === 'reviews' && <ReviewsView />}
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
@@ -134,14 +135,63 @@ function DashboardApp() {
   );
 }
 
-import { ModalProvider } from './context/ModalContext';
+function MainRoutes() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // If user visits via hash bookmark like /#admin or /#/admin, navigate to /admin
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (hash === 'admin' || hash.startsWith('admin/')) {
+      navigate('/admin');
+    }
+  }, [navigate]);
+
+  return (
+    <Routes>
+      {/* Root Route ALWAYS serves the Landing Page */}
+      <Route
+        path="/"
+        element={<Landing onNavigateAdmin={() => navigate('/admin')} />}
+      />
+
+      {/* Explore / Turfs route */}
+      <Route
+        path="/turfs"
+        element={<Landing onNavigateAdmin={() => navigate('/admin')} />}
+      />
+
+      {/* Super Admin Login Route */}
+      <Route
+        path="/login"
+        element={<LoginView onNavigateHome={() => navigate('/')} />}
+      />
+
+      {/* Super Admin Dashboard Routes */}
+      <Route
+        path="/admin/*"
+        element={<DashboardApp />}
+      />
+
+      {/* Fallback route */}
+      <Route
+        path="*"
+        element={<Landing onNavigateAdmin={() => navigate('/admin')} />}
+      />
+    </Routes>
+  );
+}
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ModalProvider>
-        <DashboardApp />
-      </ModalProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ModalProvider>
+          <BrowserRouter>
+            <MainRoutes />
+          </BrowserRouter>
+        </ModalProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

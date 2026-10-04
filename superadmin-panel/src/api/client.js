@@ -93,6 +93,11 @@ class AdminApiClient {
     });
   }
 
+  getTurfs(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/turfs${qs ? `?${qs}` : ''}`);
+  }
+
   getAllTurfs(status, cursor) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);

@@ -83,7 +83,7 @@ export const LoginView = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition duration-200 shadow-md shadow-emerald-500/20 flex items-center justify-center space-x-2 text-sm"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition duration-200 shadow-md shadow-emerald-500/20 flex items-center justify-center space-x-2 text-sm cursor-pointer"
           >
             {loading ? (
               <>
@@ -97,6 +97,15 @@ export const LoginView = () => {
               </>
             )}
           </button>
+
+          <div className="pt-2 text-center">
+            <a
+              href="/"
+              className="text-xs font-semibold text-slate-500 hover:text-emerald-600 transition inline-flex items-center gap-1"
+            >
+              ← Back to Public Website
+            </a>
+          </div>
         </form>
       </div>
     </div>
