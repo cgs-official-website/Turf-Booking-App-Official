@@ -1,9 +1,10 @@
 // src/api/client.js
 export const PRODUCTION_API_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
+export const LOCAL_API_URL = 'http://localhost:5000/api/v1';
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  PRODUCTION_API_URL;
+  LOCAL_API_URL;
 
 class AdminApiClient {
   getToken() {

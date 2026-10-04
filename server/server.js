@@ -64,6 +64,9 @@ initCronJobs();
 // ── Start Server ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
+  if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
+    console.warn('⚠️ WARNING: NODE_ENV is set to "production" but REDIS_URL is not configured! OTPs and rate limiting will run in in-memory fallback mode.');
+  }
   console.log(`🚀 Turf Booking Backend running on port ${PORT}`);
   console.log(`📡 API V1 Base URL: http://0.0.0.0:${PORT}/api/v1`);
 });

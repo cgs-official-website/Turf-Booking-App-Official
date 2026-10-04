@@ -56,7 +56,6 @@ export default function ExploreScreen({ navigation }) {
     if (sort)            params.sort   = sort;
     if (activeFilters.sort) params.sort = activeFilters.sort;
     if (activeFilters.time) params.time = activeFilters.time;
-    if (location && location !== 'Current Location') params.location = location;
     if (query.trim()) params.search = query.trim();
 
     turfsApi.getTurfs(params)

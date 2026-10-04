@@ -147,7 +147,8 @@ const createReviewSchema = z.object({
 
 // Report Issue Schema
 const reportIssueSchema = z.object({
-  category: z.string().min(1),
+  category: z.string().optional(),
+  issueType: z.string().optional(),
   description: z.string().min(5),
 });
 

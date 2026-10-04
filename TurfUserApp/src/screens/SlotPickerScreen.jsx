@@ -74,23 +74,20 @@ export default function SlotPickerScreen({ route, navigation }) {
     setEndSlot(null);
     turfsApi
       .getAvailability(turfId, selectedDate)
-      .then((res) => setSlots(res.slots || []))
-      .catch(() => setSlots([
-        { start: '06:00', end: '07:00', available: true },
-        { start: '07:00', end: '08:00', available: true },
-        { start: '08:00', end: '09:00', available: false },
-        { start: '09:00', end: '10:00', available: true },
-        { start: '10:00', end: '11:00', available: true },
-        { start: '11:00', end: '12:00', available: true },
-        { start: '14:00', end: '15:00', available: true },
-        { start: '15:00', end: '16:00', available: true },
-        { start: '16:00', end: '17:00', available: false },
-        { start: '17:00', end: '18:00', available: true },
-        { start: '18:00', end: '19:00', available: true },
-        { start: '19:00', end: '20:00', available: true },
-        { start: '20:00', end: '21:00', available: true },
-        { start: '21:00', end: '22:00', available: true },
-      ]))
+      .then((res) => {
+        const rawSlots = res?.slots || res?.data?.slots || (Array.isArray(res) ? res : []);
+        const formatted = rawSlots.map((s) => ({
+          ...s,
+          start: s.start || s.startTime,
+          end: s.end || s.endTime,
+          available: Boolean(s.available),
+        }));
+        setSlots(formatted);
+      })
+      .catch((err) => {
+        console.warn('Error fetching slots:', err?.message || err);
+        setSlots([]);
+      })
       .finally(() => setLoading(false));
   }, [selectedDate, turfId]);
 
@@ -112,8 +109,44 @@ export default function SlotPickerScreen({ route, navigation }) {
     return options;
   }, [selectedSlot]);
 
+  const turfPrice = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+
+  const getSlotDisplayInfo = (slot, dateStr) => {
+    const now = new Date();
+    const todayStr = fmtDate(now);
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const startMins = timeToMins(slot.start || slot.startTime);
+    const endMins = timeToMins(slot.end || slot.endTime);
+
+    const isBlocked = Boolean(slot.isBlocked);
+    const isBooked = Boolean(slot.isBooked || (!slot.available && !slot.isBlocked));
+
+    if (isBlocked) {
+      return { status: 'blocked', label: 'Blocked', color: '#EF4444', isAvail: false };
+    }
+    if (isBooked) {
+      return { status: 'booked', label: 'Booked', color: '#94A3B8', isAvail: false };
+    }
+
+    if (dateStr < todayStr) {
+      return { status: 'past', label: 'Past', color: '#94A3B8', isAvail: false };
+    }
+
+    if (dateStr === todayStr) {
+      if (endMins <= currentMins) {
+        return { status: 'past', label: 'Past', color: '#94A3B8', isAvail: false };
+      }
+      if (startMins <= currentMins && currentMins < endMins) {
+        return { status: 'in_process', label: 'In process', color: '#F59E0B', isAvail: false };
+      }
+    }
+
+    return { status: 'available', label: 'Available', color: '#10B981', isAvail: true };
+  };
+
   const handleSlotSelect = (slot) => {
-    if (!slot.available) return;
+    const slotInfo = getSlotDisplayInfo(slot, selectedDate);
+    if (!slotInfo.isAvail) return;
     setSelectedSlot(slot);
     setEndSlot(null);
     setShowEndPicker(true);
@@ -129,11 +162,12 @@ export default function SlotPickerScreen({ route, navigation }) {
       return;
     }
     navigation.navigate('BookingConfirm', {
-      turfData:  { ...turf, _id: turfId },
+      turfData:  { ...turf, _id: turfId, pricePerHour: turfPrice, price: turfPrice },
       sport,
       date:      selectedDate,
       startTime: selectedSlot.start,
       endTime:   endSlot.end,
+      duration:  endSlot.duration || 1,
     });
   };
 
@@ -253,7 +287,8 @@ export default function SlotPickerScreen({ route, navigation }) {
             <View style={styles.slotsGrid}>
               {slots.map((slot, idx) => {
                 const isSelected = selectedSlot?.start === slot.start;
-                const isAvail = slot.available;
+                const slotInfo = getSlotDisplayInfo(slot, selectedDate);
+                const isAvail = slotInfo.isAvail;
 
                 return (
                   <TouchableOpacity
@@ -268,7 +303,7 @@ export default function SlotPickerScreen({ route, navigation }) {
                         backgroundColor: isSelected
                           ? C.primary
                           : (isAvail ? (dark ? '#18273D' : '#FFFFFF') : (dark ? '#121B29' : '#F1F5F9')),
-                        opacity: isAvail ? 1 : 0.45,
+                        opacity: isAvail ? 1 : (isSelected ? 1 : 0.5),
                       },
                       isSelected && SHADOW.glow,
                     ]}
@@ -293,11 +328,12 @@ export default function SlotPickerScreen({ route, navigation }) {
                         {
                           color: isSelected
                             ? '#FFFFFF'
-                            : (isAvail ? '#10B981' : C.caption),
+                            : slotInfo.color,
+                          fontWeight: (slotInfo.status === 'in_process' || isSelected) ? '800' : '600',
                         },
                       ]}
                     >
-                      {isSelected ? 'SELECTED' : isAvail ? 'Available' : 'Booked'}
+                      {isSelected ? 'SELECTED' : slotInfo.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -311,7 +347,7 @@ export default function SlotPickerScreen({ route, navigation }) {
           <View>
             <Text style={[styles.footerLabel, { color: C.subtext }]}>Total Amount</Text>
             <Text style={[styles.footerPrice, { color: C.primary }]}>
-              ₹{(turf.pricePerHour || 800) * (endSlot?.duration || 1)}
+              ₹{turfPrice * (endSlot?.duration || 1)}
             </Text>
           </View>
 

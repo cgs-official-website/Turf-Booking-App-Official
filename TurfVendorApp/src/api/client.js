@@ -1,22 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// DEV ONLY: localhost only, so the app can't silently fall back to Railway.
+// Before release, restore the Railway URL as the first entry and remove localhost.
 const CANDIDATE_URLS = [
-  'https://turf-booking-app-official-production.up.railway.app/api/v1',
   'http://localhost:5000/api/v1',
-  'http://192.168.0.30:5000/api/v1',
-  'http://10.0.2.2:5000/api/v1',
-  'http://192.168.0.50:5000/api/v1',
+  'http://192.168.0.23:5000/api/v1',
+  'http://192.168.0.14:5000/api/v1',
+  'http://192.168.0.12:5000/api/v1',
+  'http://192.168.0.70:5000/api/v1',
+  // 'https://turf-booking-app-official-production.up.railway.app/api/v1', // re-enable for release
 ];
 
 export const BASE_URL = CANDIDATE_URLS[0];
-export const FALLBACK_URL = CANDIDATE_URLS[1];
-export const SERVER_ORIGIN = 'https://turf-booking-app-official-production.up.railway.app';
+export const FALLBACK_URL = CANDIDATE_URLS[0];
+export const SERVER_ORIGIN = 'http://localhost:5000';
 
 export const getImageUrl = (path) => {
   if (!path) return null;
   if (/^(https?:|file:|content:|data:)/i.test(path)) return path;
   return `${SERVER_ORIGIN}/${String(path).replace(/^\/+/, '')}`;
 };
+
+let activeBaseUrl = CANDIDATE_URLS[0];
 
 export const apiRequest = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('vendorToken');
@@ -35,9 +40,14 @@ export const apiRequest = async (endpoint, options = {}) => {
   let response = null;
   let lastError = null;
 
-  for (const host of CANDIDATE_URLS) {
+  const hostsToTry = [
+    activeBaseUrl,
+    ...CANDIDATE_URLS.filter((h) => h !== activeBaseUrl),
+  ];
+
+  for (const host of hostsToTry) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
       response = await fetch(`${host}${endpoint}`, {
         ...config,
@@ -45,6 +55,7 @@ export const apiRequest = async (endpoint, options = {}) => {
       });
       clearTimeout(timeoutId);
       if (response && (response.ok || response.status < 500)) {
+        activeBaseUrl = host;
         break;
       }
     } catch (err) {
@@ -54,7 +65,7 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 
   if (!response) {
-    throw lastError || new Error('Cannot reach server. Please check your internet connection.');
+    throw new Error('Cannot reach backend server. Please verify "npm run dev" is running in server terminal.');
   }
 
   try {

@@ -1,4 +1,6 @@
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
+const bookingService = require('../services/bookingService');
+const { BookingError } = bookingService;
 const razorpayService = require('../services/razorpayService');
 const cacheService = require('../services/cacheService');
 const notificationService = require('../services/notificationService');
@@ -11,86 +13,121 @@ const paymentController = {
    * Verify Razorpay payment signature (client-return path)
    */
   async verifyPayment(req, res) {
-    const parsed = paymentVerifySchema.parse(req.body);
-    const { bookingId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = parsed;
+    try {
+      const parsed = paymentVerifySchema.parse(req.body);
+      const { bookingId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = parsed;
 
-    const booking = await firestoreService.getDoc('bookings', bookingId);
-    if (!booking) {
-      return sendError(res, 'Booking not found', 404, 'NOT_FOUND');
-    }
+      const booking = await bookingService.getById(bookingId, { includeRelations: true });
+      if (!booking) {
+        return sendError(res, 'Booking not found', 404, 'NOT_FOUND');
+      }
 
-    // Idempotent return if already confirmed
-    if (booking.status === 'confirmed') {
-      return sendSuccess(res, {
-        booking,
-        message: 'Booking is already confirmed',
-      });
-    }
+      // Idempotent return if already confirmed
+      if (booking.status === 'confirmed' || booking.bookingStatus === 'confirmed') {
+        return sendSuccess(res, {
+          booking,
+          message: 'Booking is already confirmed',
+        });
+      }
 
-    const isValid = razorpayService.verifySignature(
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
-    );
+      const isValid = razorpayService.verifySignature(
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature
+      );
 
-    if (!isValid) {
-      return sendError(res, 'Payment signature verification failed', 400, 'PAYMENT_VERIFY_FAILED');
-    }
+      if (!isValid) {
+        return sendError(res, 'Payment signature verification failed', 400, 'PAYMENT_VERIFY_FAILED');
+      }
 
-    const confirmedBooking = await firestoreService.updateDoc('bookings', bookingId, {
-      status: 'confirmed',
-      razorpayPaymentId: razorpay_payment_id,
-      razorpaySignature: razorpay_signature,
-      confirmedAt: new Date(),
-      notificationSent: true,
-    });
+      const { booking: confirmedBooking } = await bookingService.confirmRazorpayPayment(
+        bookingId,
+        req.user,
+        {
+          razorpayPaymentId: razorpay_payment_id,
+          razorpayOrderId: razorpay_order_id,
+        }
+      );
 
-    // Invalidate Redis slot cache and vendor dashboard
-    await cacheService.invalidateSlots(booking.turfId, booking.date);
-    if (booking.vendorId) {
-      await cacheService.invalidateDashboard(booking.vendorId);
-    }
+      // Invalidate Redis slot cache and vendor dashboard
+      await cacheService.invalidateSlots(confirmedBooking.turfId, confirmedBooking.date);
+      if (confirmedBooking.vendorId) {
+        await cacheService.invalidateDashboard(confirmedBooking.vendorId);
+      }
 
-    // Send FCM push notifications safely in background (guarded against duplicate sends)
-    if (!booking.notificationSent) {
+      // Send FCM push notifications safely in background
       (async () => {
-        // Resolve vendorId strictly for the booked turf
-        let vendorId = booking.vendorId;
-        if (!vendorId && booking.turfId) {
-          const turf = await firestoreService.getDoc('turfs', booking.turfId);
+        let vendorId = confirmedBooking.vendorId;
+        if (!vendorId && confirmedBooking.turfId) {
+          const turf = await prisma.turf.findUnique({ where: { id: confirmedBooking.turfId } });
           vendorId = turf?.vendorId;
         }
 
         // 1. To User
-        if (booking.userId) {
+        if (confirmedBooking.userId) {
           await notificationService.sendNotification({
-            recipientId: booking.userId,
+            recipientId: confirmedBooking.userId,
             recipientRole: 'user',
             title: 'Booking Confirmed!',
-            body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
+            body: `Your slot at ${confirmedBooking.turfName || confirmedBooking.turf?.name || 'the turf'} on ${confirmedBooking.date} (${confirmedBooking.startTime}) is confirmed!`,
             type: 'booking',
             data: { bookingId },
           });
         }
 
-        // 2. To Vendor associated with the booked turf
+        // 2. To Vendor associated with the booked turf only
         if (vendorId) {
+          let turfName = confirmedBooking.turfName || confirmedBooking.turf?.name;
+          let turfType = confirmedBooking.turfType || confirmedBooking.sport || (Array.isArray(confirmedBooking.turf?.sports) && confirmedBooking.turf.sports[0]);
+
+          if ((!turfName || !turfType) && confirmedBooking.turfId) {
+            const turf = await prisma.turf.findUnique({ where: { id: confirmedBooking.turfId } });
+            if (turf) {
+              if (!turfName) turfName = turf.name;
+              if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
+            }
+          }
+
+          turfName = turfName || 'Turf';
+          turfType = turfType || 'Standard';
+          const timeSlot = `${confirmedBooking.startTime} - ${confirmedBooking.endTime}`;
+          const notifTitle = 'New Booking Request';
+          const notifBody = `New booking received for ${turfName}, ${timeSlot} on ${confirmedBooking.date}.`;
+
           await notificationService.sendNotification({
             recipientId: vendorId,
             recipientRole: 'vendor',
-            title: 'New Booking Received!',
-            body: `New booking for ${booking.date} at ${booking.startTime} (₹${booking.amount || booking.totalAmount || ''}).`,
+            title: notifTitle,
+            body: notifBody,
             type: 'booking',
-            data: { bookingId },
+            data: {
+              bookingId: String(bookingId),
+              turfId: String(confirmedBooking.turfId || ''),
+              screen: 'BookingDetail',
+              type: 'booking',
+              notificationText: notifBody,
+              turfName,
+              turfType,
+              date: confirmedBooking.date,
+              timeSlot,
+              amount: String(confirmedBooking.amount || confirmedBooking.totalAmount || ''),
+              paymentStatus: confirmedBooking.paymentStatus || 'success',
+            },
           });
         }
       })().catch((err) => console.warn('⚠️ Push notification dispatch warning:', err.message));
-    }
 
-    return sendSuccess(res, {
-      booking: confirmedBooking,
-      message: 'Payment verified and booking confirmed successfully',
-    });
+      return sendSuccess(res, {
+        booking: confirmedBooking,
+        message: 'Payment verified and booking confirmed successfully',
+      });
+    } catch (err) {
+      if (err instanceof BookingError) {
+        return sendError(res, err.message, err.status, err.code);
+      }
+      console.error('verifyPayment error:', err);
+      return sendError(res, 'Failed to verify payment', 500, 'PAYMENT_VERIFY_FAILED');
+    }
   },
 
   /**
@@ -118,57 +155,75 @@ const paymentController = {
         const paymentId = payload.payment?.entity?.id;
 
         if (orderId) {
-          const result = await firestoreService.queryWithCursor('bookings', {
-            filters: [['razorpayOrderId', '==', orderId]],
-            limit: 1,
+          const result = await bookingService.confirmByRazorpayOrderId(orderId, {
+            razorpayPaymentId: paymentId || '',
           });
 
-          if (result.items.length > 0) {
-            const booking = result.items[0];
-            if (booking.status !== 'confirmed' && !booking.notificationSent) {
-              await firestoreService.updateDoc('bookings', booking.id, {
-                status: 'confirmed',
-                razorpayPaymentId: paymentId || '',
-                confirmedAt: new Date(),
-                notificationSent: true,
-              });
+          if (result.found && result.updated) {
+            const booking = result.booking;
 
-              await cacheService.invalidateSlots(booking.turfId, booking.date);
-              if (booking.vendorId) {
-                await cacheService.invalidateDashboard(booking.vendorId);
-              }
-
-              // Send background notifications if not already sent
-              let vendorId = booking.vendorId;
-              if (!vendorId && booking.turfId) {
-                const turf = await firestoreService.getDoc('turfs', booking.turfId);
-                vendorId = turf?.vendorId;
-              }
-
-              if (vendorId) {
-                await notificationService.sendNotification({
-                  recipientId: vendorId,
-                  recipientRole: 'vendor',
-                  title: 'New Booking Received!',
-                  body: `New booking for ${booking.date} at ${booking.startTime}.`,
-                  type: 'booking',
-                  data: { bookingId: booking.id },
-                });
-              }
-
-              if (booking.userId) {
-                await notificationService.sendNotification({
-                  recipientId: booking.userId,
-                  recipientRole: 'user',
-                  title: 'Booking Confirmed!',
-                  body: `Your slot at ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
-                  type: 'booking',
-                  data: { bookingId: booking.id },
-                });
-              }
-
-              console.log(`✅ Webhook confirmed booking ${booking.id}`);
+            await cacheService.invalidateSlots(booking.turfId, booking.date);
+            if (booking.vendorId) {
+              await cacheService.invalidateDashboard(booking.vendorId);
             }
+
+            // Send background notifications
+            let vendorId = booking.vendorId;
+            if (!vendorId && booking.turfId) {
+              const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
+              vendorId = turf?.vendorId;
+            }
+
+            if (vendorId) {
+              let turfName = booking.turfName || booking.turf?.name;
+              let turfType = booking.turfType || booking.sport || (Array.isArray(booking.turf?.sports) && booking.turf.sports[0]);
+
+              if ((!turfName || !turfType) && booking.turfId) {
+                const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
+                if (turf) {
+                  if (!turfName) turfName = turf.name;
+                  if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
+                }
+              }
+
+              turfName = turfName || 'Turf';
+              turfType = turfType || 'Standard';
+              const timeSlot = `${booking.startTime} - ${booking.endTime}`;
+              const notifText = `New Booking: ${turfName} - ${turfType}, ${booking.date}, ${timeSlot}`;
+
+              await notificationService.sendNotification({
+                recipientId: vendorId,
+                recipientRole: 'vendor',
+                title: notifText,
+                body: notifText,
+                type: 'booking',
+                data: {
+                  bookingId: String(booking.id),
+                  screen: 'BookingDetail',
+                  type: 'booking',
+                  notificationText: notifText,
+                  turfName,
+                  turfType,
+                  date: booking.date,
+                  timeSlot,
+                  amount: String(booking.amount || booking.totalAmount || ''),
+                  paymentStatus: booking.paymentStatus || 'success',
+                },
+              });
+            }
+
+            if (booking.userId) {
+              await notificationService.sendNotification({
+                recipientId: booking.userId,
+                recipientRole: 'user',
+                title: 'Booking Confirmed!',
+                body: `Your slot at ${booking.turfName || booking.turf?.name || 'the turf'} on ${booking.date} (${booking.startTime}) is confirmed!`,
+                type: 'booking',
+                data: { bookingId: booking.id },
+              });
+            }
+
+            console.log(`✅ Webhook confirmed booking ${booking.id}`);
           }
         }
       }

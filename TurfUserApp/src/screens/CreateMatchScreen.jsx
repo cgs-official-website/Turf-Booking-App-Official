@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, Modal, FlatList,
+  TouchableOpacity, Modal, FlatList, ActivityIndicator, Image,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
 import { getSportIconComponent } from '../components/SportChip';
 import { matchStorage } from '../utils/matchStorage';
+import { turfsApi } from '../api/turfs';
 import PrimaryButton from '../components/PrimaryButton';
 
 const SPORTS = ['Cricket', 'Football', 'Badminton', 'Volleyball', 'Basketball', 'Tennis'];
@@ -16,13 +17,43 @@ export default function CreateMatchScreen({ route, navigation }) {
   const params = route.params || {};
   const { C, dark } = useTheme();
 
-  const [place] = useState(params.venue || params.place || '');
+  const [place, setPlace] = useState(params.venue || params.place || '');
+  const [selectedTurf, setSelectedTurf] = useState(null);
+  const [turfModal, setTurfModal] = useState(false);
+  const [turfsList, setTurfsList] = useState([]);
+  const [loadingTurfs, setLoadingTurfs] = useState(false);
+  const [turfSearch, setTurfSearch] = useState('');
+  const [customVenueInput, setCustomVenueInput] = useState('');
+
   const [sport, setSport] = useState(params.sport || 'Cricket');
   const [sportModal, setSportModal] = useState(false);
   const [date, setDate] = useState(params.date ? String(params.date) : 'Today');
   const [time, setTime] = useState(params.time || '07:00 PM');
   const [strangers, setStrangers] = useState(null); // 'yes' | 'no'
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLoadingTurfs(true);
+    turfsApi.getTurfs({ limit: 50 })
+      .then((res) => {
+        const list = res?.turfs || res?.data || (Array.isArray(res) ? res : []);
+        setTurfsList(list);
+      })
+      .catch((err) => {
+        console.warn('Failed to load turfs for match:', err);
+      })
+      .finally(() => setLoadingTurfs(false));
+  }, []);
+
+  const filteredTurfs = useMemo(() => {
+    if (!turfSearch.trim()) return turfsList;
+    const q = turfSearch.toLowerCase();
+    return turfsList.filter((t) =>
+      (t.name && t.name.toLowerCase().includes(q)) ||
+      (t.city && t.city.toLowerCase().includes(q)) ||
+      (t.address && t.address.toLowerCase().includes(q))
+    );
+  }, [turfsList, turfSearch]);
 
   const canProceed = place.trim().length > 0 && sport && strangers !== null;
 
@@ -32,6 +63,7 @@ export default function CreateMatchScreen({ route, navigation }) {
     try {
       const match = await matchStorage.createMatch({
         bookingId: params.bookingId || null,
+        turfId: selectedTurf?.id || selectedTurf?._id || null,
         place,
         sport,
         date,
@@ -70,10 +102,19 @@ export default function CreateMatchScreen({ route, navigation }) {
         <Text style={[styles.sectionTitle, { color: C.text }]}>Match Configuration</Text>
 
         <Text style={[styles.label, { color: C.text }]}>Venue / Stadium</Text>
-        <View style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}>
-          <Feather name="map-pin" size={16} color={C.primary} style={{ marginRight: 8 }} />
-          <Text style={[styles.inputText, { color: C.text }]}>{place || 'Select ground'}</Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.inputBox, { backgroundColor: C.card, borderColor: place ? C.primary : C.border }]}
+          onPress={() => setTurfModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Feather name="map-pin" size={16} color={C.primary} style={{ marginRight: 8 }} />
+            <Text style={[styles.inputText, { color: place ? C.text : C.caption }]} numberOfLines={1}>
+              {place || 'Select ground / stadium'}
+            </Text>
+          </View>
+          <Feather name="chevron-down" size={18} color={C.subtext} />
+        </TouchableOpacity>
 
         <Text style={[styles.label, { color: C.text }]}>Sport Category</Text>
         <TouchableOpacity
@@ -163,6 +204,131 @@ export default function CreateMatchScreen({ route, navigation }) {
         />
       </View>
 
+      {/* Venue selection modal */}
+      <Modal visible={turfModal} transparent animationType="slide" onRequestClose={() => setTurfModal(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setTurfModal(false)}
+        >
+          <View
+            style={[
+              styles.turfModalBox,
+              { backgroundColor: C.card, borderColor: C.border },
+              SHADOW.floating,
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, { color: C.text, marginBottom: 0 }]}>Select Venue / Stadium</Text>
+              <TouchableOpacity onPress={() => setTurfModal(false)}>
+                <Feather name="x" size={20} color={C.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search ground */}
+            <View style={[styles.searchBox, { backgroundColor: dark ? '#18273D' : '#F1F5F9', borderColor: C.border }]}>
+              <Feather name="search" size={16} color={C.subtext} style={{ marginRight: 8 }} />
+              <TextInput
+                style={[styles.searchInput, { color: C.text }]}
+                placeholder="Search stadium or city..."
+                placeholderTextColor={C.caption}
+                value={turfSearch}
+                onChangeText={setTurfSearch}
+              />
+              {turfSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setTurfSearch('')}>
+                  <Feather name="x-circle" size={16} color={C.subtext} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {loadingTurfs ? (
+              <View style={{ padding: 24, alignItems: 'center' }}>
+                <ActivityIndicator color={C.primary} />
+                <Text style={{ color: C.subtext, marginTop: 8 }}>Loading available stadiums...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredTurfs}
+                keyExtractor={(item) => String(item.id || item._id)}
+                style={{ maxHeight: 280 }}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <View style={{ padding: 20, alignItems: 'center' }}>
+                    <Text style={{ color: C.subtext }}>No stadiums found</Text>
+                  </View>
+                }
+                renderItem={({ item }) => {
+                  const isSelected = place === item.name;
+                  const loc = item.address || item.city || item.location?.city || '';
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.turfOptionRow,
+                        {
+                          borderBottomColor: C.border,
+                          backgroundColor: isSelected ? C.primaryLight : 'transparent',
+                        },
+                      ]}
+                      onPress={() => {
+                        setPlace(item.name);
+                        setSelectedTurf(item);
+                        if (item.sports?.length) {
+                          setSport(item.sports[0]);
+                        }
+                        setTurfModal(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={[styles.turfRowName, { color: C.text }]}>{item.name}</Text>
+                        {!!loc && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                            <Feather name="map-pin" size={12} color={C.subtext} style={{ marginRight: 4 }} />
+                            <Text style={[styles.turfRowLoc, { color: C.subtext }]} numberOfLines={1}>{loc}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {isSelected ? (
+                        <Feather name="check-circle" size={20} color={C.primary} />
+                      ) : (
+                        <Feather name="chevron-right" size={18} color={C.subtext} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )}
+
+            {/* Custom ground input option */}
+            <View style={[styles.customGroundWrap, { borderTopColor: C.border }]}>
+              <Text style={[styles.customGroundLabel, { color: C.subtext }]}>Or enter custom stadium name:</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                <TextInput
+                  style={[styles.customGroundInput, { backgroundColor: dark ? '#18273D' : '#F1F5F9', color: C.text, borderColor: C.border }]}
+                  placeholder="e.g. City Sports Complex"
+                  placeholderTextColor={C.caption}
+                  value={customVenueInput}
+                  onChangeText={setCustomVenueInput}
+                />
+                <TouchableOpacity
+                  style={[styles.customApplyBtn, { backgroundColor: C.primary, opacity: customVenueInput.trim() ? 1 : 0.5 }]}
+                  disabled={!customVenueInput.trim()}
+                  onPress={() => {
+                    setPlace(customVenueInput.trim());
+                    setSelectedTurf(null);
+                    setTurfModal(false);
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>Apply</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Sport selection modal */}
       <Modal visible={sportModal} transparent animationType="fade" onRequestClose={() => setSportModal(false)}>
         <TouchableOpacity
@@ -217,7 +383,18 @@ const styles = StyleSheet.create({
   footer:      { padding: SPACING.lg, borderTopWidth: 1 },
   modalOverlay:{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'center', padding: SPACING.lg },
   modalBox:    { borderRadius: RADIUS.xxl, padding: 20, borderWidth: 1 },
+  turfModalBox:{ borderRadius: RADIUS.xxl, padding: 20, borderWidth: 1, maxHeight: '80%' },
+  modalHeaderRow:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   modalTitle:  { ...FONT.h2, fontSize: 18, fontWeight: '800', marginBottom: 14 },
+  searchBox:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: RADIUS.md, paddingHorizontal: 12, height: 44, marginBottom: 12 },
+  searchInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  turfOptionRow:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 8, borderBottomWidth: 1, borderRadius: RADIUS.sm },
+  turfRowName: { fontSize: 15, fontWeight: '800' },
+  turfRowLoc:  { fontSize: 12 },
+  customGroundWrap:{ marginTop: 12, paddingTop: 12, borderTopWidth: 1 },
+  customGroundLabel:{ fontSize: 12, fontWeight: '600' },
+  customGroundInput:{ flex: 1, height: 42, borderWidth: 1, borderRadius: RADIUS.md, paddingHorizontal: 12, fontSize: 13 },
+  customApplyBtn:{ paddingHorizontal: 16, height: 42, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
   sportRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1 },
   sportIconWrap:{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   sportRowText:{ fontSize: 15, fontWeight: '700' },

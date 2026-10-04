@@ -24,4 +24,14 @@ export const notificationsApi = {
     apiRequest(`/notifications/${id}/read`, {
       method: 'PATCH',
     }),
+
+  // GET /api/v1/notifications/preferences
+  getPreferences: () => apiRequest('/notifications/preferences', { method: 'GET' }),
+
+  // PUT /api/v1/notifications/preferences
+  updatePreferences: (pushNotifications) =>
+    apiRequest('/notifications/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ pushNotifications }),
+    }),
 };

@@ -1,15 +1,25 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Image, TouchableOpacity,
   ScrollView, RefreshControl, StatusBar, ActivityIndicator, Dimensions,
+  Alert, Platform, PermissionsAndroid, Linking, AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import Geolocation from '@react-native-community/geolocation';
+
+try {
+  Geolocation.setRNConfiguration({
+    skipPermissionRequests: false,
+    authorizationLevel: 'auto',
+    locationProvider: 'playServices',
+  });
+} catch (_) { }
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { turfsApi } from '../api/turfs';
+import { nearbyTurfsApi } from '../api/nearbyTurfsApi';
 import { notificationsApi } from '../api/notifications';
 import { fetchWishlist, toggleWishlist } from '../redux/wishlistSlice';
 import { setLocationPermission } from '../redux/authSlice';
@@ -20,6 +30,7 @@ import TurfCard from '../components/TurfCard';
 import SectionHeader from '../components/SectionHeader';
 import { TurfCardSkeleton } from '../components/SkeletonLoader';
 import FilterBottomSheet from './FilterBottomSheet';
+import NearbyTurfsModal from '../components/NearbyTurfsModal';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const SPORTS = [
@@ -40,30 +51,45 @@ function LocationPermissionView({ C, dark }) {
 
   const handleAllow = async () => {
     setLoading(true);
+
+    const onPosSuccess = async (position) => {
+      try {
+        const { latitude, longitude } = position.coords;
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+          { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' } }
+        );
+        const data = await res.json();
+        const addr = data.address;
+        const cityName =
+          addr.suburb || addr.town || addr.city ||
+          addr.village || addr.county || addr.state || 'Current Location';
+        dispatch(setLocationPermission(cityName));
+      } catch {
+        dispatch(setLocationPermission('Current Location'));
+      }
+      setLoading(false);
+    };
+
+    const onPosFail = () => {
+      dispatch(setLocationPermission(null));
+      setLoading(false);
+    };
+
     Geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' } }
+      onPosSuccess,
+      (err) => {
+        if (err && (err.code === 3 || err.code === 2)) {
+          Geolocation.getCurrentPosition(
+            onPosSuccess,
+            onPosFail,
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
           );
-          const data = await res.json();
-          const addr = data.address;
-          const cityName =
-            addr.suburb || addr.town || addr.city ||
-            addr.village || addr.county || addr.state || 'Current Location';
-          dispatch(setLocationPermission(cityName));
-        } catch {
-          dispatch(setLocationPermission('Current Location'));
+        } else {
+          onPosFail();
         }
-        setLoading(false);
       },
-      () => {
-        dispatch(setLocationPermission(null));
-        setLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 1000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
   };
 
@@ -99,28 +125,223 @@ function LocationPermissionView({ C, dark }) {
 
 // ─── Main HomeScreen ──────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
-  const dispatch  = useDispatch();
+  const dispatch = useDispatch();
   const { C, dark } = useTheme();
 
-  const user                      = useSelector((s) => s.auth.user);
-  const wishlist                  = useSelector((s) => s.wishlist.wishlist);
+  const user = useSelector((s) => s.auth.user);
+  const wishlist = useSelector((s) => s.wishlist.wishlist);
   const locationPermissionGranted = useSelector((s) => s.auth.locationPermissionGranted);
-  const location                  = useSelector((s) => s.auth.location);
-  const [turfs,         setTurfs]         = useState([]);
-  const [sport,         setSport]         = useState(null);
-  const [loading,       setLoading]       = useState(true);
-  const [unread,        setUnread]        = useState(0);
+  const location = useSelector((s) => s.auth.location);
+  const [turfs, setTurfs] = useState([]);
+  const [sport, setSport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [unread, setUnread] = useState(0);
   const [filterVisible, setFilterVisible] = useState(false);
+  const [nearbyModalVisible, setNearbyModalVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState({ sort: null, time: null });
+
+  const [nearbyTurfs, setNearbyTurfs] = useState([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationOff, setLocationOff] = useState(false);
+  const [userCoords, setUserCoords] = useState(null);
+  const [customLocationName, setCustomLocationName] = useState(null);
+  const waitingForLocationRef = useRef(false);
+
+  const onLocationSuccess = useCallback(async (position) => {
+    try {
+      const { latitude, longitude } = position.coords;
+      setUserCoords({ lat: latitude, lng: longitude });
+      setLocationOff(false);
+
+      // Reverse geocoding to get real place name (e.g., "Perundurai Road, Erode")
+      let placeName = '';
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+          { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' } }
+        );
+        const data = await res.json();
+        const addr = data.address || {};
+        const road = addr.road || addr.suburb || addr.neighbourhood;
+        const city = addr.city || addr.town || addr.village || addr.county || addr.state;
+        if (road && city && road !== city) {
+          placeName = `${road}, ${city}`;
+        } else {
+          placeName = city || road || 'Current Location';
+        }
+      } catch {
+        placeName = 'Current Location';
+      }
+
+      setCustomLocationName(placeName);
+      dispatch(setLocationPermission(placeName));
+
+      // Call API: GET /api/turfs/nearby?lat=..&lng=..&radius=5
+      try {
+        const res = await nearbyTurfsApi.getNearbyTurfs({
+          lat: latitude,
+          lng: longitude,
+          radius: 5,
+        });
+        const list = res.data?.turfs || res.turfs || [];
+        setNearbyTurfs(list);
+      } catch (apiErr) {
+        console.warn('Nearby turfs API error:', apiErr.message);
+      }
+    } catch (err) {
+      console.warn('Location processing error:', err);
+    } finally {
+      setIsLocating(false);
+      setNearbyLoading(false);
+    }
+  }, [dispatch]);
+
+  const handleTurnOnLocation = useCallback(async () => {
+    setIsLocating(true);
+    setNearbyLoading(true);
+
+    const onQuickSuccess = (position) => {
+      onLocationSuccess(position);
+    };
+
+    const onQuickFail = async () => {
+      setIsLocating(false);
+      setNearbyLoading(false);
+      waitingForLocationRef.current = true;
+      if (Platform.OS === 'android') {
+        try {
+          await Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
+          return;
+        } catch {
+          Linking.openSettings().catch(() => { });
+        }
+      } else {
+        Linking.openSettings().catch(() => { });
+      }
+    };
+
+    // If user already turned on location in mobile (e.g. from notification shade), view location immediately
+    Geolocation.getCurrentPosition(
+      onQuickSuccess,
+      () => {
+        Geolocation.getCurrentPosition(
+          onQuickSuccess,
+          onQuickFail,
+          { enableHighAccuracy: false, timeout: 2500, maximumAge: 60000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 2500, maximumAge: 30000 }
+    );
+  }, [onLocationSuccess]);
+
+  const requestLocationAndFetchNearby = useCallback(async () => {
+    setIsLocating(true);
+    setNearbyLoading(true);
+
+    let hasPerm = true;
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        hasPerm =
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+      } catch {
+        hasPerm = false;
+      }
+    }
+
+    if (!hasPerm) {
+      setIsLocating(false);
+      setNearbyLoading(false);
+      setLocationOff(true);
+      Alert.alert(
+        'Location is Turned Off',
+        'Please allow location permission in your device settings to discover nearby turf grounds.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Turn On Location',
+            onPress: () => {
+              waitingForLocationRef.current = true;
+              Linking.openSettings().catch(() => { });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    const onLocationFailure = (geoErr) => {
+      setIsLocating(false);
+      setNearbyLoading(false);
+      setLocationOff(true);
+      // Popup notification when location is off
+      Alert.alert(
+        'Location is Turned Off',
+        'Please turn on GPS / Location services to see turf grounds near you.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Turn On Location',
+            onPress: handleTurnOnLocation,
+          },
+        ]
+      );
+    };
+
+    Geolocation.getCurrentPosition(
+      onLocationSuccess,
+      (geoErr) => {
+        if (geoErr && (geoErr.code === 3 || geoErr.code === 2)) {
+          Geolocation.getCurrentPosition(
+            onLocationSuccess,
+            onLocationFailure,
+            { enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 }
+          );
+        } else {
+          onLocationFailure(geoErr);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+    );
+  }, [onLocationSuccess, handleTurnOnLocation]);
+
+  // When returning to app after turning on location in mobile settings, auto-detect & view location
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        if (waitingForLocationRef.current || locationOff) {
+          waitingForLocationRef.current = false;
+          Geolocation.getCurrentPosition(
+            (pos) => onLocationSuccess(pos),
+            () => {
+              Geolocation.getCurrentPosition(
+                (pos) => onLocationSuccess(pos),
+                () => { },
+                { enableHighAccuracy: false, timeout: 3500, maximumAge: 60000 }
+              );
+            },
+            { enableHighAccuracy: true, timeout: 3500, maximumAge: 30000 }
+          );
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [locationOff, onLocationSuccess]);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       const params = {};
-      if (sport)                params.sport = sport;
-      if (activeFilters.sort)   params.sort  = activeFilters.sort;
-      if (activeFilters.time)   params.time  = activeFilters.time;
-      if (location && location !== 'Current Location') params.location = location;
+      if (sport) params.sport = sport;
+      if (activeFilters.sort) params.sort = activeFilters.sort;
+      if (activeFilters.time) params.time = activeFilters.time;
       const res = await turfsApi.getTurfs(params);
       setTurfs(res.turfs || res.items || []);
     } catch {
@@ -135,12 +356,30 @@ export default function HomeScreen({ navigation }) {
     dispatch(fetchWishlist());
   }, [dispatch]);
 
+  useEffect(() => {
+    if (locationPermissionGranted) {
+      requestLocationAndFetchNearby();
+    }
+  }, [locationPermissionGranted, requestLocationAndFetchNearby]);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([load(), requestLocationAndFetchNearby()]);
+  }, [load, requestLocationAndFetchNearby]);
+
   useFocusEffect(
     useCallback(() => {
       notificationsApi.getAll()
         .then((r) => setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read).length))
-        .catch(() => {});
-    }, [])
+        .catch(() => { });
+
+      if (locationOff) {
+        Geolocation.getCurrentPosition(
+          (pos) => onLocationSuccess(pos),
+          () => { },
+          { enableHighAccuracy: false, timeout: 2500, maximumAge: 60000 }
+        );
+      }
+    }, [locationOff, onLocationSuccess])
   );
 
   const handleApplyFilter = (filters) => {
@@ -171,11 +410,15 @@ export default function HomeScreen({ navigation }) {
   };
 
   const displayName = user?.name?.split(' ')[0] || 'Player';
-  const displayLocation = (location && location !== 'Current Location')
-    ? location
-    : (typeof user?.location === 'string' && user.location.trim()
-        ? user.location.trim()
-        : (user?.location?.address || user?.location?.city || 'Chennai, Tamil Nadu'));
+  const displayLocation = isLocating
+    ? 'Locating...'
+    : locationOff
+      ? 'Select Location'
+      : (customLocationName || (location && location !== 'Current Location'
+        ? location
+        : (typeof user?.location === 'string' && user.location.trim()
+          ? user.location.trim()
+          : (user?.location?.address || user?.location?.city || 'Chennai, Tamil Nadu'))));
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
@@ -185,7 +428,7 @@ export default function HomeScreen({ navigation }) {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 110 }}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[C.primary]} />}
+          refreshControl={<RefreshControl refreshing={loading || isLocating} onRefresh={handleRefresh} colors={[C.primary]} />}
         >
           {/* ── Top Header Bar ── */}
           <View style={styles.header}>
@@ -196,17 +439,35 @@ export default function HomeScreen({ navigation }) {
                 </Text>
                 <Feather name="smile" size={13} color={C.primary} style={{ marginLeft: 5 }} />
               </View>
-              <TouchableOpacity
-                style={styles.locationRow}
-                onPress={() => navigation.navigate('Location')}
-                activeOpacity={0.7}
-              >
-                <Feather name="map-pin" size={14} color={C.primary} style={{ marginRight: 4 }} />
-                <Text style={[styles.locationText, { color: C.text }]} numberOfLines={1}>
-                  {displayLocation}
-                </Text>
-                <Feather name="chevron-down" size={14} color={C.primary} style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
+              <View style={styles.locationContainer}>
+                {/* Location Icon: Tap to get current location & show turfs within 5 km */}
+                <TouchableOpacity
+                  style={styles.locationIconBtn}
+                  onPress={requestLocationAndFetchNearby}
+                  activeOpacity={0.65}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Feather name="map-pin" size={14} color={C.primary} style={{ marginRight: 4 }} />
+                </TouchableOpacity>
+
+                {/* Location Text & Chevron: Keep existing behavior to open Location Screen */}
+                <TouchableOpacity
+                  style={styles.locationRow}
+                  onPress={() => {
+                    if (locationOff) {
+                      requestLocationAndFetchNearby();
+                    } else {
+                      navigation.navigate('Location');
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.locationText, { color: C.text }]} numberOfLines={1}>
+                    {displayLocation}
+                  </Text>
+                  <Feather name="chevron-down" size={14} color={C.primary} style={{ marginLeft: 2 }} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Notification Bell */}
@@ -355,23 +616,68 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.section}>
             <SectionHeader
               title="Nearby Grounds"
-              subtitle="Fastest to reach from your current area"
-              actionText="Explore"
-              onActionPress={() => navigation.navigate('Explore')}
+              subtitle={
+                customLocationName
+                  ? `Fastest to reach from ${customLocationName}`
+                  : "Fastest to reach from your current area"
+              }
+              actionText={nearbyTurfs.length > 0 ? "View All" : "Explore"}
+              onActionPress={() => {
+                if (nearbyTurfs.length > 0) {
+                  setNearbyModalVisible(true);
+                } else {
+                  navigation.navigate('Explore');
+                }
+              }}
               style={{ paddingHorizontal: SPACING.lg }}
             />
 
             <View style={{ paddingHorizontal: SPACING.lg }}>
-              {nearby.slice(0, 4).map((item) => (
-                <TurfCard
-                  key={item._id || item.id}
-                  turf={item}
-                  variant="vertical"
-                  isFavorite={isWishlisted(item._id || item.id)}
-                  onToggleFavorite={() => dispatch(toggleWishlist(item))}
-                  onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id })}
-                />
-              ))}
+              {isLocating || nearbyLoading ? (
+                <TurfCardSkeleton />
+              ) : locationOff ? (
+                <View style={[styles.locationPromptCard, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <View style={[styles.locationPromptIcon, { backgroundColor: C.primaryLight }]}>
+                    <Feather name="map-pin" size={24} color={C.primary} />
+                  </View>
+                  <Text style={[styles.locationPromptTitle, { color: C.text }]}>
+                    Location Access Needed
+                  </Text>
+                  <Text style={[styles.locationPromptDesc, { color: C.subtext }]}>
+                    Give permission to detect your position and display turf grounds within 5 km of you.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.locationPromptBtn, { backgroundColor: C.primary }]}
+                    onPress={requestLocationAndFetchNearby}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="navigation" size={15} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={styles.locationPromptBtnText}>Enable Location & View Turfs</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : nearbyTurfs.length > 0 ? (
+                nearbyTurfs.slice(0, 4).map((item) => (
+                  <TurfCard
+                    key={item._id || item.id}
+                    turf={item}
+                    variant="vertical"
+                    isFavorite={isWishlisted(item._id || item.id)}
+                    onToggleFavorite={() => dispatch(toggleWishlist(item))}
+                    onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id, turf: item })}
+                  />
+                ))
+              ) : (
+                nearby.slice(0, 4).map((item) => (
+                  <TurfCard
+                    key={item._id || item.id}
+                    turf={item}
+                    variant="vertical"
+                    isFavorite={isWishlisted(item._id || item.id)}
+                    onToggleFavorite={() => dispatch(toggleWishlist(item))}
+                    onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id })}
+                  />
+                ))
+              )}
             </View>
           </View>
 
@@ -405,6 +711,12 @@ export default function HomeScreen({ navigation }) {
         onApply={handleApplyFilter}
         initialFilters={activeFilters}
       />
+
+      <NearbyTurfsModal
+        visible={nearbyModalVisible}
+        onClose={() => setNearbyModalVisible(false)}
+        navigation={navigation}
+      />
     </View>
   );
 }
@@ -424,10 +736,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  locationRow: {
+  locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
+  },
+  locationIconBtn: {
+    paddingVertical: 4,
+    paddingRight: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   locationText: {
     ...FONT.h3,
@@ -624,5 +946,46 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  locationPromptCard: {
+    padding: 20,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  locationPromptIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  locationPromptTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  locationPromptDesc: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+  },
+  locationPromptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: RADIUS.round,
+  },
+  locationPromptBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

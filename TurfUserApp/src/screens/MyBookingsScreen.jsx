@@ -220,7 +220,7 @@ export default function MyBookingsScreen({ navigation }) {
                 <View style={[styles.cardFooter, { borderTopColor: C.border }]}>
                   <View>
                     <Text style={[styles.priceLabel, { color: C.caption }]}>Paid Amount</Text>
-                    <Text style={[styles.priceValue, { color: C.primary }]}>₹{item.totalAmount || 800}</Text>
+                    <Text style={[styles.priceValue, { color: C.primary }]}>₹{item.totalAmount ?? item.amount ?? 500}</Text>
                   </View>
 
                   <View style={{ flexDirection: 'row', gap: 8 }}>

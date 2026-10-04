@@ -12,17 +12,17 @@ const notificationRoutes = require('./notificationRoutes');
 const placesRoutes = require('./placesRoutes');
 const adminRoutes = require('./adminRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
+const enquiryRoutes = require('./enquiryRoutes');
 const { sendSuccess } = require('../utils/response');
 
 // Health Check
 router.get('/health', async (req, res) => {
-  const { query } = require('../config/db');
+  const prisma = require('../config/prisma');
   let dbOk = false;
   let userCount = 0;
   try {
-    const resCount = await query("SELECT count(*) as count FROM documents WHERE collection = 'users'");
+    userCount = await prisma.user.count();
     dbOk = true;
-    userCount = parseInt(resCount.rows[0]?.count || 0, 10);
   } catch (e) {
     dbOk = false;
   }
@@ -52,6 +52,8 @@ router.use('/matches', matchRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/places', placesRoutes);
 router.use('/admin', adminRoutes);
+router.use('/enquiries', enquiryRoutes);
+router.use('/vendor-enquiries', enquiryRoutes);
 
 // Public Reviews Stream (Directly from database)
 router.get('/reviews', async (req, res) => {

@@ -22,4 +22,11 @@ export const notificationsApi = {
 
   // PATCH /api/v1/notifications/read-all
   markAllRead: () => client.patch('/notifications/read-all'),
+
+  // GET /api/v1/notifications/preferences
+  getPreferences: () => client.get('/notifications/preferences'),
+
+  // PUT /api/v1/notifications/preferences
+  updatePreferences: (pushNotifications) =>
+    client.put('/notifications/preferences', { pushNotifications }),
 };

@@ -1,4 +1,4 @@
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
 const razorpayService = require('../services/razorpayService');
 const { sendSuccess, sendError } = require('../utils/response');
 
@@ -74,89 +74,116 @@ const SEED_PLANS = [
 const subscriptionController = {
   /**
    * GET /api/v1/subscription/plans
-   * Dynamic fetching from Firestore with fallback seed
    */
   async getPlans(req, res) {
-    let result = await firestoreService.queryWithCursor('subscription_plans', { limit: 50 });
-    let plans = result?.items || [];
+    try {
+      let plans = await prisma.subscriptionPlan.findMany({
+        where: { isActive: true },
+        orderBy: { price: 'asc' },
+      });
 
-    if (!plans || plans.length === 0) {
-      for (const p of SEED_PLANS) {
-        await firestoreService.setDoc('subscription_plans', p.id, p);
+      if (!plans || plans.length === 0) {
+        for (const p of SEED_PLANS) {
+          await prisma.subscriptionPlan.upsert({
+            where: { id: p.id },
+            create: {
+              id: p.id,
+              name: p.name,
+              price: p.price,
+              durationDays: p.durationDays,
+              description: p.description,
+              features: p.features,
+              popular: p.popular,
+              isActive: true,
+            },
+            update: {},
+          });
+        }
+        plans = await prisma.subscriptionPlan.findMany({
+          where: { isActive: true },
+          orderBy: { price: 'asc' },
+        });
       }
-      result = await firestoreService.queryWithCursor('subscription_plans', { limit: 50 });
-      plans = result?.items || [];
-    }
 
-    const rawPlans = (plans && plans.length > 0) ? plans : SEED_PLANS;
-    const seen = new Set();
-    const uniquePlans = [];
-    for (const p of rawPlans) {
-      const key = (p.id || p._id || p.name || '').trim();
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        uniquePlans.push(p);
-      }
-    }
+      const formatted = plans.map((p) => ({
+        ...p,
+        _id: p.id,
+        price: Number(p.price),
+      }));
 
-    return sendSuccess(res, { plans: uniquePlans });
+      return sendSuccess(res, { plans: formatted });
+    } catch (err) {
+      console.error('getPlans error:', err);
+      return sendSuccess(res, { plans: SEED_PLANS });
+    }
   },
 
   /**
    * POST /api/v1/subscription/plans (Admin only)
-   * Create dynamic subscription plan
    */
   async createPlan(req, res) {
     const { name, price, durationDays, description, features, popular } = req.body;
-    if (!name || !price || !durationDays) {
+    if (!name || price === undefined || !durationDays) {
       return sendError(res, 'Name, price and durationDays are required', 400, 'VALIDATION_ERROR');
     }
 
-    const planId = `plan_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`;
-    const newPlan = {
-      id: planId,
-      _id: planId,
-      name: name.trim(),
-      price: Number(price),
-      durationDays: Number(durationDays),
-      description: description || '',
-      features: Array.isArray(features) ? features : (typeof features === 'string' ? features.split('\n').filter(Boolean) : []),
-      popular: !!popular,
-      status: 'active',
-      createdAt: new Date(),
-    };
+    try {
+      const planId = `plan_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`;
+      const plan = await prisma.subscriptionPlan.create({
+        data: {
+          id: planId,
+          name: name.trim(),
+          price: Number(price),
+          durationDays: Number(durationDays),
+          description: description || '',
+          features: Array.isArray(features) ? features : (typeof features === 'string' ? features.split('\n').filter(Boolean) : []),
+          popular: !!popular,
+          isActive: true,
+        },
+      });
 
-    await firestoreService.setDoc('subscription_plans', planId, newPlan);
-    return sendSuccess(res, { plan: newPlan, message: 'Subscription plan created successfully' });
+      return sendSuccess(res, { plan: { ...plan, _id: plan.id, price: Number(plan.price) }, message: 'Subscription plan created successfully' });
+    } catch (err) {
+      console.error('createPlan error:', err);
+      return sendError(res, 'Failed to create plan', 500, 'CREATE_FAILED');
+    }
   },
 
   /**
    * PUT /api/v1/subscription/plans/:id (Admin only)
-   * Update dynamic subscription plan
    */
   async updatePlan(req, res) {
     const { id } = req.params;
-    const { name, price, durationDays, description, features, popular, status } = req.body;
+    const { name, price, durationDays, description, features, popular, status, isActive } = req.body;
 
-    const existing = await firestoreService.getDoc('subscription_plans', id);
-    if (!existing) {
-      return sendError(res, 'Subscription plan not found', 404, 'NOT_FOUND');
+    try {
+      const existing = await prisma.subscriptionPlan.findUnique({ where: { id } });
+      if (!existing) {
+        return sendError(res, 'Subscription plan not found', 404, 'NOT_FOUND');
+      }
+
+      const updates = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (price !== undefined) updates.price = Number(price);
+      if (durationDays !== undefined) updates.durationDays = Number(durationDays);
+      if (description !== undefined) updates.description = description;
+      if (features !== undefined) {
+        updates.features = Array.isArray(features) ? features : (typeof features === 'string' ? features.split('\n').filter(Boolean) : []);
+      }
+      if (popular !== undefined) updates.popular = !!popular;
+      if (isActive !== undefined) updates.isActive = !!isActive;
+      if (status !== undefined) updates.isActive = status === 'active';
+
+      const updated = await prisma.subscriptionPlan.update({
+        where: { id },
+        data: updates,
+      });
+
+      return sendSuccess(res, { plan: { ...updated, _id: updated.id, price: Number(updated.price) }, message: 'Subscription plan updated successfully' });
+    } catch (err) {
+      console.error('updatePlan error:', err);
+      return sendError(res, 'Failed to update plan', 500, 'UPDATE_FAILED');
     }
-
-    const updates = {};
-    if (name !== undefined) updates.name = name.trim();
-    if (price !== undefined) updates.price = Number(price);
-    if (durationDays !== undefined) updates.durationDays = Number(durationDays);
-    if (description !== undefined) updates.description = description;
-    if (features !== undefined) {
-      updates.features = Array.isArray(features) ? features : (typeof features === 'string' ? features.split('\n').filter(Boolean) : []);
-    }
-    if (popular !== undefined) updates.popular = !!popular;
-    if (status !== undefined) updates.status = status;
-    updates.updatedAt = new Date();
-
-    const updated = await firestoreService.setDoc('subscription_plans', id, updates, true);
-    return sendSuccess(res, { plan: updated, message: 'Subscription plan updated successfully' });
   },
 
   /**
@@ -164,8 +191,13 @@ const subscriptionController = {
    */
   async deletePlan(req, res) {
     const { id } = req.params;
-    await firestoreService.deleteDoc('subscription_plans', id);
-    return sendSuccess(res, { message: 'Subscription plan deleted successfully' });
+    try {
+      await prisma.subscriptionPlan.delete({ where: { id } });
+      return sendSuccess(res, { message: 'Subscription plan deleted successfully' });
+    } catch (err) {
+      console.error('deletePlan error:', err);
+      return sendError(res, 'Failed to delete plan', 500, 'DELETE_FAILED');
+    }
   },
 
   /**
@@ -175,40 +207,49 @@ const subscriptionController = {
     const { uid } = req.user;
     const { planId } = req.body;
 
-    let plan = await firestoreService.getDoc('subscription_plans', planId);
-    if (!plan) {
-      plan = SEED_PLANS.find((p) => p.id === planId || p._id === planId);
+    try {
+      let plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+      if (!plan) {
+        plan = SEED_PLANS.find((p) => p.id === planId || p._id === planId);
+      }
+      if (!plan) {
+        return sendError(res, 'Invalid subscription plan', 400, 'INVALID_PLAN');
+      }
+
+      const planPrice = Number(plan.price);
+      const order = await razorpayService.createOrder(planPrice, `sub_${uid.slice(-6)}_${Date.now()}`, {
+        vendorId: uid,
+        planId: plan.id,
+      });
+
+      const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const subDoc = await prisma.vendorSubscription.create({
+        data: {
+          id: subId,
+          vendorId: uid,
+          planId: plan.id,
+          planName: plan.name,
+          amount: planPrice,
+          durationDays: plan.durationDays,
+          razorpayOrderId: order.id,
+          status: 'created',
+        },
+      });
+
+      return sendSuccess(res, {
+        orderId: order.id,
+        order: { id: order.id, amount: order.amount, currency: order.currency },
+        keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+        mock: process.env.MOCK_PAYMENTS === 'true' || !process.env.RAZORPAY_KEY_ID,
+        amount: order.amount,
+        currency: order.currency,
+        subscriptionId: subDoc.id,
+        plan,
+      });
+    } catch (err) {
+      console.error('createSubscriptionOrder error:', err);
+      return sendError(res, 'Failed to create subscription order', 500, 'CREATE_ORDER_FAILED');
     }
-    if (!plan) {
-      return sendError(res, 'Invalid subscription plan', 400, 'INVALID_PLAN');
-    }
-
-    const order = await razorpayService.createOrder(plan.price, `sub_${uid.slice(-6)}_${Date.now()}`, {
-      vendorId: uid,
-      planId: plan.id || plan._id || planId,
-    });
-
-    const subDoc = await firestoreService.createDoc('subscriptions', {
-      vendorId: uid,
-      planId: plan.id || plan._id || planId,
-      planName: plan.name,
-      amount: plan.price,
-      durationDays: plan.durationDays,
-      razorpayOrderId: order.id,
-      status: 'created',
-      createdAt: new Date(),
-    });
-
-    return sendSuccess(res, {
-      orderId: order.id,
-      order: { id: order.id, amount: order.amount, currency: order.currency },
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-      mock: process.env.MOCK_PAYMENTS === 'true' || !process.env.RAZORPAY_KEY_ID,
-      amount: order.amount,
-      currency: order.currency,
-      subscriptionId: subDoc.id,
-      plan,
-    });
   },
 
   /**
@@ -218,53 +259,41 @@ const subscriptionController = {
     const { uid } = req.user;
     const { planId, subscriptionId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    if (process.env.MOCK_PAYMENTS !== 'true' && razorpay_signature !== 'MOCK_SIGNATURE_FOR_TESTING') {
-      const isValid = razorpayService.verifySignature(
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature
-      );
-      if (!isValid) {
-        return sendError(res, 'Payment verification failed', 400, 'INVALID_SIGNATURE');
+    try {
+      if (process.env.MOCK_PAYMENTS !== 'true' && razorpay_signature !== 'MOCK_SIGNATURE_FOR_TESTING') {
+        const isValid = razorpayService.verifySignature(
+          razorpay_order_id,
+          razorpay_payment_id,
+          razorpay_signature
+        );
+        if (!isValid) {
+          return sendError(res, 'Payment verification failed', 400, 'INVALID_SIGNATURE');
+        }
       }
-    }
 
-    let plan = await firestoreService.getDoc('subscription_plans', planId);
-    if (!plan) {
-      plan = SEED_PLANS.find((p) => p.id === planId || p._id === planId);
-    }
+      let plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+      if (!plan) {
+        plan = SEED_PLANS.find((p) => p.id === planId || p._id === planId);
+      }
 
-    const now = new Date();
-    const durationDays = plan?.durationDays || 30;
-    const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const durationDays = plan?.durationDays || 30;
+      const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
-    // Record subscription in Firestore
-    const subRecord = {
-      vendorId: uid,
-      planId: planId || plan?.id,
-      plan: plan || { name: 'Partner Pro', price: 999 },
-      status: 'active',
-      amount: plan?.price || 999,
-      razorpayOrderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-      startDate: now,
-      expiryDate: expiresAt,
-      expiresAt,
-      createdAt: now,
-    };
+      if (subscriptionId) {
+        await prisma.vendorSubscription.update({
+          where: { id: subscriptionId },
+          data: {
+            status: 'active',
+            razorpayOrderId: razorpay_order_id,
+            razorpayPaymentId: razorpay_payment_id,
+            startsAt: now,
+            expiresAt,
+          },
+        });
+      }
 
-    if (subscriptionId) {
-      await firestoreService.setDoc('subscriptions', subscriptionId, subRecord, true);
-    } else {
-      await firestoreService.createDoc('subscriptions', subRecord);
-    }
-
-    // Activate Vendor subscription status & onboarding payment flag
-    await firestoreService.setDoc('vendors', uid, {
-      hasPaidSubscription: true,
-      hasPaidOnboarding: true,
-      subscriptionStatus: 'active',
-      subscription: {
+      const vendorSubData = {
         active: true,
         status: 'active',
         planId: planId || plan?.id,
@@ -273,18 +302,23 @@ const subscriptionController = {
         startDate: now,
         expiryDate: expiresAt,
         expiresAt,
-      },
-    }, true);
+      };
 
-    return sendSuccess(res, {
-      message: 'Subscription activated successfully!',
-      subscription: {
-        active: true,
-        status: 'active',
-        plan: plan || { name: 'Partner Pro' },
-        expiryDate: expiresAt,
-      },
-    });
+      await prisma.vendor.update({
+        where: { id: uid },
+        data: {
+          subscription: vendorSubData,
+        },
+      });
+
+      return sendSuccess(res, {
+        message: 'Subscription activated successfully!',
+        subscription: vendorSubData,
+      });
+    } catch (err) {
+      console.error('verifySubscription error:', err);
+      return sendError(res, 'Failed to verify subscription', 500, 'VERIFY_FAILED');
+    }
   },
 
   /**
@@ -292,23 +326,36 @@ const subscriptionController = {
    */
   async getMySubscription(req, res) {
     const { uid } = req.user;
-    const vendor = await firestoreService.getDoc('vendors', uid);
 
-    if (vendor && vendor.subscription && vendor.subscription.active) {
-      return sendSuccess(res, { subscription: vendor.subscription });
+    try {
+      const vendor = await prisma.vendor.findUnique({ where: { id: uid } });
+      if (vendor && vendor.subscription && vendor.subscription.active) {
+        return sendSuccess(res, { subscription: vendor.subscription });
+      }
+
+      const activeSub = await prisma.vendorSubscription.findFirst({
+        where: { vendorId: uid, status: 'active' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (activeSub) {
+        return sendSuccess(res, {
+          subscription: {
+            active: true,
+            status: 'active',
+            planId: activeSub.planId,
+            planName: activeSub.planName,
+            expiryDate: activeSub.expiresAt,
+            expiresAt: activeSub.expiresAt,
+          },
+        });
+      }
+
+      return sendSuccess(res, { subscription: null });
+    } catch (err) {
+      console.error('getMySubscription error:', err);
+      return sendError(res, 'Failed to fetch subscription', 500, 'FETCH_FAILED');
     }
-
-    // Check subscriptions collection
-    const subs = await firestoreService.queryDocs('subscriptions', [
-      { field: 'vendorId', operator: '==', value: uid },
-      { field: 'status', operator: '==', value: 'active' },
-    ]);
-
-    if (subs && subs.length > 0) {
-      return sendSuccess(res, { subscription: subs[0] });
-    }
-
-    return sendSuccess(res, { subscription: null });
   },
 
   /**
@@ -316,12 +363,19 @@ const subscriptionController = {
    */
   async getSubscriptionHistory(req, res) {
     const { uid } = req.user;
-    const result = await firestoreService.queryWithCursor('subscriptions', {
-      filters: [['vendorId', '==', uid]],
-      limit: 50,
-    });
 
-    return sendSuccess(res, { history: result.items || [] });
+    try {
+      const history = await prisma.vendorSubscription.findMany({
+        where: { vendorId: uid },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+
+      return sendSuccess(res, { history });
+    } catch (err) {
+      console.error('getSubscriptionHistory error:', err);
+      return sendError(res, 'Failed to fetch subscription history', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -335,21 +389,23 @@ const subscriptionController = {
     const now = new Date();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    const subDoc = await firestoreService.createDoc('subscriptions', {
-      vendorId: uid,
-      planId,
-      planName: 'Free Trial Starter',
-      amount: 0,
-      durationDays: 30,
-      status: 'active',
-      startDate: now,
-      endDate: expiresAt,
-      createdAt: now,
-    });
+    try {
+      const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      await prisma.vendorSubscription.create({
+        data: {
+          id: subId,
+          vendorId: uid,
+          planId,
+          planName: 'Free Trial Starter',
+          amount: 0,
+          durationDays: 30,
+          status: 'active',
+          startsAt: now,
+          expiresAt,
+        },
+      });
 
-    const vendorUpdate = {
-      hasPaidSubscription: true,
-      subscription: {
+      const vendorUpdate = {
         active: true,
         status: 'active',
         planId,
@@ -358,16 +414,24 @@ const subscriptionController = {
         startDate: now,
         endDate: expiresAt,
         expiresAt,
-        subscriptionId: subDoc.id,
-      },
-    };
+        subscriptionId: subId,
+      };
 
-    await firestoreService.setDoc('vendors', uid, vendorUpdate, true);
+      await prisma.vendor.update({
+        where: { id: uid },
+        data: {
+          subscription: vendorUpdate,
+        },
+      });
 
-    return sendSuccess(res, {
-      subscription: vendorUpdate.subscription,
-      message: 'Free subscription plan activated successfully! Welcome to your Dashboard.',
-    });
+      return sendSuccess(res, {
+        subscription: vendorUpdate,
+        message: 'Free subscription plan activated successfully! Welcome to your Dashboard.',
+      });
+    } catch (err) {
+      console.error('activateFreePlan error:', err);
+      return sendError(res, 'Failed to activate free plan', 500, 'ACTIVATE_FAILED');
+    }
   },
 
   /**

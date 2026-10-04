@@ -6,10 +6,12 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
 import { matchStorage, playerStorage } from '../utils/matchStorage';
+import { client } from '../api/client';
 
 export default function SelectPlayersScreen({ route, navigation }) {
   const { matchId } = route.params;
 
+  const [match, setMatch] = useState(null);
   const [players, setPlayers] = useState([]);
   const [selected, setSelected] = useState({}); // id -> true
   const [guestModal, setGuestModal] = useState(false);
@@ -19,38 +21,73 @@ export default function SelectPlayersScreen({ route, navigation }) {
 
   useEffect(() => {
     (async () => {
+      const m = await matchStorage.getMatch(matchId);
+      setMatch(m);
+
       const list = await playerStorage.getRecentPlayers();
       setPlayers(list);
+
       const initial = {};
-      list.forEach((p) => { initial[p.id] = true; }); // default all selected, like screenshot
+      if (m?.players && m.players.length > 0) {
+        m.players.forEach((p) => {
+          if (p && p.id) initial[p.id] = true;
+        });
+      }
       setSelected(initial);
     })();
-  }, []);
+  }, [matchId]);
 
   const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
+  const isOpenMatch = match?.playWithStrangers === true;
+
+  // Open Match: inviting friends is optional (selectedCount >= 0)
+  // Private Squad: creator must select & invite specific players (selectedCount >= 1)
+  const canProceed = isOpenMatch ? true : selectedCount >= 1;
 
   const handleSaveGuest = async () => {
     if (!guestName.trim()) {
       Alert.alert('Name required', 'Please enter guest name');
       return;
     }
-    const guest = await playerStorage.addGuestPlayer({ name: guestName.trim(), phone: guestPhone.trim() });
-    setPlayers((p) => [...p, guest]);
-    setSelected((s) => ({ ...s, [guest.id]: true }));
-    setGuestName('');
-    setGuestPhone('');
-    setGuestModal(false);
+    try {
+      const guest = await playerStorage.addGuestPlayer({ name: guestName.trim(), phone: guestPhone.trim() });
+      setPlayers((p) => [guest, ...p.filter((x) => x.id !== guest.id)]);
+      setSelected((s) => ({ ...s, [guest.id]: true }));
+      setGuestName('');
+      setGuestPhone('');
+      setGuestModal(false);
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Failed to save guest player');
+    }
   };
 
   const handleNext = async () => {
-    if (selectedCount < 2 || saving) return;
+    if (!canProceed || saving) return;
     setSaving(true);
     try {
       const chosen = players.filter((p) => selected[p.id]);
-      await matchStorage.updateMatch(matchId, { players: chosen });
+
+      await matchStorage.updateMatch(matchId, {
+        players: chosen,
+        playWithStrangers: match?.playWithStrangers,
+      });
+
+      // If backend match ID exists and players are invited, trigger invitations via API
+      if (chosen.length > 0 && match?.id) {
+        try {
+          await client.post(`/matches/${match.id}/invite`, {
+            playerIds: chosen.map((p) => p.id || p.userId).filter(Boolean),
+          });
+        } catch (inviteErr) {
+          console.warn('Backend player invitation API skipped:', inviteErr);
+        }
+      }
+
       navigation.navigate('BuildTeams', { matchId });
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Failed to update match players');
     } finally {
       setSaving(false);
     }
@@ -73,23 +110,41 @@ export default function SelectPlayersScreen({ route, navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 100 }}>
-        <Text style={styles.sectionTitle}>Select Players</Text>
-        <Text style={styles.sectionSub}>Choose who's playing</Text>
+        <Text style={styles.sectionTitle}>
+          {isOpenMatch ? 'Select Players (Optional)' : 'Select Players'}
+        </Text>
+        <Text style={styles.sectionSub}>
+          {isOpenMatch
+            ? 'Open Match · Optionally invite friends. Other players can discover & join via join code.'
+            : 'Private Squad · Select & invite specific players. Only invited players can join.'}
+        </Text>
 
-        {players.map((p) => (
-          <TouchableOpacity key={p.id} style={styles.playerRow} onPress={() => toggle(p.id)}>
-            <View style={styles.playerLeft}>
-              <View style={styles.avatar}>
-                <Icon name="person" size={16} color={COLORS.subtext} />
+        {players.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Icon name="people-outline" size={32} color={COLORS.subtext} />
+            <Text style={styles.emptyTitle}>No invited players yet</Text>
+            <Text style={styles.emptySub}>
+              {isOpenMatch
+                ? 'Tap "Add Guest / Invite by Phone" below to invite friends, or proceed to open match for public players.'
+                : 'Tap "Add Guest / Invite by Phone" below to add specific players to your private squad.'}
+            </Text>
+          </View>
+        ) : (
+          players.map((p) => (
+            <TouchableOpacity key={p.id} style={styles.playerRow} onPress={() => toggle(p.id)}>
+              <View style={styles.playerLeft}>
+                <View style={styles.avatar}>
+                  <Icon name="person" size={16} color={COLORS.subtext} />
+                </View>
+                <Text style={styles.playerName}>{p.name}</Text>
+                {p.isGuest && <Text style={styles.guestTag}>Guest</Text>}
               </View>
-              <Text style={styles.playerName}>{p.name}</Text>
-              {p.isGuest && <Text style={styles.guestTag}>Guest</Text>}
-            </View>
-            <View style={[styles.radio, selected[p.id] && styles.radioActive]}>
-              {selected[p.id] && <Icon name="checkmark" size={14} color="#fff" />}
-            </View>
-          </TouchableOpacity>
-        ))}
+              <View style={[styles.radio, selected[p.id] && styles.radioActive]}>
+                {selected[p.id] && <Icon name="checkmark" size={14} color="#fff" />}
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
 
         <TouchableOpacity style={styles.addGuestRow} onPress={() => setGuestModal(true)}>
           <Icon name="person-add-outline" size={16} color={COLORS.primary} />
@@ -99,12 +154,16 @@ export default function SelectPlayersScreen({ route, navigation }) {
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.nextBtn, selectedCount < 2 && { opacity: 0.5 }]}
-          disabled={selectedCount < 2 || saving}
+          style={[styles.nextBtn, !canProceed && { opacity: 0.5 }]}
+          disabled={!canProceed || saving}
           onPress={handleNext}
         >
           <Text style={styles.nextText}>
-            {saving ? 'Please wait…' : `Next · ${selectedCount} selected`}
+            {saving
+              ? 'Please wait…'
+              : isOpenMatch && selectedCount === 0
+              ? 'Next (Skip Invitations)'
+              : `Next · ${selectedCount} ${isOpenMatch ? 'invited' : 'selected'}`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -113,21 +172,21 @@ export default function SelectPlayersScreen({ route, navigation }) {
       <Modal visible={guestModal} transparent animationType="slide" onRequestClose={() => setGuestModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Add Guest</Text>
+            <Text style={styles.modalTitle}>Add Guest Player</Text>
 
             <Text style={styles.label}>Name</Text>
             <TextInput
               style={styles.input}
-              placeholder="Madhan Raj"
+              placeholder="Enter player name"
               placeholderTextColor={COLORS.subtext}
               value={guestName}
               onChangeText={setGuestName}
             />
 
-            <Text style={styles.label}>Mobile number (option)</Text>
+            <Text style={styles.label}>Mobile number (optional)</Text>
             <TextInput
               style={styles.input}
-              placeholder="98774 32156"
+              placeholder="Enter 10-digit mobile number"
               placeholderTextColor={COLORS.subtext}
               value={guestPhone}
               onChangeText={setGuestPhone}
@@ -139,7 +198,7 @@ export default function SelectPlayersScreen({ route, navigation }) {
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleSaveGuest}>
-                <Text style={styles.saveText}>Save</Text>
+                <Text style={styles.saveText}>Save & Add</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -161,6 +220,10 @@ const styles = StyleSheet.create({
 
   sectionTitle:{ fontSize: 18, fontWeight: '800', color: COLORS.text },
   sectionSub:  { fontSize: 12, color: COLORS.subtext, marginBottom: SPACING.md },
+
+  emptyCard:   { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, backgroundColor: '#fff', marginVertical: SPACING.sm },
+  emptyTitle:  { fontSize: 15, fontWeight: '700', color: COLORS.text, marginTop: SPACING.sm },
+  emptySub:    { fontSize: 12, color: COLORS.subtext, textAlign: 'center', marginTop: 4, lineHeight: 18 },
 
   playerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 12, marginBottom: SPACING.sm, backgroundColor: '#fff' },
   playerLeft:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },

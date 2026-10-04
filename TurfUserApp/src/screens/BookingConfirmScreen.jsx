@@ -27,9 +27,11 @@ export default function BookingConfirmScreen({ route, navigation }) {
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' (Hand Cash) | 'online' (Razorpay / UPI)
   const [paying,        setPaying]        = useState(false);
 
-  const turfId    = turfData?._id || turfData?.id;
-  const total     = turfData?.pricePerHour || turfData?.pricing?.baseRate || 800;
-  const perPerson = Math.round(total / (players || 1));
+  const turfId        = turfData?._id || turfData?.id;
+  const durationHours = Number(route.params?.duration || 1);
+  const hourlyRate    = Number(turfData?.pricePerHour ?? turfData?.price ?? turfData?.pricing?.baseRate ?? 500);
+  const total         = hourlyRate * durationHours;
+  const perPerson     = Math.round(total / (players || 1));
   const rawImage  = turfData?.images?.[0] || turfData?.image;
   const imageUri  = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
 
