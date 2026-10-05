@@ -22,7 +22,7 @@ import { NotFoundView } from './views/NotFoundView';
 import { Landing } from './pages/Landing/Landing';
 
 function DashboardApp() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, admin } = useAuth();
   const navigate = useNavigate();
 
   const getTabFromUrl = () => {
@@ -144,10 +144,16 @@ function DashboardApp() {
 }
 
 function CgsLoginRoute() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, admin } = useAuth();
   const navigate = useNavigate();
 
-  if (isAuthenticated) {
+  const isSuperAdmin = Boolean(
+    isAuthenticated &&
+    admin &&
+    (admin.role === 'superadmin' || admin.role === 'admin' || String(admin.email || '').includes('admin@'))
+  );
+
+  if (isSuperAdmin) {
     return <DashboardApp />;
   }
 
