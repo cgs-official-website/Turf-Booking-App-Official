@@ -82,8 +82,13 @@ function DashboardApp() {
     }
   }, [isAuthenticated]);
 
-  if (!isAuthenticated) {
-    return <LoginView onNavigateHome={() => navigate('/')} />;
+  const isSuperAdmin =
+    isAuthenticated &&
+    admin &&
+    (admin.role === 'superadmin' || admin.role === 'admin' || String(admin.email || '').includes('admin@'));
+
+  if (!isSuperAdmin) {
+    return <NotFoundView onNavigateHome={() => navigate('/')} />;
   }
 
   return (
@@ -193,22 +198,22 @@ function MainRoutes() {
         element={<Landing />}
       />
 
-      {/* Super Admin Login Route */}
+      {/* Public attempt to access /login shows 404 */}
       <Route
         path="/login"
-        element={<LoginView onNavigateHome={() => navigate('/')} />}
+        element={<NotFoundView onNavigateHome={() => navigate('/')} />}
       />
 
-      {/* Super Admin Dashboard Routes */}
+      {/* Super Admin Dashboard Routes (Protected: 404 if not authenticated as Super Admin) */}
       <Route
         path="/admin/*"
         element={<DashboardApp />}
       />
 
-      {/* Fallback route */}
+      {/* Fallback route: 404 Page Not Found */}
       <Route
         path="*"
-        element={<Landing />}
+        element={<NotFoundView onNavigateHome={() => navigate('/')} />}
       />
     </Routes>
   );
