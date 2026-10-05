@@ -119,6 +119,7 @@ const authSlice = createSlice({
       } else {
         state.locationSet = true;
         state.location    = action.payload;
+        state.locationPermissionGranted = true;
         AsyncStorage.setItem('userLocation', action.payload);
       }
     },

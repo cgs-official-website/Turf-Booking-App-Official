@@ -59,8 +59,15 @@ export const updateTurf = createAsyncThunk('vendor/updateTurf', async ({ id, dat
   try { return await updateTurfApi(id, data); } catch (e) { return rejectWithValue(e.message); }
 });
  
-export const deleteTurf = createAsyncThunk('vendor/deleteTurf', async (id, { rejectWithValue }) => {
-  try { await deleteTurfApi(id); return id; } catch (e) { return rejectWithValue(e.message); }
+export const deleteTurf = createAsyncThunk('vendor/deleteTurf', async (arg, { rejectWithValue }) => {
+  try {
+    const id = typeof arg === 'object' && arg !== null ? arg.id : arg;
+    const resetData = typeof arg === 'object' && arg !== null ? arg.resetData !== false : true;
+    await deleteTurfApi(id, resetData);
+    return id;
+  } catch (e) {
+    return rejectWithValue(e.message);
+  }
 });
  
 export const addSlot = createAsyncThunk('vendor/addSlot', async ({ turfId, slot }, { rejectWithValue }) => {
@@ -376,11 +383,13 @@ const vendorSlice = createSlice({
       .addCase(deleteTurf.pending, pending)
       .addCase(deleteTurf.fulfilled, (state, { payload }) => {
         state.loading = false;
-        state.turfs = state.turfs.filter(t => t._id !== payload);
+        state.turfs = state.turfs.filter(t => t._id !== payload && t.id !== payload);
         if (state.activeTurfId === payload) {
-          state.activeTurfId = state.turfs[0]?._id || null;
+          state.activeTurfId = state.turfs[0]?._id || state.turfs[0]?.id || null;
         }
-        state.successMessage = 'Turf deleted';
+        state.turf = null;
+        state.bookings = [];
+        state.successMessage = 'Turf and all data deleted and reset';
       })
       .addCase(deleteTurf.rejected, rejected);
 

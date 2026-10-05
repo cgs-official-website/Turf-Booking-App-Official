@@ -91,27 +91,10 @@ export default function SlotPickerScreen({ route, navigation }) {
       .finally(() => setLoading(false));
   }, [selectedDate, turfId]);
 
-  const endSlots = useMemo(() => {
-    if (!selectedSlot) return [];
-    const startMin = timeToMins(selectedSlot.start);
-    const endMin   = timeToMins(selectedSlot.end);
-    const options  = [];
-    for (let t = startMin + 60; t <= endMin; t += 60) {
-      options.push({
-        end:      minsToTime(t),
-        duration: (t - startMin) / 60,
-      });
-    }
-    // Fallback 1hr if slot template is 1hr
-    if (options.length === 0) {
-      options.push({ end: selectedSlot.end, duration: 1 });
-    }
-    return options;
-  }, [selectedSlot]);
-
   const turfPrice = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
 
   const getSlotDisplayInfo = (slot, dateStr) => {
+    if (!slot) return { status: 'booked', label: 'Booked', color: '#94A3B8', isAvail: false };
     const now = new Date();
     const todayStr = fmtDate(now);
     const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -143,6 +126,44 @@ export default function SlotPickerScreen({ route, navigation }) {
 
     return { status: 'available', label: 'Available', color: '#10B981', isAvail: true };
   };
+
+  const endSlots = useMemo(() => {
+    if (!selectedSlot) return [];
+    const startMin = timeToMins(selectedSlot.start);
+    const options = [];
+
+    // Option 1: 1 Hour Play (Always valid for the selected available slot)
+    options.push({
+      end: minsToTime(startMin + 60),
+      duration: 1,
+    });
+
+    // Check Option 2: 2 Hours Play (Next 1-hour slot must exist and be available)
+    const slot2Start = minsToTime(startMin + 60);
+    const slot2 = slots.find((s) => (s.start || s.startTime) === slot2Start);
+    const slot2Avail = slot2 && getSlotDisplayInfo(slot2, selectedDate).isAvail;
+
+    if (slot2Avail) {
+      options.push({
+        end: minsToTime(startMin + 120),
+        duration: 2,
+      });
+
+      // Check Option 3: 3 Hours Play (Third 1-hour slot must also exist and be available)
+      const slot3Start = minsToTime(startMin + 120);
+      const slot3 = slots.find((s) => (s.start || s.startTime) === slot3Start);
+      const slot3Avail = slot3 && getSlotDisplayInfo(slot3, selectedDate).isAvail;
+
+      if (slot3Avail) {
+        options.push({
+          end: minsToTime(startMin + 180),
+          duration: 3,
+        });
+      }
+    }
+
+    return options;
+  }, [selectedSlot, slots, selectedDate]);
 
   const handleSlotSelect = (slot) => {
     const slotInfo = getSlotDisplayInfo(slot, selectedDate);
@@ -262,7 +283,7 @@ export default function SlotPickerScreen({ route, navigation }) {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Feather name="clock" size={16} color={C.primary} style={{ marginRight: 8 }} />
                 <Text style={[styles.selectedTimeText, { color: C.primaryDark || C.primary }]}>
-                  {to12h(selectedSlot.start)} → {to12h(endSlot.end)} ({endSlot.duration} Hour)
+                  {to12h(selectedSlot.start)} → {to12h(endSlot.end)} ({endSlot.duration} {endSlot.duration > 1 ? 'Hours' : 'Hour'})
                 </Text>
               </View>
               <TouchableOpacity onPress={() => { setSelectedSlot(null); setEndSlot(null); }}>
@@ -286,7 +307,10 @@ export default function SlotPickerScreen({ route, navigation }) {
           ) : (
             <View style={styles.slotsGrid}>
               {slots.map((slot, idx) => {
-                const isSelected = selectedSlot?.start === slot.start;
+                const slotStartMin = timeToMins(slot.start || slot.startTime);
+                const selStartMin = selectedSlot ? timeToMins(selectedSlot.start) : null;
+                const selEndMin = endSlot ? timeToMins(endSlot.end) : (selectedSlot ? timeToMins(selectedSlot.end) : null);
+                const isSelected = selectedSlot && slotStartMin >= selStartMin && slotStartMin < selEndMin;
                 const slotInfo = getSlotDisplayInfo(slot, selectedDate);
                 const isAvail = slotInfo.isAvail;
 
@@ -329,12 +353,11 @@ export default function SlotPickerScreen({ route, navigation }) {
                           color: isSelected
                             ? '#FFFFFF'
                             : slotInfo.color,
-                          fontWeight: (slotInfo.status === 'in_process' || isSelected) ? '800' : '600',
+                          fontWeight: slotInfo.status === 'in_process' || isSelected ? '800' : '600',
                         },
                       ]}
                     >
-                      {isSelected ? 'SELECTED' : slotInfo.label}
-                    </Text>
+                      {isSelected ? 'SELECTED' : slotInfo.label}                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -350,7 +373,6 @@ export default function SlotPickerScreen({ route, navigation }) {
               ₹{turfPrice * (endSlot?.duration || 1)}
             </Text>
           </View>
-
           <PrimaryButton
             title="Continue to Confirm →"
             onPress={handleConfirm}
@@ -387,11 +409,13 @@ export default function SlotPickerScreen({ route, navigation }) {
                   activeOpacity={0.8}
                 >
                   <View>
-                    <Text style={[styles.durationHours, { color: C.text }]}>{opt.duration} Hour Play</Text>
+                    <Text style={[styles.durationHours, { color: C.text }]}>
+                      {opt.duration} {opt.duration > 1 ? 'Hours Play' : 'Hour Play'}
+                    </Text>
                     <Text style={[styles.durationEnd, { color: C.subtext }]}>Until {to12h(opt.end)}</Text>
                   </View>
                   <Text style={[styles.durationPrice, { color: C.primary }]}>
-                    ₹{(turf.pricePerHour || 800) * opt.duration}
+                    ₹{turfPrice * opt.duration}
                   </Text>
                 </TouchableOpacity>
               ))}

@@ -785,6 +785,10 @@ const vendorController = {
         },
       });
 
+      await cacheService.del(`turf:${turf.id}`);
+      await cacheService.invalidatePattern('turf*');
+      await cacheService.invalidateDashboard(uid);
+
       return sendSuccess(res, { turf: formatTurf(turf), message: 'Turf added successfully' }, 201);
     } catch (err) {
       console.error('addTurf error:', err);
@@ -861,6 +865,8 @@ const vendorController = {
       });
 
       await cacheService.del(`turf:${turfId}`);
+      await cacheService.invalidatePattern('turf*');
+      await cacheService.invalidateDashboard(uid);
 
       return sendSuccess(res, { turf: formatTurf(updated) });
     } catch (err) {
@@ -887,24 +893,76 @@ const vendorController = {
         return sendError(res, 'Access denied: You do not own this turf', 403, 'FORBIDDEN');
       }
 
+      const isReset = req.query.resetData === 'true' || req.body?.resetData === true;
       const bookingCount = await prisma.booking.count({
         where: { turfId },
       });
 
-      if (bookingCount > 0) {
+      if (bookingCount > 0 && !isReset) {
         return sendError(
           res,
-          `Cannot delete turf with ${bookingCount} existing booking(s). Please suspend it instead.`,
+          `Cannot delete turf with ${bookingCount} existing booking(s). Please reset data or suspend it instead.`,
           400,
           'TURF_HAS_BOOKINGS',
           { bookingCount }
         );
       }
 
-      await prisma.turf.delete({ where: { id: turfId } });
-      await cacheService.del(`turf:${turfId}`);
+      await prisma.$transaction(async (tx) => {
+        // 1. Delete payments for bookings belonging to this turf
+        await tx.payment.deleteMany({
+          where: { booking: { turfId } },
+        });
 
-      return sendSuccess(res, { message: 'Turf deleted successfully', turfId });
+        // 2. Delete bookings for this turf
+        await tx.booking.deleteMany({
+          where: { turfId },
+        });
+
+        // 3. Delete slot overrides
+        await tx.slotOverride.deleteMany({
+          where: { turfId },
+        });
+
+        // 4. Delete reviews
+        await tx.review.deleteMany({
+          where: { turfId },
+        });
+
+        // 5. Delete wishlist items
+        await tx.wishlistItem.deleteMany({
+          where: { turfId },
+        });
+
+        // 6. Detach matches
+        await tx.match.updateMany({
+          where: { turfId },
+        });
+
+        // 7. Delete the turf itself
+        await tx.turf.delete({
+          where: { id: turfId },
+        });
+
+        // 8. Reset vendor onboarding & approval acknowledgement
+        await tx.vendor.update({
+          where: { id: existing.vendorId },
+          data: {
+            turfOnboardingComplete: false,
+            turfApprovalAcknowledged: false,
+          },
+        });
+      });
+
+      await cacheService.del(`turf:${turfId}`);
+      await cacheService.invalidatePattern(`*${turfId}*`);
+      await cacheService.invalidatePattern('turf*');
+      await cacheService.invalidateDashboard(uid);
+      if (existing.vendorId !== uid) {
+        await cacheService.invalidateDashboard(existing.vendorId);
+      }
+
+      return sendSuccess(res, { message: 'Turf and all data deleted and reset successfully', turfId });
     } catch (err) {
       console.error('deleteTurf error:', err);
       return sendError(res, 'Failed to delete turf', 500, 'DELETE_FAILED');
@@ -974,7 +1032,10 @@ const vendorController = {
         const slotKey = `${startTime}-${endTime}`;
 
         let status = 'available';
-        const b = bookedSlots.find((x) => x.startTime === startTime);
+        const b = bookedSlots.find((x) => {
+          const xEnd = x.endTime || `${String(Number(x.startTime.split(':')[0]) + 1).padStart(2, '0')}:${x.startTime.split(':')[1] || '00'}`;
+          return x.startTime < endTime && xEnd > startTime;
+        });
         if (b) {
           status = b.bookingStatus === 'confirmed' ? 'booked' : 'requested';
         } else if (blocked.includes(startTime) || blocked.includes(slotKey)) {

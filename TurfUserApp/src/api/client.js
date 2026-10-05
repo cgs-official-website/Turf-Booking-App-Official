@@ -5,23 +5,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-export const PRODUCTION_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
-export const LOCAL_URL      = 'http://localhost:5000/api/v1';
-export const LAN_URL_CURRENT= 'http://192.168.0.23:5000/api/v1';
-export const LAN_URL        = 'http://192.168.0.14:5000/api/v1';
-export const LAN_URL_OLD    = 'http://192.168.0.12:5000/api/v1';
+export const LOCAL_URL      = 'http://127.0.0.1:5000/api/v1';
+export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 export const EMULATOR_URL   = 'http://10.0.2.2:5000/api/v1';
+export const LAN_URL_CURRENT= 'http://192.168.0.23:5000/api/v1';
 
 export const BASE_URL = LOCAL_URL;
-export const SERVER_ORIGIN = 'http://localhost:5000';
+export const SERVER_ORIGIN = 'http://127.0.0.1:5000';
 
 const CANDIDATE_URLS = [
   LOCAL_URL,
-  LAN_URL_CURRENT,
-  LAN_URL,
-  LAN_URL_OLD,
+  LOCAL_HOST_URL,
   Platform.OS === 'android' ? EMULATOR_URL : null,
-  PRODUCTION_URL,
+  LAN_URL_CURRENT,
 ].filter(Boolean);
 
 export const getImageUrl = (path) => {

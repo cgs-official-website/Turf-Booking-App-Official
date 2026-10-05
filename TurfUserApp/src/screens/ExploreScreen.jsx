@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Platform, StatusBar, RefreshControl,
@@ -64,9 +65,11 @@ export default function ExploreScreen({ navigation }) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    load();
-  }, [sport, sort, activeFilters, location, query]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [sport, sort, activeFilters, location, query])
+  );
 
   useEffect(() => {
     dispatch(fetchWishlist());

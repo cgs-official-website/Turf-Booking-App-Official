@@ -182,6 +182,12 @@ const turfController = {
    */
   async getTurfLocations(req, res) {
     try {
+      const cacheKey = 'turfs_meta_locations';
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        return sendSuccess(res, cached);
+      }
+
       const turfs = await prisma.turf.findMany({
         where: { status: 'active' },
         select: {
@@ -244,11 +250,14 @@ const turfController = {
 
       const cities = Array.from(new Set(turfs.map((t) => t.city).filter(Boolean)));
 
-      return sendSuccess(res, {
+      const responsePayload = {
         locations,
         totalTurfs: turfs.length,
         cities,
-      });
+      };
+      await cacheService.set(cacheKey, responsePayload, 600); // 10 mins cache
+
+      return sendSuccess(res, responsePayload);
     } catch (err) {
       console.error('getTurfLocations error:', err);
       return sendError(res, 'Failed to fetch turf locations', 500, 'FETCH_FAILED');
@@ -351,7 +360,10 @@ const turfController = {
         const slotKey = `${startTime}-${endTime}`;
 
         const isBlocked = (slotOverrides.blockedSlots || []).includes(slotKey) || (slotOverrides.blockedSlots || []).includes(startTime);
-        const bookedCourts = activeBookings.filter((b) => b.startTime === startTime).length;
+        const bookedCourts = activeBookings.filter((b) => {
+          const bEnd = b.endTime || `${pad(Number(b.startTime.split(':')[0]) + 1)}:${b.startTime.split(':')[1] || '00'}`;
+          return b.startTime < endTime && bEnd > startTime;
+        }).length;
         const isBooked = bookedCourts >= courtCount;
 
         let price = baseRate;

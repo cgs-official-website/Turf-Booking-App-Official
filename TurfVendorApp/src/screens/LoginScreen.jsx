@@ -29,9 +29,12 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (error && isFocused) {
+      const isNotFound = error.toLowerCase().includes('not found') || error.toLowerCase().includes('create new account');
       const isPending = error.toLowerCase().includes('pending') || error.toLowerCase().includes('approval');
       const isRejected = error.toLowerCase().includes('not approved') || error.toLowerCase().includes('rejected');
-      const title = isPending
+      const title = isNotFound
+        ? 'Account Not Found'
+        : isPending
         ? 'Account Pending Approval'
         : isRejected
         ? 'Account Not Approved'

@@ -11,7 +11,7 @@ import { matchStorage } from '../utils/matchStorage';
 import { turfsApi } from '../api/turfs';
 import PrimaryButton from '../components/PrimaryButton';
 
-const SPORTS = ['Cricket', 'Football', 'Badminton', 'Volleyball', 'Basketball', 'Tennis'];
+const ALL_SPORTS = ['Cricket', 'Football', 'Badminton', 'Volleyball', 'Basketball', 'Tennis'];
 
 export default function CreateMatchScreen({ route, navigation }) {
   const params = route.params || {};
@@ -54,6 +54,19 @@ export default function CreateMatchScreen({ route, navigation }) {
       (t.address && t.address.toLowerCase().includes(q))
     );
   }, [turfsList, turfSearch]);
+
+  // Only show sports available at the selected turf; fall back to full list if no turf or no sport data
+  const availableSports = useMemo(() => {
+    if (!selectedTurf) return ALL_SPORTS;
+    const turfSports = selectedTurf.sports;
+    if (!Array.isArray(turfSports) || turfSports.length === 0) return ALL_SPORTS;
+    // Normalise casing: match against canonical list
+    const normalised = turfSports.map((s) => {
+      const lower = s.toLowerCase();
+      return ALL_SPORTS.find((a) => a.toLowerCase() === lower) || s;
+    });
+    return normalised.filter(Boolean);
+  }, [selectedTurf]);
 
   const canProceed = place.trim().length > 0 && sport && strangers !== null;
 
@@ -275,7 +288,12 @@ export default function CreateMatchScreen({ route, navigation }) {
                         setPlace(item.name);
                         setSelectedTurf(item);
                         if (item.sports?.length) {
-                          setSport(item.sports[0]);
+                          // Normalise turf's first sport against canonical list
+                          const firstSport = item.sports[0];
+                          const matched = ALL_SPORTS.find(
+                            (a) => a.toLowerCase() === firstSport.toLowerCase()
+                          ) || firstSport;
+                          setSport(matched);
                         }
                         setTurfModal(false);
                       }}
@@ -338,8 +356,13 @@ export default function CreateMatchScreen({ route, navigation }) {
         >
           <View style={[styles.modalBox, { backgroundColor: C.card, borderColor: C.border }, SHADOW.floating]}>
             <Text style={[styles.modalTitle, { color: C.text }]}>Select Sport</Text>
+            {selectedTurf && availableSports.length < ALL_SPORTS.length && (
+              <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 6, textAlign: 'center' }}>
+                Showing sports available at {place}
+              </Text>
+            )}
             <FlatList
-              data={SPORTS}
+              data={availableSports}
               keyExtractor={(i) => i}
               renderItem={({ item }) => (
                 <TouchableOpacity

@@ -1,5 +1,5 @@
-// @theme-ready ✅
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
 } from 'react-native';
@@ -42,7 +42,11 @@ const DashboardScreen = ({ navigation }) => {
     if (!plans.length) dispatch(fetchPlans());
   };
 
-  useEffect(() => { loadData(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
   const safeTurfs = Array.isArray(turfs) ? turfs : [];

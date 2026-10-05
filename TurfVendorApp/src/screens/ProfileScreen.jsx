@@ -1,12 +1,13 @@
 // @theme-ready ✅
-import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Alert, Switch, Image, Platform, Linking,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logoutVendor } from '../redux/authSlice';
-import { deleteTurf as deleteTurfAction } from '../redux/vendorSlice';
+import { deleteTurf as deleteTurfAction, fetchMyTurfs } from '../redux/vendorSlice';
 import { fcmHelper } from '../utils/fcmHelper';
 import { notificationsApi } from '../api/notifications';
 import { SIZES, SHADOWS } from '../utils/theme';
@@ -144,6 +145,12 @@ const ProfileScreen = ({ navigation }) => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchMyTurfs());
+    }, [dispatch])
+  );
+
   const safeTurfs = Array.isArray(turfs) ? turfs : [];
   const safeBookings = Array.isArray(bookings) ? bookings : [];
 
@@ -154,16 +161,40 @@ const ProfileScreen = ({ navigation }) => {
     ]);
   };
 
-  const handleDeleteTurf = () => {
+  const handleDeleteTurf = async () => {
+    let currentTurfs = safeTurfs;
+    if (currentTurfs.length === 0) {
+      try {
+        const fetched = await dispatch(fetchMyTurfs()).unwrap();
+        if (Array.isArray(fetched)) currentTurfs = fetched;
+      } catch (_) {}
+    }
+
+    const targetTurf = currentTurfs[0] || vendor?.turf;
+    const turfId = targetTurf?._id || targetTurf?.id;
+
+    if (!turfId) {
+      Alert.alert('No Active Turf', 'You do not have any active turf registered to delete.');
+      return;
+    }
+
     Alert.alert(
-      'Delete Turf',
-      'This will permanently delete your active turf, along with all scheduled slots and bookings history. This action cannot be undone.',
+      'Delete Turf & Reset Data',
+      `This will permanently delete "${targetTurf.name || 'your active turf'}", along with all scheduled slots, bookings history, and overrides. This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Permanently',
           style: 'destructive',
-          onPress: () => dispatch(deleteTurfAction()),
+          onPress: async () => {
+            try {
+              await dispatch(deleteTurfAction({ id: turfId, resetData: true })).unwrap();
+              dispatch(fetchMyTurfs());
+              Alert.alert('Reset Complete', 'Your turf and all data have been permanently deleted and reset.');
+            } catch (err) {
+              Alert.alert('Delete Failed', typeof err === 'string' ? err : 'Could not delete turf.');
+            }
+          },
         },
       ]
     );
@@ -225,7 +256,7 @@ const ProfileScreen = ({ navigation }) => {
           {/* Quick Metrics Strip */}
           <View style={[styles.metricsStrip, { borderTopColor: colors.border }]}>
             <View style={styles.metricItem}>
-              <Text style={[styles.metricVal, { color: colors.text }]}>{safeTurfs.length || 1}</Text>
+              <Text style={[styles.metricVal, { color: colors.text }]}>{safeTurfs.length}</Text>
               <Text style={[styles.metricLbl, { color: colors.textSecondary }]}>ACTIVE TURFS</Text>
             </View>
             <View style={[styles.metricDiv, { backgroundColor: colors.border }]} />

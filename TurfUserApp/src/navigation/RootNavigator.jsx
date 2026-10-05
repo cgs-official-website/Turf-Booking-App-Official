@@ -26,6 +26,11 @@ import BuildTeamsScreen      from '../screens/BuildTeamsScreen';
 import MatchScreen           from '../screens/MatchScreen';
 import TossScreen            from '../screens/TossScreen';
 import ScorecardScreen       from '../screens/ScorecardScreen';
+import FootballScorecardScreen from '../screens/FootballScorecardScreen';
+import BadmintonScorecardScreen from '../screens/BadmintonScorecardScreen';
+import VolleyballScorecardScreen from '../screens/VolleyballScorecardScreen';
+import BasketballScorecardScreen from '../screens/BasketballScorecardScreen';
+import TennisScorecardScreen   from '../screens/TennisScorecardScreen';
 
 import { createNavigationContainerRef } from '@react-navigation/native';
 
@@ -98,7 +103,12 @@ export default function RootNavigator() {
             <Stack.Screen name="BuildTeams"     component={BuildTeamsScreen}     options={{ presentation: 'card' }} />
             <Stack.Screen name="Match"          component={MatchScreen}          options={{ presentation: 'card' }} />
             <Stack.Screen name="Toss"           component={TossScreen}           options={{ presentation: 'card' }} />
-            <Stack.Screen name="Scorecard"      component={ScorecardScreen}      options={{ presentation: 'card' }} />
+            <Stack.Screen name="Scorecard"           component={ScorecardScreen}           options={{ presentation: 'card' }} />
+            <Stack.Screen name="FootballScorecard"   component={FootballScorecardScreen}   options={{ presentation: 'card' }} />
+            <Stack.Screen name="BadmintonScorecard"  component={BadmintonScorecardScreen}  options={{ presentation: 'card' }} />
+            <Stack.Screen name="VolleyballScorecard" component={VolleyballScorecardScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="BasketballScorecard" component={BasketballScorecardScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="TennisScorecard"     component={TennisScorecardScreen}     options={{ presentation: 'card' }} />
           </>
         )}
       </Stack.Navigator>

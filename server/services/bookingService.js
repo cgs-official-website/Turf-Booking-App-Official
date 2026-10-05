@@ -270,6 +270,12 @@ const bookingService = {
     const { dateObj } = validateBookingInput(payload);
     const courtNumber = resolveCourtNumber(turf, payload.courtNumber);
     const hourlyRate = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+    if (!payload.endTime && payload.startTime) {
+      const [sh, sm] = payload.startTime.split(':').map(Number);
+      const eh = (sh + 1) % 24;
+      payload.endTime = `${String(eh).padStart(2, '0')}:${String(sm || 0).padStart(2, '0')}`;
+    }
+
     let durationHours = 1;
     if (payload.startTime && payload.endTime) {
       const [sh, sm] = payload.startTime.split(':').map(Number);
@@ -286,14 +292,15 @@ const bookingService = {
 
     try {
       const created = await withRetry(() => prisma.$transaction(async (tx) => {
-        // 1. Clear expired reservations for this exact slot:
+        // 1. Clear expired reservations overlapping this slot:
         // Delete rows with no razorpayOrderId
         await tx.booking.deleteMany({
           where: {
             turfId: turf.id,
             courtNumber,
             bookingDate: dateObj,
-            startTime: payload.startTime,
+            startTime: { lt: payload.endTime },
+            endTime: { gt: payload.startTime },
             bookingStatus: 'reserved',
             holdExpiresAt: { lt: now },
             razorpayOrderId: null,
@@ -306,7 +313,8 @@ const bookingService = {
             turfId: turf.id,
             courtNumber,
             bookingDate: dateObj,
-            startTime: payload.startTime,
+            startTime: { lt: payload.endTime },
+            endTime: { gt: payload.startTime },
             bookingStatus: 'reserved',
             holdExpiresAt: { lt: now },
             razorpayOrderId: { not: null },
@@ -317,13 +325,14 @@ const bookingService = {
           },
         });
 
-        // 2. Check for active clash on the specific court
+        // 2. Check for active clash on the specific court (time range overlap)
         const existing = await tx.booking.findFirst({
           where: {
             turfId: turf.id,
             courtNumber,
             bookingDate: dateObj,
-            startTime: payload.startTime,
+            startTime: { lt: payload.endTime },
+            endTime: { gt: payload.startTime },
             bookingStatus: { in: ['reserved', 'pending', 'confirmed'] },
           },
         });
@@ -333,7 +342,13 @@ const bookingService = {
           if (existing.userId === actor.uid && existing.bookingStatus === 'reserved') {
             const updated = await tx.booking.update({
               where: { bookingId: existing.bookingId },
-              data: { holdExpiresAt: expiresAt, updatedAt: now },
+              data: {
+                startTime: payload.startTime,
+                endTime: payload.endTime,
+                totalAmount: price,
+                holdExpiresAt: expiresAt,
+                updatedAt: now,
+              },
             });
             return updated;
           }

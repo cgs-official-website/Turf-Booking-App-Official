@@ -50,8 +50,8 @@ export const updateTurfAmenitiesApi = (id, { images, ...fields }) => {
   return apiRequest(`/vendor/turfs/${id}`, { method: 'PUT', body: form });
 };
 
-export const deleteTurfApi = (id) =>
-  apiRequest(`/vendor/turfs/${id}`, { method: 'DELETE' });
+export const deleteTurfApi = (id, resetData = true) =>
+  apiRequest(`/vendor/turfs/${id}${resetData ? '?resetData=true' : ''}`, { method: 'DELETE' });
 
 export const addSlotApi = (turfId, slot) =>
   apiRequest(`/vendor/turfs/${turfId}/slots`, {

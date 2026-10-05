@@ -1,17 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CANDIDATE_URLS = [
+  'http://127.0.0.1:5000/api/v1',
   'http://localhost:5000/api/v1',
+  'http://10.0.2.2:5000/api/v1',
   'http://192.168.0.23:5000/api/v1',
-  'http://192.168.0.14:5000/api/v1',
-  'http://192.168.0.12:5000/api/v1',
-  'http://192.168.0.70:5000/api/v1',
-  'https://turf-booking-app-official-production.up.railway.app/api/v1',
 ];
 
 export const BASE_URL = CANDIDATE_URLS[0];
 export const FALLBACK_URL = CANDIDATE_URLS[0];
-export const SERVER_ORIGIN = 'http://localhost:5000';
+export const SERVER_ORIGIN = 'http://127.0.0.1:5000';
 
 export const getImageUrl = (path) => {
   if (!path) return null;
@@ -45,7 +43,7 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
     try {
       response = await fetch(`${host}${endpoint}`, {
         ...config,

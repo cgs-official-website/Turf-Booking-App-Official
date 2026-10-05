@@ -38,8 +38,19 @@ export default function MatchScreen({ route, navigation }) {
     completed: 'COMPLETED',
   }[match.status] || 'UPCOMING';
 
+  const getScorecardRoute = (sport) => {
+    switch ((sport || '').toLowerCase()) {
+      case 'football': return 'FootballScorecard';
+      case 'badminton': return 'BadmintonScorecard';
+      case 'volleyball': return 'VolleyballScorecard';
+      case 'basketball': return 'BasketballScorecard';
+      case 'tennis': return 'TennisScorecard';
+      default: return 'Scorecard';
+    }
+  };
+
   const goToss = () => navigation.navigate('Toss', { matchId });
-  const goScorecard = () => navigation.navigate('Scorecard', { matchId });
+  const goScorecard = () => navigation.navigate(getScorecardRoute(match.sport), { matchId });
 
   return (
     <View style={styles.root}>

@@ -368,6 +368,7 @@ export default function HomeScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      load();
       notificationsApi.getAll()
         .then((r) => setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read).length))
         .catch(() => { });
@@ -379,14 +380,14 @@ export default function HomeScreen({ navigation }) {
           { enableHighAccuracy: false, timeout: 2500, maximumAge: 60000 }
         );
       }
-    }, [locationOff, onLocationSuccess])
+    }, [load, locationOff, onLocationSuccess])
   );
 
   const handleApplyFilter = (filters) => {
     setActiveFilters(filters);
   };
 
-  if (!locationPermissionGranted) {
+  if (!locationPermissionGranted && !location) {
     return (
       <View style={[styles.container, { backgroundColor: C.bg }]}>
         <StatusBar barStyle={dark ? "light-content" : "dark-content"} backgroundColor={C.bg} />

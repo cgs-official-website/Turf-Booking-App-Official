@@ -1,5 +1,6 @@
 // @theme-ready ✅
-import React, { useEffect, useLayoutEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, RefreshControl,
@@ -36,7 +37,11 @@ const MyTurfsScreen = ({ navigation }) => {
     });
   }, [navigation, colors]);
 
-  useEffect(() => { dispatch(fetchMyTurfs()); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchMyTurfs());
+    }, [dispatch])
+  );
 
   const handleDelete = (id, name) => {
     Alert.alert('Delete Turf', `Are you sure you want to delete "${name}"?`, [

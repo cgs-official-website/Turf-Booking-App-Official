@@ -176,36 +176,23 @@ const authController = {
     const cleanEmail = String(email).toLowerCase().trim();
 
     if (role === 'vendor') {
+      const vendorUid = `vendor_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
       let vendor = await prisma.vendor.findFirst({
-        where: { email: cleanEmail },
+        where: {
+          OR: [
+            { email: { equals: cleanEmail, mode: 'insensitive' } },
+            { id: vendorUid },
+          ],
+        },
       });
 
       if (!vendor) {
-        if (process.env.NODE_ENV !== 'production') {
-          // Dev convenience: auto-provision approved test vendor
-          const newHash = await bcrypt.hash(password, 10);
-          const vendorId = `vendor_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
-          const vendorName = cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-          vendor = await prisma.vendor.create({
-            data: {
-              id: vendorId,
-              name: vendorName || 'Turf Partner',
-              email: cleanEmail,
-              passwordHash: newHash,
-              kycStatus: 'approved',
-              turfOnboardingComplete: true,
-              turfApprovalAcknowledged: true,
-              subscription: { active: true, status: 'active' },
-            },
-          });
-        } else {
-          return sendError(
-            res,
-            'No vendor account found with this email. Please select "New Account" to register.',
-            404,
-            'ACCOUNT_NOT_FOUND'
-          );
-        }
+        return sendError(
+          res,
+          'Account not found. Please create a new account before logging in.',
+          404,
+          'ACCOUNT_NOT_FOUND'
+        );
       }
 
       const isDevPass = process.env.NODE_ENV !== 'production' &&
@@ -213,16 +200,25 @@ const authController = {
       const isMatch = await bcrypt.compare(password, vendor.passwordHash);
 
       if (!isMatch && !isDevPass) {
-        if (process.env.NODE_ENV !== 'production') {
-          // Dev convenience: accept and sync vendor password so developers are never blocked
-          const newHash = await bcrypt.hash(password, 10);
-          await prisma.vendor.update({
-            where: { id: vendor.id },
-            data: { passwordHash: newHash },
-          });
-        } else {
-          return sendError(res, 'Invalid password. Please check your credentials.', 401, 'INVALID_CREDENTIALS');
-        }
+        return sendError(res, 'Invalid password. Please check your credentials.', 401, 'INVALID_CREDENTIALS');
+      }
+
+      if (!isMatch && isDevPass) {
+        const newHash = await bcrypt.hash(password, 10);
+        await prisma.vendor.update({
+          where: { id: vendor.id },
+          data: { passwordHash: newHash },
+        });
+      }
+
+      if (vendor.kycStatus === 'pending') {
+        return sendError(
+          res,
+          'Your account is pending Superadmin approval. You will be able to log in once your account has been approved.',
+          403,
+          'ACCOUNT_PENDING',
+          { kycStatus: 'pending', vendor: formatVendor(vendor) }
+        );
       }
 
       if (vendor.kycStatus === 'suspended') {
