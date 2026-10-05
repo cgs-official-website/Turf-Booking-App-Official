@@ -20,8 +20,8 @@ export const NotFoundView = ({ onNavigateHome }) => {
             }}
           />
 
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 rounded-full text-xs font-black uppercase tracking-wider mb-3">
-            <AlertOctagon size={13} />
+          <div className="inline-flex items-center space-x-1.5 px-3.5 py-1 bg-transparent border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-full text-xs font-black uppercase tracking-wider mb-3">
+            <AlertOctagon size={13} className="text-rose-500" />
             <span>404 - Page Not Found</span>
           </div>
 
