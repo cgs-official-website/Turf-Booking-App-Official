@@ -15,6 +15,7 @@ import { VendorsView } from './views/VendorsView';
 import { UsersView } from './views/UsersView';
 import { MatchesView } from './views/MatchesView';
 import { ReportsView } from './views/ReportsView';
+import { InquiriesView } from './views/InquiriesView';
 import { SubscriptionsView } from './views/SubscriptionsView';
 import { ReviewsView } from './views/ReviewsView';
 import { NotFoundView } from './views/NotFoundView';
@@ -93,6 +94,7 @@ function DashboardApp() {
         onSelectTab={handleSelectTab}
         pendingKycCount={statsData.stats?.pendingKycs || 0}
         openReportsCount={statsData.stats?.openReports || 0}
+        pendingInquiriesCount={statsData.stats?.pendingEnquiries || 0}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -123,10 +125,11 @@ function DashboardApp() {
           {activeTab === 'users' && <UsersView />}
           {activeTab === 'matches' && <MatchesView />}
           {activeTab === 'reviews' && <ReviewsView />}
+          {activeTab === 'inquiries' && <InquiriesView onUpdateStats={fetchStats} />}
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
 
-          {!['overview', 'kyc', 'turfs', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'reports', 'subscriptions'].includes(activeTab) && (
+          {!['overview', 'kyc', 'turfs', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions'].includes(activeTab) && (
             <NotFoundView onNavigateHome={() => setActiveTab('overview')} />
           )}
         </main>

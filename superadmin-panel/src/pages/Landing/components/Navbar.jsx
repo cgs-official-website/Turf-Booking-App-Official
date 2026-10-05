@@ -98,24 +98,13 @@ export const Navbar = ({ onNavigateAdmin, onExploreTurfs, onBookNow }) => {
             {isDark ? <Sun size={17} className="text-amber-400" /> : <Moon size={17} className="text-slate-700 dark:text-slate-300" />}
           </button>
 
-          {/* Admin Portal Login Link */}
+          {/* Contact / Inquiry CTA */}
           <button
             type="button"
-            onClick={onNavigateAdmin}
-            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-1.5 cursor-pointer"
-          >
-            <Lock size={13} className="text-slate-500" />
-            <span>Admin Portal</span>
-          </button>
-
-          {/* Book Now Primary Button */}
-          <button
-            type="button"
-            onClick={onBookNow || (() => scrollTo('turfs'))}
+            onClick={() => scrollTo('inquiries')}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition flex items-center space-x-1.5 cursor-pointer"
           >
-            <CalendarCheck size={14} />
-            <span>Book a Turf</span>
+            <span>Contact Desk</span>
           </button>
         </div>
 
@@ -170,23 +159,10 @@ export const Navbar = ({ onNavigateAdmin, onExploreTurfs, onBookNow }) => {
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
             <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                if (onBookNow) onBookNow();
-                else scrollTo('turfs');
-              }}
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold text-center shadow-xs"
+              onClick={() => scrollTo('inquiries')}
+              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold text-center shadow-xs cursor-pointer"
             >
-              Book Now
-            </button>
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onNavigateAdmin();
-              }}
-              className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 text-center"
-            >
-              Super Admin Portal Login
+              Contact Desk / Inquiries
             </button>
           </div>
         </div>

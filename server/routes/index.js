@@ -53,7 +53,9 @@ router.use('/notifications', notificationRoutes);
 router.use('/places', placesRoutes);
 router.use('/admin', adminRoutes);
 router.use('/enquiries', enquiryRoutes);
+router.use('/inquiries', enquiryRoutes);
 router.use('/vendor-enquiries', enquiryRoutes);
+router.post('/reports/inquiry', require('../controllers/enquiryController').createEnquiry);
 
 // Public Reviews Stream (Directly from database)
 router.get('/reviews', async (req, res) => {

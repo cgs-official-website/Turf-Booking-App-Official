@@ -9,6 +9,7 @@ import {
   Trophy,
   Star,
   AlertTriangle,
+  Inbox,
   LogOut,
   ChevronRight,
   X,
@@ -21,6 +22,7 @@ export const Sidebar = ({
   onSelectTab,
   pendingKycCount = 0,
   openReportsCount = 0,
+  pendingInquiriesCount = 0,
   isOpen = false,
   onClose,
 }) => {
@@ -52,14 +54,21 @@ export const Sidebar = ({
       ],
     },
     {
-      title: 'SUPPORT & LOGS',
+      title: 'SUPPORT & LEADS',
       items: [
+        {
+          id: 'inquiries',
+          label: 'Inquiries & Leads',
+          icon: Inbox,
+          badge: pendingInquiriesCount,
+          badgeColor: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+        },
         {
           id: 'reports',
           label: 'Issue Reports',
           icon: AlertTriangle,
           badge: openReportsCount,
-          badgeColor: 'bg-rose-50 text-rose-600 border border-rose-200',
+          badgeColor: 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
         },
       ],
     },

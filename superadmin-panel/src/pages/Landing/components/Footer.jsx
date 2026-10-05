@@ -60,12 +60,6 @@ export const Footer = ({ onNavigateAdmin, onOpenInquiryModal }) => {
             >
               Submit Inquiry
             </button>
-            <button
-              onClick={onNavigateAdmin}
-              className="text-slate-800 dark:text-slate-200 font-bold hover:underline cursor-pointer"
-            >
-              Super Admin Login
-            </button>
           </div>
         </div>
 

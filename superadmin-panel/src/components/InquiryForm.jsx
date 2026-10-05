@@ -30,25 +30,18 @@ export const InquiryForm = ({ sourcePage = 'Landing Page', initialModule = 'Gene
     setStatus({ type: '', message: '' });
 
     try {
-      // Send inquiry to backend or fallback
-      let success = true;
-      try {
-        if (api && api.request) {
-          const res = await api.request('/reports/inquiry', {
-            method: 'POST',
-            body: JSON.stringify({ ...formData, sourcePage, submittedAt: new Date().toISOString() }),
-          });
-          if (res && res.success === false) success = false;
-        }
-      } catch {
-        // Fallback local acknowledgment
-        success = true;
-      }
+      const res = await api.submitInquiry({
+        ...formData,
+        sourcePage,
+        submittedAt: new Date().toISOString(),
+      });
 
-      if (success) {
+      if (res && (res.success || res.data)) {
         setStatus({
           type: 'success',
-          message: 'Thank you! Your inquiry has been submitted. Our operations desk will get back to you shortly.',
+          message:
+            res.data?.message ||
+            'Thank you! Your inquiry has been received. Our operations team will contact you shortly.',
         });
         setFormData({
           name: '',
@@ -59,10 +52,17 @@ export const InquiryForm = ({ sourcePage = 'Landing Page', initialModule = 'Gene
           message: '',
         });
       } else {
-        setStatus({ type: 'error', message: 'Unable to send message right now. Please try again or email support@turf.com.' });
+        setStatus({
+          type: 'error',
+          message: res?.error?.message || 'Unable to send message right now. Please try again.',
+        });
       }
     } catch (err) {
-      setStatus({ type: 'error', message: err.message || 'An error occurred.' });
+      console.error('Inquiry submission error:', err);
+      setStatus({
+        type: 'error',
+        message: err.message || 'Unable to submit inquiry. Please check your internet or try again.',
+      });
     } finally {
       setLoading(false);
     }

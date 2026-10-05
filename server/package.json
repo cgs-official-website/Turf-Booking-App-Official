@@ -10,7 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "6.19.3",
+    "@prisma/client": "^6.19.3",
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.11.0",
@@ -25,7 +25,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.15",
     "pg": "^8.23.0",
-    "prisma": "6.19.3",
+    "prisma": "^6.19.3",
     "razorpay": "^2.9.4",
     "zod": "^3.23.8"
   },

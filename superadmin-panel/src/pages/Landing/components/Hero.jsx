@@ -30,21 +30,25 @@ export const Hero = ({ onNavigateAdmin, onExploreTurfs, onBookNow }) => {
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 pt-2">
               <button
                 type="button"
-                onClick={onBookNow || onExploreTurfs}
+                onClick={() => {
+                  const el = document.getElementById('how-it-works');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
                 className="w-full sm:w-auto flex items-center justify-center space-x-2.5 px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/25 transition-all duration-200 transform hover:scale-[1.02] active:scale-95 cursor-pointer"
               >
-                <CalendarCheck size={16} />
-                <span>Get Started & Explore</span>
+                <span>Explore Ecosystem</span>
                 <ArrowRight size={15} />
               </button>
 
               <button
                 type="button"
-                onClick={onNavigateAdmin}
+                onClick={() => {
+                  const el = document.getElementById('inquiries');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
                 className="w-full sm:w-auto flex items-center justify-center space-x-2 px-5 py-3.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white font-bold text-sm rounded-xl border border-slate-200/90 dark:border-slate-700 shadow-xs transition cursor-pointer"
               >
-                <Lock size={15} className="text-slate-500" />
-                <span>Super Admin Portal</span>
+                <span>Contact Desk</span>
               </button>
             </div>
 

@@ -193,6 +193,35 @@ class AdminApiClient {
     const qs = params.toString();
     return this.request(`/admin/reviews${qs ? `?${qs}` : ''}`);
   }
+
+  // Ecosystem Inquiries & Leads Management
+  submitInquiry(data) {
+    return this.request('/enquiries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAllEnquiries(status, search) {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    if (search) params.set('search', search);
+    const qs = params.toString();
+    return this.request(`/enquiries${qs ? `?${qs}` : ''}`);
+  }
+
+  updateEnquiryStatus(id, status) {
+    return this.request(`/enquiries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  deleteEnquiry(id) {
+    return this.request(`/enquiries/${id}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new AdminApiClient();
