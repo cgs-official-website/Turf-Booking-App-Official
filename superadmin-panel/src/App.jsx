@@ -18,7 +18,6 @@ import { ReportsView } from './views/ReportsView';
 import { InquiriesView } from './views/InquiriesView';
 import { SubscriptionsView } from './views/SubscriptionsView';
 import { ReviewsView } from './views/ReviewsView';
-import { LandingPageView } from './views/LandingPageView';
 import { NotFoundView } from './views/NotFoundView';
 import { Landing } from './pages/Landing/Landing';
 
@@ -129,9 +128,8 @@ function DashboardApp() {
           {activeTab === 'inquiries' && <InquiriesView onUpdateStats={fetchStats} />}
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
-          {activeTab === 'landing' && <LandingPageView />}
 
-          {!['overview', 'kyc', 'turfs', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions', 'landing'].includes(activeTab) && (
+          {!['overview', 'kyc', 'turfs', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions'].includes(activeTab) && (
             <NotFoundView onNavigateHome={() => setActiveTab('overview')} />
           )}
         </main>
@@ -140,30 +138,59 @@ function DashboardApp() {
   );
 }
 
+function CgsLoginRoute() {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  if (isAuthenticated) {
+    return <DashboardApp />;
+  }
+
+  return <LoginView onNavigateHome={() => navigate('/')} />;
+}
+
 function MainRoutes() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // If user visits via hash bookmark like /#admin or /#/admin, navigate to /admin
+  // If user visits via hash bookmark or url like /cgs, #cgs, /admin, #admin
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#\/?/, '').trim();
-    if (hash === 'admin' || hash.startsWith('admin/')) {
-      navigate('/admin');
+    const rawHash = (window.location.hash || '').replace(/^#\/?/, '').trim().toLowerCase();
+    const rawPath = (window.location.pathname || '').toLowerCase();
+
+    if (rawHash === 'cgs' || rawHash.startsWith('cgs/') || rawPath === '/cgs' || rawPath.startsWith('/cgs/')) {
+      if (location.pathname !== '/cgs') {
+        navigate('/cgs');
+      }
+    } else if (rawHash === 'admin' || rawHash.startsWith('admin/')) {
+      if (!location.pathname.startsWith('/admin')) {
+        navigate('/admin');
+      }
     }
-  }, [navigate]);
+  }, [location, navigate]);
 
   return (
     <Routes>
       {/* Root Route ALWAYS serves the Landing Page */}
       <Route
         path="/"
-        element={<Landing onNavigateAdmin={() => navigate('/admin')} />}
+        element={<Landing />}
+      />
+
+      {/* Secret CGS Super Admin Login Route */}
+      <Route
+        path="/cgs"
+        element={<CgsLoginRoute />}
+      />
+      <Route
+        path="/cgs/*"
+        element={<CgsLoginRoute />}
       />
 
       {/* Explore / Turfs route */}
       <Route
         path="/turfs"
-        element={<Landing onNavigateAdmin={() => navigate('/admin')} />}
+        element={<Landing />}
       />
 
       {/* Super Admin Login Route */}
@@ -181,7 +208,7 @@ function MainRoutes() {
       {/* Fallback route */}
       <Route
         path="*"
-        element={<Landing onNavigateAdmin={() => navigate('/admin')} />}
+        element={<Landing />}
       />
     </Routes>
   );

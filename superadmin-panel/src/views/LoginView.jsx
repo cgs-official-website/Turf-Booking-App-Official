@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import appLogo from '../assets/logo.png';
 
-export const LoginView = () => {
+export const LoginView = ({ onNavigateHome }) => {
   const { login, loading } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -15,6 +17,7 @@ export const LoginView = () => {
     setError('');
     try {
       await login(email, password);
+      navigate('/admin');
     } catch (err) {
       setError(err.message || 'Invalid credentials');
     }
@@ -109,12 +112,13 @@ export const LoginView = () => {
           </button>
 
           <div className="pt-2 text-center">
-            <a
-              href="/"
-              className="text-xs font-semibold text-slate-500 hover:text-emerald-600 transition inline-flex items-center gap-1"
+            <button
+              type="button"
+              onClick={onNavigateHome || (() => navigate('/'))}
+              className="text-xs font-semibold text-slate-500 hover:text-emerald-600 transition inline-flex items-center gap-1 cursor-pointer"
             >
               ← Back to Public Website
-            </a>
+            </button>
           </div>
         </form>
       </div>
