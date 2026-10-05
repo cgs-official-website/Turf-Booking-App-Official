@@ -50,7 +50,7 @@ export const Sidebar = ({
       items: [
         { id: 'reviews', label: 'Turf Reviews', icon: Star },
         { id: 'users', label: 'Players Directory', icon: Users },
-        { id: 'matches', label: 'Matches & Scores', icon: Trophy },
+        // { id: 'matches', label: 'Matches & Scores', icon: Trophy },
       ],
     },
     {
