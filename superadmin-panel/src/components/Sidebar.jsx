@@ -10,6 +10,7 @@ import {
   Star,
   AlertTriangle,
   Inbox,
+  Globe,
   LogOut,
   ChevronRight,
   X,
@@ -34,6 +35,7 @@ export const Sidebar = ({
       items: [
         { id: 'overview', label: 'Overview', icon: LayoutDashboard },
         { id: 'bookings', label: 'Live Bookings', icon: CalendarCheck },
+        { id: 'landing', label: 'Landing Page', icon: Globe },
       ],
     },
     {
