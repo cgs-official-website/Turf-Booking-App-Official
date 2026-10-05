@@ -149,7 +149,9 @@ const nearbyTurfsController = {
       console.error('getNearbyTurfs error:', err);
       return sendError(res, 'Failed to fetch nearby turfs', 500, 'NEARBY_FETCH_FAILED');
     }
-  },
+  }
+};
+
 nearbyTurfsController.ensureLatLngColumns = ensureLatLngColumns;
 
 module.exports = nearbyTurfsController;
