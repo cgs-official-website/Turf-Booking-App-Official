@@ -16,6 +16,14 @@ import {
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import Geolocation from '@react-native-community/geolocation';
+
+try {
+  Geolocation.setRNConfiguration({
+    skipPermissionRequests: false,
+    authorizationLevel: 'auto',
+    locationProvider: 'playServices',
+  });
+} catch (_) {}
 import useTheme from '../hooks/useTheme';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 import { nearbyTurfsApi } from '../api/nearbyTurfsApi';
@@ -36,16 +44,16 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
   const requestLocationPermission = async () => {
     if (Platform.OS === 'android') {
       try {
-        const granted = await PermissionsAndroid.request(
+        const granted = await PermissionsAndroid.requestMultiple([
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'Turf App needs your location to show pitches within 5 km.',
-            buttonPositive: 'Allow',
-            buttonNegative: 'Deny',
-          }
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        return (
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
+            PermissionsAndroid.RESULTS.GRANTED ||
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] ===
+            PermissionsAndroid.RESULTS.GRANTED
         );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
       } catch (err) {
         console.warn('Permission request error:', err);
         return false;
@@ -69,45 +77,62 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
       return;
     }
 
-    Geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          setUserCoords({ lat: latitude, lng: longitude });
+    const onLocationSuccess = async (position) => {
+      try {
+        const { latitude, longitude } = position.coords;
+        setUserCoords({ lat: latitude, lng: longitude });
 
-          // Call API: GET /api/turfs/nearby?lat=..&lng=..&radius=5
-          const res = await nearbyTurfsApi.getNearbyTurfs({
-            lat: latitude,
-            lng: longitude,
-            radius: 5,
-          });
+        // Call API: GET /api/turfs/nearby?lat=..&lng=..&radius=5
+        const res = await nearbyTurfsApi.getNearbyTurfs({
+          lat: latitude,
+          lng: longitude,
+          radius: 5,
+        });
 
-          const list = res.data?.turfs || res.turfs || [];
-          setTurfs(list);
-        } catch (apiErr) {
-          console.warn('Nearby turfs API error:', apiErr.message);
-          setErrorType('api_error');
-        } finally {
-          setLoading(false);
-        }
-      },
-      (geoErr) => {
-        console.warn('Geolocation error:', geoErr);
-        if (geoErr.code === 1) {
-          // PERMISSION_DENIED
-          setErrorType('permission_denied');
-        } else if (geoErr.code === 2) {
-          // POSITION_UNAVAILABLE (GPS off or weak signal)
-          setErrorType('gps_off');
-        } else {
-          setErrorType('gps_off');
-        }
+        const list = res.data?.turfs || res.turfs || [];
+        setTurfs(list);
+      } catch (apiErr) {
+        console.warn('Nearby turfs API error:', apiErr.message);
+        setErrorType('api_error');
+      } finally {
         setLoading(false);
+      }
+    };
+
+    const onLocationFailure = (geoErr) => {
+      if (geoErr && geoErr.code === 1) {
+        // PERMISSION_DENIED
+        setErrorType('permission_denied');
+      } else {
+        // POSITION_UNAVAILABLE or TIMEOUT (GPS off)
+        setErrorType('gps_off');
+      }
+      setLoading(false);
+    };
+
+    // First attempt with high accuracy (GPS).
+    // If it times out or position is unavailable, automatically fallback to fused provider
+    Geolocation.getCurrentPosition(
+      onLocationSuccess,
+      (geoErr) => {
+        if (geoErr && (geoErr.code === 3 || geoErr.code === 2)) {
+          Geolocation.getCurrentPosition(
+            onLocationSuccess,
+            onLocationFailure,
+            {
+              enableHighAccuracy: false,
+              timeout: 6000,
+              maximumAge: 120000,
+            }
+          );
+        } else {
+          onLocationFailure(geoErr);
+        }
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 10000,
+        timeout: 5000,
+        maximumAge: 60000,
       }
     );
   }, []);
@@ -118,7 +143,13 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
     }
   }, [visible, fetchNearbyTurfs]);
 
-  const handleOpenSettings = () => {
+  const handleOpenSettings = async () => {
+    if (Platform.OS === 'android' && errorType === 'gps_off') {
+      try {
+        await Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
+        return;
+      } catch {}
+    }
     Linking.openSettings().catch(() => {});
   };
 
@@ -265,8 +296,15 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
                   onPress={handleOpenSettings}
                   activeOpacity={0.8}
                 >
-                  <Feather name="settings" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.settingsBtnText}>Open Settings</Text>
+                  <Feather
+                    name={errorType === 'gps_off' ? 'navigation' : 'settings'}
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.settingsBtnText}>
+                    {errorType === 'gps_off' ? 'Turn On Location' : 'Open Settings'}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
