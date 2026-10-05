@@ -329,6 +329,15 @@ const bookingService = {
         });
 
         if (existing) {
+          // If the reservation belongs to the CURRENT user, reuse/extend their hold reservation!
+          if (existing.userId === actor.uid && existing.bookingStatus === 'reserved') {
+            const updated = await tx.booking.update({
+              where: { bookingId: existing.bookingId },
+              data: { holdExpiresAt: expiresAt, updatedAt: now },
+            });
+            return updated;
+          }
+
           if (existing.bookingStatus === 'reserved' && existing.holdExpiresAt && existing.holdExpiresAt > now) {
             throw new BookingError('Slot is currently held by another user. Try again in a few minutes.', 409, 'SLOT_HELD');
           }
@@ -370,6 +379,11 @@ const bookingService = {
             bookingStatus: { in: ['reserved', 'pending', 'confirmed'] },
           },
         });
+
+        if (conflict?.userId === actor.uid && conflict?.bookingStatus === 'reserved') {
+          return toApi(conflict, { turf });
+        }
+
         if (conflict?.bookingStatus === 'reserved' && conflict.holdExpiresAt && conflict.holdExpiresAt > new Date()) {
           throw new BookingError('Slot is currently held by another user. Try again in a few minutes.', 409, 'SLOT_HELD');
         }

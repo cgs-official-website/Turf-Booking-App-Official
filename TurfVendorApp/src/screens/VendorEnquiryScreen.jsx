@@ -80,6 +80,7 @@ const VendorEnquiryScreen = ({ navigation }) => {
   };
 
   const handleSendEnquiry = async () => {
+    if (submitting) return;
     if (!validate()) {
       return;
     }

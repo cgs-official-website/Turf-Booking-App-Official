@@ -1,4 +1,4 @@
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
 const { sendSuccess, sendError } = require('../utils/response');
 
 const enquiryController = {
@@ -59,24 +59,70 @@ const enquiryController = {
         });
       }
 
-      const enquiryData = {
-        turfName: cleanTurfName,
-        vendorName: cleanVendorName,
-        vendorMobile: cleanPhone,
-        vendorLocation: cleanLocation,
-        message: cleanMessage,
-        status: 'pending',
-        type: 'vendor_enquiry',
-        createdAt: new Date().toISOString(),
-      };
+      // Prevent duplicate enquiries within a 60-second window
+      const recentEnquiry = await prisma.vendorEnquiry.findFirst({
+        where: {
+          vendorMobile: cleanPhone,
+          turfName: cleanTurfName,
+          createdAt: {
+            gte: new Date(Date.now() - 60000),
+          },
+        },
+      });
 
-      const enquiry = await firestoreService.createDoc('vendor_enquiries', enquiryData);
+      if (recentEnquiry) {
+        return sendSuccess(
+          res,
+          {
+            enquiry: recentEnquiry,
+            message: 'Your enquiry has already been received. Our team will contact you shortly.',
+          },
+          200
+        );
+      }
+
+      const enquiryId = `enq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const reportId = `RPT-ENQ-${Date.now()}`;
+
+      // 1. Store in vendor_enquiries table
+      const enquiry = await prisma.vendorEnquiry.create({
+        data: {
+          id: enquiryId,
+          turfName: cleanTurfName,
+          vendorName: cleanVendorName,
+          vendorMobile: cleanPhone,
+          vendorLocation: cleanLocation,
+          message: cleanMessage,
+          status: 'pending',
+        },
+      });
+
+      // 2. Store in reports table so it automatically routes to Superadmin Issue Reports module
+      const report = await prisma.report.create({
+        data: {
+          id: reportId,
+          vendorId: null, // Prospective vendor doesn't have an approved vendor account yet
+          issueType: 'Vendor Enquiry',
+          category: 'Vendor Enquiry',
+          description: `[Prospective Partner Enquiry]\nFacility / Turf: ${cleanTurfName}\nOwner / Contact: ${cleanVendorName} (${cleanPhone})\nLocation: ${cleanLocation}\n\nEnquiry Details:\n${cleanMessage}`,
+          contactInfo: {
+            turfName: cleanTurfName,
+            vendorName: cleanVendorName,
+            vendorMobile: cleanPhone,
+            vendorLocation: cleanLocation,
+            message: cleanMessage,
+            enquiryId: enquiry.id,
+          },
+          status: 'open',
+        },
+      });
 
       return sendSuccess(
         res,
         {
           enquiry,
-          message: 'Vendor enquiry submitted successfully',
+          report,
+          message: 'Vendor enquiry submitted successfully and forwarded to administration',
         },
         201
       );
@@ -92,15 +138,14 @@ const enquiryController = {
    */
   async getAllEnquiries(req, res, next) {
     try {
-      const result = await firestoreService.queryWithCursor('vendor_enquiries', {
-        orderByField: 'createdAt',
-        orderDirection: 'desc',
-        limit: 50,
+      const enquiries = await prisma.vendorEnquiry.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 50,
       });
 
       return sendSuccess(res, {
-        enquiries: result.items || [],
-        nextCursor: result.nextCursor || null,
+        enquiries,
+        total: enquiries.length,
       });
     } catch (err) {
       console.error('Error fetching enquiries:', err);

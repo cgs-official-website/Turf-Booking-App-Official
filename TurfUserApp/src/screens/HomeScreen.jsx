@@ -15,7 +15,7 @@ try {
     authorizationLevel: 'auto',
     locationProvider: 'playServices',
   });
-} catch (_) {}
+} catch (_) { }
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { turfsApi } from '../api/turfs';
@@ -125,17 +125,17 @@ function LocationPermissionView({ C, dark }) {
 
 // ─── Main HomeScreen ──────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
-  const dispatch  = useDispatch();
+  const dispatch = useDispatch();
   const { C, dark } = useTheme();
 
-  const user                      = useSelector((s) => s.auth.user);
-  const wishlist                  = useSelector((s) => s.wishlist.wishlist);
+  const user = useSelector((s) => s.auth.user);
+  const wishlist = useSelector((s) => s.wishlist.wishlist);
   const locationPermissionGranted = useSelector((s) => s.auth.locationPermissionGranted);
-  const location                  = useSelector((s) => s.auth.location);
-  const [turfs,         setTurfs]         = useState([]);
-  const [sport,         setSport]         = useState(null);
-  const [loading,       setLoading]       = useState(true);
-  const [unread,        setUnread]        = useState(0);
+  const location = useSelector((s) => s.auth.location);
+  const [turfs, setTurfs] = useState([]);
+  const [sport, setSport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [unread, setUnread] = useState(0);
   const [filterVisible, setFilterVisible] = useState(false);
   const [nearbyModalVisible, setNearbyModalVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState({ sort: null, time: null });
@@ -214,10 +214,10 @@ export default function HomeScreen({ navigation }) {
           await Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
           return;
         } catch {
-          Linking.openSettings().catch(() => {});
+          Linking.openSettings().catch(() => { });
         }
       } else {
-        Linking.openSettings().catch(() => {});
+        Linking.openSettings().catch(() => { });
       }
     };
 
@@ -267,7 +267,7 @@ export default function HomeScreen({ navigation }) {
             text: 'Turn On Location',
             onPress: () => {
               waitingForLocationRef.current = true;
-              Linking.openSettings().catch(() => {});
+              Linking.openSettings().catch(() => { });
             },
           },
         ]
@@ -321,7 +321,7 @@ export default function HomeScreen({ navigation }) {
             () => {
               Geolocation.getCurrentPosition(
                 (pos) => onLocationSuccess(pos),
-                () => {},
+                () => { },
                 { enableHighAccuracy: false, timeout: 3500, maximumAge: 60000 }
               );
             },
@@ -339,9 +339,9 @@ export default function HomeScreen({ navigation }) {
     try {
       setLoading(true);
       const params = {};
-      if (sport)                params.sport = sport;
-      if (activeFilters.sort)   params.sort  = activeFilters.sort;
-      if (activeFilters.time)   params.time  = activeFilters.time;
+      if (sport) params.sport = sport;
+      if (activeFilters.sort) params.sort = activeFilters.sort;
+      if (activeFilters.time) params.time = activeFilters.time;
       const res = await turfsApi.getTurfs(params);
       setTurfs(res.turfs || res.items || []);
     } catch {
@@ -370,12 +370,12 @@ export default function HomeScreen({ navigation }) {
     useCallback(() => {
       notificationsApi.getAll()
         .then((r) => setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read).length))
-        .catch(() => {});
+        .catch(() => { });
 
       if (locationOff) {
         Geolocation.getCurrentPosition(
           (pos) => onLocationSuccess(pos),
-          () => {},
+          () => { },
           { enableHighAccuracy: false, timeout: 2500, maximumAge: 60000 }
         );
       }
@@ -413,12 +413,12 @@ export default function HomeScreen({ navigation }) {
   const displayLocation = isLocating
     ? 'Locating...'
     : locationOff
-    ? 'Select Location'
-    : (customLocationName || (location && location !== 'Current Location'
+      ? 'Select Location'
+      : (customLocationName || (location && location !== 'Current Location'
         ? location
         : (typeof user?.location === 'string' && user.location.trim()
-            ? user.location.trim()
-            : (user?.location?.address || user?.location?.city || 'Chennai, Tamil Nadu'))));
+          ? user.location.trim()
+          : (user?.location?.address || user?.location?.city || 'Chennai, Tamil Nadu'))));
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>

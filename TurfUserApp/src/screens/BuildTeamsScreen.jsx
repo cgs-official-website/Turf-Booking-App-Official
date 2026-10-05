@@ -25,12 +25,17 @@ export default function BuildTeamsScreen({ route, navigation }) {
       if (!m) return;
       setMatch(m);
 
+      // Ensure creator is present if no players selected
+      const effectivePlayers = (m.players && m.players.length > 0)
+        ? m.players
+        : [{ id: 'host_creator', name: 'You (Host)', isGuest: false }];
+
       // split players alternately if not already split
       if (m.teams?.A?.playerIds?.length || m.teams?.B?.playerIds?.length) {
         setTeamA(m.teams.A);
         setTeamB(m.teams.B);
       } else {
-        const ids = m.players.map((p) => p.id);
+        const ids = effectivePlayers.map((p) => p.id);
         const a = ids.filter((_, i) => i % 2 === 0);
         const b = ids.filter((_, i) => i % 2 === 1);
         setTeamA({ name: 'Team A', logo: null, playerIds: a, captainId: a[0] || null });
@@ -39,7 +44,10 @@ export default function BuildTeamsScreen({ route, navigation }) {
     })();
   }, [matchId]);
 
-  const playerById = (id) => match?.players.find((p) => p.id === id);
+  const playerById = (id) => {
+    if (id === 'host_creator') return { id: 'host_creator', name: 'You (Host)' };
+    return match?.players?.find((p) => p.id === id);
+  };
 
   const swapTeam = (id) => {
     if (teamA.playerIds.includes(id)) {
@@ -74,18 +82,24 @@ export default function BuildTeamsScreen({ route, navigation }) {
   };
 
   const handleContinue = async () => {
-    if (teamA.playerIds.length === 0 || teamB.playerIds.length === 0) {
-      Alert.alert('Need players', 'Both teams need at least one player');
+    const isOpenMatch = match?.playWithStrangers === true;
+
+    // For Private Squad with no players, alert gently if both teams are empty
+    if (!isOpenMatch && teamA.playerIds.length === 0 && teamB.playerIds.length === 0) {
+      Alert.alert('Need players', 'Please select at least one player for your private squad team.');
       return;
     }
+
     setSaving(true);
     try {
       const updated = await matchStorage.updateMatch(matchId, {
         teams: { A: teamA, B: teamB },
         status: 'upcoming',
       });
-      await matchStorage.addTimeline(matchId, 'Teams finalized');
+      await matchStorage.addTimeline(matchId, 'Match Room Created');
       navigation.replace('Match', { matchId: updated.id });
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Failed to save match room');
     } finally {
       setSaving(false);
     }

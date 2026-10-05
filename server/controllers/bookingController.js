@@ -148,60 +148,64 @@ const bookingController = {
         // Invalidate slot cache
         await cacheService.invalidateSlots(booking.turfId, booking.date);
 
-        // Notify user & vendor
-        try {
-          await notificationService.sendNotification({
-            recipientId: uid,
-            recipientRole: 'user',
-            title: 'Hand Cash Request Submitted',
-            body: `Your request for ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime} - ${booking.endTime}) has been submitted. The pitch owner will review and confirm.`,
-            type: 'booking',
-            data: { bookingId: id, screen: 'Bookings' },
-          });
-
-          // Resolve vendorId and turf details for vendor notification
-          let vendorId = booking.vendorId;
-          let turfName = booking.turfName || booking.turf?.name;
-          let turfType = booking.turfType || booking.sport || (Array.isArray(booking.turf?.sports) && booking.turf.sports[0]);
-
-          if ((!vendorId || !turfName || !turfType) && booking.turfId) {
-            const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
-            if (turf) {
-              if (!vendorId) vendorId = turf.vendorId;
-              if (!turfName) turfName = turf.name;
-              if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
-            }
-          }
-
-          turfName = turfName || 'Turf';
-          turfType = turfType || 'Standard';
-          const timeSlot = `${booking.startTime} - ${booking.endTime}`;
-          const notifText = `New Booking: ${turfName} - ${turfType}, ${booking.date}, ${timeSlot}`;
-
-          if (vendorId) {
+        // Notify user & vendor asynchronously in background (non-blocking)
+        (async () => {
+          try {
             await notificationService.sendNotification({
-              recipientId: vendorId,
-              recipientRole: 'vendor',
-              title: notifText,
-              body: notifText,
+              recipientId: uid,
+              recipientRole: 'user',
+              title: 'Hand Cash Request Submitted',
+              body: `Your request for ${booking.turfName || 'the turf'} on ${booking.date} (${booking.startTime} - ${booking.endTime}) has been submitted. The pitch owner will review and confirm.`,
               type: 'booking',
-              data: {
-                bookingId: String(id),
-                screen: 'BookingDetail',
-                type: 'booking',
-                notificationText: notifText,
-                turfName,
-                turfType,
-                date: booking.date,
-                timeSlot,
-                amount: String(booking.amount || booking.totalAmount || ''),
-                paymentStatus: booking.paymentStatus || 'pending',
-              },
+              data: { bookingId: id, screen: 'Bookings' },
             });
+
+            // Resolve vendorId and turf details for vendor notification
+            let vendorId = booking.vendorId;
+            let turfName = booking.turfName || booking.turf?.name;
+            let turfType = booking.turfType || booking.sport || (Array.isArray(booking.turf?.sports) && booking.turf.sports[0]);
+
+            if ((!vendorId || !turfName || !turfType) && booking.turfId) {
+              const turf = await prisma.turf.findUnique({ where: { id: booking.turfId } });
+              if (turf) {
+                if (!vendorId) vendorId = turf.vendorId;
+                if (!turfName) turfName = turf.name;
+                if (!turfType) turfType = Array.isArray(turf.sports) ? turf.sports[0] : (turf.sports || 'Turf');
+              }
+            }
+
+            turfName = turfName || 'Turf';
+            turfType = turfType || 'Standard';
+            const timeSlot = `${booking.startTime} - ${booking.endTime}`;
+            const notifTitle = 'New Booking Request';
+            const notifBody = `New booking received for ${turfName}, ${timeSlot} on ${booking.date}.`;
+
+            if (vendorId) {
+              await notificationService.sendNotification({
+                recipientId: vendorId,
+                recipientRole: 'vendor',
+                title: notifTitle,
+                body: notifBody,
+                type: 'booking',
+                data: {
+                  bookingId: String(id),
+                  turfId: String(booking.turfId || ''),
+                  screen: 'BookingDetail',
+                  type: 'booking',
+                  notificationText: notifBody,
+                  turfName,
+                  turfType,
+                  date: booking.date,
+                  timeSlot,
+                  amount: String(booking.amount || booking.totalAmount || ''),
+                  paymentStatus: booking.paymentStatus || 'pending',
+                },
+              });
+            }
+          } catch (notifErr) {
+            console.warn('⚠️ Notification warning on cash booking:', notifErr.message);
           }
-        } catch (notifErr) {
-          console.warn('⚠️ Notification warning on cash booking:', notifErr.message);
-        }
+        })();
       }
 
       return sendSuccess(res, {
@@ -297,20 +301,22 @@ const bookingController = {
           await cacheService.invalidateDashboard(booking.vendorId);
         }
 
-        // Notify Vendor
+        // Notify Vendor asynchronously in background
         if (booking.vendorId) {
-          try {
-            await notificationService.sendNotification({
-              recipientId: booking.vendorId,
-              recipientRole: 'vendor',
-              title: 'Booking Cancelled',
-              body: `Booking for ${booking.date} at ${booking.startTime} has been cancelled.`,
-              type: 'booking',
-              data: { bookingId: id },
-            });
-          } catch (notifErr) {
-            console.warn('⚠️ Notification error on cancel:', notifErr.message);
-          }
+          (async () => {
+            try {
+              await notificationService.sendNotification({
+                recipientId: booking.vendorId,
+                recipientRole: 'vendor',
+                title: 'Booking Cancelled',
+                body: `Booking for ${booking.date} at ${booking.startTime} has been cancelled.`,
+                type: 'booking',
+                data: { bookingId: id },
+              });
+            } catch (notifErr) {
+              console.warn('⚠️ Notification error on cancel:', notifErr.message);
+            }
+          })();
         }
       }
 

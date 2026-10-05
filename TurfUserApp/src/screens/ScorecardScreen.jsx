@@ -117,7 +117,40 @@ export default function ScorecardScreen({ route, navigation }) {
     }
   };
 
-  const playerById = (id) => match?.players.find((p) => p.id === id);
+  const playerById = (id) => {
+    if (!id) return null;
+    const found = match?.players?.find((p) => p.id === id);
+    if (found) return found;
+    if (id === 'host_creator') return { id: 'host_creator', name: 'You (Host)' };
+    if (id.endsWith('_p1')) return { id, name: 'Player 1' };
+    if (id.endsWith('_p2')) return { id, name: 'Player 2' };
+    return { id, name: 'Player' };
+  };
+
+  const eligibleBatters = (teamKey, excludeIds = []) => {
+    if (!match || !match.teams || !match.teams[teamKey]) return [];
+    const teamPlayerIds = match.teams[teamKey].playerIds || [];
+    let list = teamPlayerIds
+      .filter((id) => !excludeIds.includes(id))
+      .map((id) => playerById(id))
+      .filter(Boolean);
+
+    if (list.length === 0) {
+      const teamName = match.teams[teamKey]?.name || 'Player';
+      const fallbackList = [
+        { id: `${teamKey}_p1`, name: `${teamName} 1` },
+        { id: `${teamKey}_p2`, name: `${teamName} 2` },
+      ];
+      return fallbackList.filter((p) => !excludeIds.includes(p.id));
+    }
+
+    if (list.length === 1 && excludeIds.length > 0) {
+      const teamName = match.teams[teamKey]?.name || 'Player';
+      list.push({ id: `${teamKey}_p2`, name: `${teamName} 2` });
+    }
+
+    return list;
+  };
 
   const persist = async (nextMatch) => {
     setMatch(nextMatch);
@@ -245,13 +278,7 @@ export default function ScorecardScreen({ route, navigation }) {
     return Object.keys(inn.bowlers).map((id) => ({ id, ...inn.bowlers[id] }));
   }, [inn]);
 
-  const eligibleBatters = (teamKey, excludeIds = []) => {
-    if (!match) return [];
-    return match.teams[teamKey].playerIds
-      .filter((id) => !excludeIds.includes(id))
-      .map((id) => playerById(id))
-      .filter(Boolean);
-  };
+
 
   if (!match || !inn) return <View style={styles.root} />;
 

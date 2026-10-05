@@ -23,8 +23,44 @@ const to12h = (t) => {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 };
 
+const parseTimeToMinutes = (t) => {
+  if (!t || typeof t !== 'string') return 0;
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
 const pad = (n) => String(n).padStart(2, '0');
 const toDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+const getSlotDynamicStatus = (slot, selectedDateStr) => {
+  if (!slot) return 'available';
+
+  if (slot.status === 'booked' || slot.status === 'requested') {
+    return slot.status;
+  }
+
+  const todayStr = toDateStr(new Date());
+
+  if (selectedDateStr < todayStr) {
+    return 'completed';
+  }
+
+  if (selectedDateStr === todayStr) {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMin = parseTimeToMinutes(slot.startTime);
+    const endMin = parseTimeToMinutes(slot.endTime);
+
+    if (currentMinutes >= endMin) {
+      return 'completed';
+    }
+    if (currentMinutes >= startMin && currentMinutes < endMin) {
+      return 'in_progress';
+    }
+  }
+
+  return slot.status || 'available';
+};
 
 const getNextDays = (count = 14) => {
   const days = [];
@@ -69,6 +105,22 @@ const getStatusMeta = (colors) => ({
     border: 'rgba(107, 114, 128, 0.25)',
     actionText: 'Unblock',
     actionColor: colors.success || '#10B981',
+  },
+  completed: {
+    label: 'Completed',
+    color: '#64748B',
+    bg: 'rgba(100, 116, 139, 0.12)',
+    border: 'rgba(100, 116, 139, 0.25)',
+    actionText: 'Finished',
+    actionColor: '#94A3B8',
+  },
+  in_progress: {
+    label: 'In Progress',
+    color: '#2563EB',
+    bg: 'rgba(37, 99, 235, 0.14)',
+    border: 'rgba(37, 99, 235, 0.45)',
+    actionText: 'Live Now',
+    actionColor: '#2563EB',
   },
 });
 
@@ -438,7 +490,7 @@ const SlotsScreen = ({ navigation }) => {
           </View>
         ) : (
           categorizedSections.map((section) => {
-            const openCount = section.slots.filter((s) => s.status === 'available').length;
+            const openCount = section.slots.filter((s) => getSlotDynamicStatus(s, dateStr) === 'available').length;
             return (
               <View key={section.key} style={styles.dayPartContainer}>
                 {/* Day Part Section Title Card */}
@@ -460,7 +512,8 @@ const SlotsScreen = ({ navigation }) => {
                 {/* 2-Column Slot Cards Grid */}
                 <View style={styles.twoColumnGrid}>
                   {section.slots.map((slot) => {
-                    const meta = STATUS_META[slot.status] || STATUS_META.available;
+                    const dynamicStatus = getSlotDynamicStatus(slot, dateStr);
+                    const meta = STATUS_META[dynamicStatus] || STATUS_META.available;
                     const isSelected = selectedSlots.has(slot.startTime);
 
                     return (
@@ -536,52 +589,63 @@ const SlotsScreen = ({ navigation }) => {
       <Modal visible={!!modalSlot} transparent animationType="fade" onRequestClose={() => setModalSlot(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, SHADOWS.md]}>
-            {modalSlot && (
-              <>
-                <Text style={styles.modalTitle}>Slot Details</Text>
-                <Text style={styles.modalTime}>{to12h(modalSlot.startTime)} - {to12h(modalSlot.endTime)} ({dateStr})</Text>
+                {modalSlot && (() => {
+                  const dynamicStatus = getSlotDynamicStatus(modalSlot, dateStr);
+                  const meta = STATUS_META[dynamicStatus] || STATUS_META.available;
+                  const isPastOrProgress = dynamicStatus === 'completed' || dynamicStatus === 'in_progress';
+                  const isBookedOrReq = modalSlot.status === 'booked' || modalSlot.status === 'requested';
 
-                <View style={styles.modalStatusRow}>
-                  <Text style={styles.modalStatusLabel}>Current Status: </Text>
-                  <Text style={[styles.modalStatusValue, { color: STATUS_META[modalSlot.status]?.color || colors.text }]}>
-                    {STATUS_META[modalSlot.status]?.label || modalSlot.status}
-                  </Text>
-                </View>
+                  return (
+                    <>
+                      <Text style={styles.modalTitle}>Slot Details</Text>
+                      <Text style={styles.modalTime}>{to12h(modalSlot.startTime)} - {to12h(modalSlot.endTime)} ({dateStr})</Text>
 
-                {(modalSlot.status === 'requested' || modalSlot.status === 'booked') ? (
-                  <>
-                    <Text style={styles.modalHint}>
-                      This slot is already linked to a customer booking and cannot be blocked manually.
-                    </Text>
-                    <View style={styles.modalActions}>
-                      <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalSlot(null)} activeOpacity={0.8}>
-                        <Text style={styles.modalCancelText}>Close</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalSlot(null)} activeOpacity={0.8}>
-                      <Text style={styles.modalCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.modalActionBtn, modalSlot.status === 'frozen' ? { backgroundColor: colors.success || '#10B981' } : { backgroundColor: colors.error || '#EF4444' }]}
-                      disabled={slotActionLoading}
-                      onPress={() => doFreeze(modalSlot, modalSlot.status === 'frozen' ? 'unfreeze' : 'freeze')}
-                      activeOpacity={0.85}
-                    >
-                      {slotActionLoading ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
-                      ) : (
-                        <Text style={styles.modalActionBtnText}>
-                          {modalSlot.status === 'frozen' ? 'Unblock Slot' : 'Block Slot'}
+                      <View style={styles.modalStatusRow}>
+                        <Text style={styles.modalStatusLabel}>Current Status: </Text>
+                        <Text style={[styles.modalStatusValue, { color: meta.color || colors.text }]}>
+                          {meta.label}
                         </Text>
+                      </View>
+
+                      {(isBookedOrReq || isPastOrProgress) ? (
+                        <>
+                          <Text style={styles.modalHint}>
+                            {isBookedOrReq
+                              ? 'This slot is already linked to a customer booking.'
+                              : dynamicStatus === 'completed'
+                              ? 'This time slot has already passed.'
+                              : 'This time slot is currently active and in progress.'}
+                          </Text>
+                          <View style={styles.modalActions}>
+                            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalSlot(null)} activeOpacity={0.8}>
+                              <Text style={styles.modalCancelText}>Close</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.modalActions}>
+                          <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalSlot(null)} activeOpacity={0.8}>
+                            <Text style={styles.modalCancelText}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.modalActionBtn, modalSlot.status === 'frozen' ? { backgroundColor: colors.success || '#10B981' } : { backgroundColor: colors.error || '#EF4444' }]}
+                            disabled={slotActionLoading}
+                            onPress={() => doFreeze(modalSlot, modalSlot.status === 'frozen' ? 'unfreeze' : 'freeze')}
+                            activeOpacity={0.85}
+                          >
+                            {slotActionLoading ? (
+                              <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                              <Text style={styles.modalActionBtnText}>
+                                {modalSlot.status === 'frozen' ? 'Unblock Slot' : 'Block Slot'}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
                       )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
-            )}
+                    </>
+                  );
+                })()}
           </View>
         </View>
       </Modal>

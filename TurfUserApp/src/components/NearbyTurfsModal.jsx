@@ -23,7 +23,7 @@ try {
     authorizationLevel: 'auto',
     locationProvider: 'playServices',
   });
-} catch (_) {}
+} catch (_) { }
 import useTheme from '../hooks/useTheme';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 import { nearbyTurfsApi } from '../api/nearbyTurfsApi';
@@ -50,9 +50,9 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
         ]);
         return (
           granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
-            PermissionsAndroid.RESULTS.GRANTED ||
+          PermissionsAndroid.RESULTS.GRANTED ||
           granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] ===
-            PermissionsAndroid.RESULTS.GRANTED
+          PermissionsAndroid.RESULTS.GRANTED
         );
       } catch (err) {
         console.warn('Permission request error:', err);
@@ -148,9 +148,9 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
       try {
         await Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
         return;
-      } catch {}
+      } catch { }
     }
-    Linking.openSettings().catch(() => {});
+    Linking.openSettings().catch(() => { });
   };
 
   const handleCardPress = (turf) => {

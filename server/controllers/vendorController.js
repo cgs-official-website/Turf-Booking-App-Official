@@ -466,25 +466,49 @@ const vendorController = {
       await cacheService.invalidateDashboard(uid);
 
       if (updatedBooking.userId) {
-        if (newStatus === 'confirmed') {
-          await notificationService.sendNotification({
-            recipientId: updatedBooking.userId,
-            recipientRole: 'user',
-            title: 'Booking Confirmed!',
-            body: `Your slot at ${updatedBooking.turfName || updatedBooking.turf?.name || 'the turf'} on ${updatedBooking.date} (${updatedBooking.startTime} - ${updatedBooking.endTime}) is confirmed.`,
-            type: 'booking',
-            data: { bookingId: id },
-          });
-        } else {
-          await notificationService.sendNotification({
-            recipientId: updatedBooking.userId,
-            recipientRole: 'user',
-            title: 'Booking Request Declined',
-            body: `Your booking request for ${updatedBooking.date} at ${updatedBooking.startTime} could not be accepted.`,
-            type: 'booking',
-            data: { bookingId: id },
-          });
-        }
+        (async () => {
+          try {
+            let turfName = updatedBooking.turfName || updatedBooking.turf?.name;
+            if (!turfName && updatedBooking.turfId) {
+              const turf = await prisma.turf.findUnique({ where: { id: updatedBooking.turfId } });
+              turfName = turf?.name;
+            }
+            turfName = turfName || 'the turf';
+            const timeSlot = `${updatedBooking.startTime} - ${updatedBooking.endTime}`;
+
+            if (newStatus === 'confirmed') {
+              await notificationService.sendNotification({
+                recipientId: updatedBooking.userId,
+                recipientRole: 'user',
+                title: 'Booking Confirmed',
+                body: `Your booking at ${turfName} for ${timeSlot} has been accepted.`,
+                type: 'booking',
+                data: {
+                  bookingId: String(id),
+                  turfId: String(updatedBooking.turfId || ''),
+                  screen: 'BookingDetail',
+                  type: 'booking',
+                },
+              });
+            } else {
+              await notificationService.sendNotification({
+                recipientId: updatedBooking.userId,
+                recipientRole: 'user',
+                title: 'Booking Update',
+                body: `Your booking request at ${turfName} for ${timeSlot} was rejected.`,
+                type: 'booking',
+                data: {
+                  bookingId: String(id),
+                  turfId: String(updatedBooking.turfId || ''),
+                  screen: 'BookingDetail',
+                  type: 'booking',
+                },
+              });
+            }
+          } catch (notifErr) {
+            console.warn('⚠️ Non-blocking notification dispatch warning:', notifErr.message);
+          }
+        })();
       }
 
       return sendSuccess(res, {
@@ -693,32 +717,6 @@ const vendorController = {
     }
   },
 
-  /**
-   * POST /api/v1/vendor/report-issue
-   * Writes to PostgreSQL reports table
-   */
-  async reportIssue(req, res) {
-    try {
-      const { uid } = req.user;
-      const parsed = reportIssueSchema.parse(req.body);
-      const reportId = `report_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-      const report = await prisma.report.create({
-        data: {
-          id: reportId,
-          vendorId: uid,
-          issueType: parsed.issueType || parsed.category || 'General Issue',
-          description: parsed.description,
-          status: 'open',
-        },
-      });
-
-      return sendSuccess(res, { report }, 201);
-    } catch (err) {
-      console.error('reportIssue error:', err);
-      return sendError(res, err.message || 'Failed to submit issue report', 400, 'SUBMISSION_FAILED');
-    }
-  },
 
   /**
    * GET /api/v1/vendor/turfs
@@ -1078,6 +1076,86 @@ const vendorController = {
     const { turfId } = req.params;
     const turf = await prisma.turf.findUnique({ where: { id: turfId } });
     return sendSuccess(res, { turf: formatTurf(turf) });
+  },
+
+  /**
+   * GET /api/v1/vendor/reports/issue-types
+   */
+  async getIssueTypes(req, res) {
+    const issueTypes = [
+      'Payment Issue',
+      'Booking Issue',
+      'Technical Issue',
+      'Turf Listing Issue',
+      'Subscription Issue',
+      'Other',
+    ];
+    return sendSuccess(res, { issueTypes });
+  },
+
+  /**
+   * POST /api/v1/vendor/reports or /api/v1/vendor/report-issue
+   */
+  async reportIssue(req, res) {
+    try {
+      const { uid } = req.user;
+      const { issueType, description } = req.body;
+
+      if (!description || !description.trim()) {
+        return sendError(res, 'Description is required', 400, 'VALIDATION_ERROR');
+      }
+
+      // Prevent duplicate issue tickets within a 60-second window
+      const cleanDesc = description.trim();
+      const recentReport = await prisma.report.findFirst({
+        where: {
+          vendorId: uid,
+          issueType: issueType || 'Other',
+          description: cleanDesc,
+          createdAt: {
+            gte: new Date(Date.now() - 60000),
+          },
+        },
+      });
+
+      if (recentReport) {
+        return sendSuccess(res, { report: recentReport }, 200);
+      }
+
+      const reportId = `TKT-${Date.now()}`;
+      const report = await prisma.report.create({
+        data: {
+          id: reportId,
+          vendorId: uid,
+          issueType: issueType || 'Other',
+          category: issueType || 'General Issue',
+          description: description.trim(),
+          status: 'open',
+        },
+      });
+
+      return sendSuccess(res, { report }, 201);
+    } catch (err) {
+      console.error('reportIssue error:', err);
+      return sendError(res, 'Failed to submit report', 500, 'REPORT_FAILED');
+    }
+  },
+
+  /**
+   * GET /api/v1/vendor/reports
+   */
+  async getMyReports(req, res) {
+    try {
+      const { uid } = req.user;
+      const reports = await prisma.report.findMany({
+        where: { vendorId: uid },
+        orderBy: { createdAt: 'desc' },
+      });
+      return sendSuccess(res, { reports });
+    } catch (err) {
+      console.error('getMyReports error:', err);
+      return sendError(res, 'Failed to fetch reports', 500, 'FETCH_FAILED');
+    }
   },
 };
 

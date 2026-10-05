@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Switch, Alert, Image, Dimensions,
+  Switch, Alert, Image, Dimensions, Linking, ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout, toggleTheme, toggleNotifications } from '../redux/authSlice';
+import { logout, toggleTheme, toggleNotifications, setNotificationsOn } from '../redux/authSlice';
 import { fcmHelper } from '../utils/fcmHelper';
+import { notificationsApi } from '../api/notifications';
 import { SPACING, RADIUS, FONT } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
 import { getImageUrl } from '../api/client';
@@ -77,6 +78,63 @@ export default function ProfileScreen({ navigation }) {
 
   const dispatch = useDispatch();
   const { C, dark } = useTheme();
+  const [savingNotif, setSavingNotif] = useState(false);
+
+  // Sync saved push notification preference from backend on load
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await notificationsApi.getPreferences();
+        const serverPref = res?.data?.pushNotifications ?? res?.pushNotifications;
+        if (typeof serverPref === 'boolean' && isMounted) {
+          dispatch(setNotificationsOn(serverPref));
+        }
+      } catch (e) {
+        // Fall back to current cached preference
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [dispatch]);
+
+  const handleToggleNotifications = async () => {
+    if (savingNotif) return;
+    const targetState = !notifOn;
+
+    if (targetState === true) {
+      // Check Android permission
+      const hasPermission = await fcmHelper.requestPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Notification Permission Required',
+          'Android is blocking notifications for Turf Booking. Please enable notifications in your device settings to receive alerts.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+    }
+
+    setSavingNotif(true);
+    // Optimistically update UI
+    dispatch(setNotificationsOn(targetState));
+
+    try {
+      await notificationsApi.updatePreferences(targetState);
+      if (targetState === true) {
+        // Refresh token registration when enabled
+        await fcmHelper.registerDeviceToken();
+      }
+    } catch (err) {
+      // Revert if saving fails
+      dispatch(setNotificationsOn(!targetState));
+      Alert.alert('Settings Error', 'Could not update notification preference. Please check your network connection.');
+    } finally {
+      setSavingNotif(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out of your player account?', [
@@ -209,7 +267,7 @@ export default function ProfileScreen({ navigation }) {
             colors={C}
             toggle
             toggleVal={notifOn}
-            onToggle={() => dispatch(toggleNotifications())}
+            onToggle={handleToggleNotifications}
           />
           <MenuItem
             icon={dark ? 'moon' : 'sun'}
