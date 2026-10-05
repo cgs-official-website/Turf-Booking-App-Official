@@ -33,6 +33,12 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+app.use((req, res, next) => {
+  const bodyPreview = req.body && Object.keys(req.body).length > 0 ? JSON.stringify(req.body) : '';
+  console.log(`📡 [${req.method}] ${req.url} ${bodyPreview}`);
+  next();
+});
+
 const path = require('path');
 
 // ── Static Files (Super Admin Web Portal & Uploads) ────────────────────────

@@ -15,14 +15,13 @@ export const EMULATOR_URL   = 'http://10.0.2.2:5000/api/v1';
 export const BASE_URL = LOCAL_URL;
 export const SERVER_ORIGIN = 'http://localhost:5000';
 
-// DEV ONLY: localhost prioritized so the app does not fall back to old legacy deployed Railway turfs
 const CANDIDATE_URLS = [
   LOCAL_URL,
   LAN_URL_CURRENT,
   LAN_URL,
   LAN_URL_OLD,
   Platform.OS === 'android' ? EMULATOR_URL : null,
-  // PRODUCTION_URL, // re-enable for release
+  PRODUCTION_URL,
 ].filter(Boolean);
 
 export const getImageUrl = (path) => {
