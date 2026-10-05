@@ -99,6 +99,10 @@ const authSlice = createSlice({
       state.notificationsOn = !state.notificationsOn;
       AsyncStorage.setItem('notificationsOn', JSON.stringify(state.notificationsOn));
     },
+    setNotificationsOn: (state, action) => {
+      state.notificationsOn = Boolean(action.payload);
+      AsyncStorage.setItem('notificationsOn', JSON.stringify(state.notificationsOn));
+    },
     setAuth: (state, action) => {
       state.token = action.payload.token;
       state.user  = action.payload.user || action.payload.profile;
@@ -201,7 +205,7 @@ const authSlice = createSlice({
 export const {
   setAuth, updateUser, setLocation,
   setLocationPermission, logout, toggleTheme, setSplashDone,
-  toggleNotifications,
+  toggleNotifications, setNotificationsOn,
 } = authSlice.actions;
 
 export default authSlice.reducer;

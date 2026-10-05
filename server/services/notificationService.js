@@ -1,9 +1,66 @@
 const prisma = require('../config/prisma');
+const { admin, firebaseApp, messaging } = require('../config/firebase');
 
 /**
- * In-App Notification Service (Prisma & PostgreSQL Backed)
+ * In-App & Remote Push Notification Service (PostgreSQL & FCM HTTP v1)
  */
 const notificationService = {
+  /**
+   * Get notification preference for user or vendor
+   * Returns boolean (default: true)
+   */
+  async getNotificationPreference(ownerId, ownerType = 'user') {
+    if (!ownerId) return true;
+    try {
+      const doc = await prisma.document.findUnique({
+        where: {
+          collection_id: {
+            collection: `pref_${ownerType}`,
+            id: String(ownerId),
+          },
+        },
+      });
+      if (doc?.data && typeof doc.data.pushNotifications === 'boolean') {
+        return doc.data.pushNotifications;
+      }
+      return true;
+    } catch (err) {
+      console.warn(`⚠️ Error reading preference for ${ownerType}:${ownerId}:`, err.message);
+      return true;
+    }
+  },
+
+  /**
+   * Set notification preference for user or vendor in PostgreSQL documents table
+   */
+  async setNotificationPreference(ownerId, ownerType = 'user', enabled = true) {
+    if (!ownerId) return null;
+    try {
+      const boolVal = Boolean(enabled);
+      await prisma.document.upsert({
+        where: {
+          collection_id: {
+            collection: `pref_${ownerType}`,
+            id: String(ownerId),
+          },
+        },
+        update: {
+          data: { pushNotifications: boolVal },
+          updatedAt: new Date(),
+        },
+        create: {
+          collection: `pref_${ownerType}`,
+          id: String(ownerId),
+          data: { pushNotifications: boolVal },
+        },
+      });
+      return boolVal;
+    } catch (err) {
+      console.warn(`⚠️ Error setting preference for ${ownerType}:${ownerId}:`, err.message);
+      throw err;
+    }
+  },
+
   /**
    * Register device notification token for user or vendor.
    * Upsert by token: a token moving to another account safely reassigns ownership.
@@ -15,13 +72,13 @@ const notificationService = {
         where: { token },
         update: {
           ownerType: recipientRole,
-          ownerId: recipientId,
+          ownerId: String(recipientId),
           updatedAt: new Date(),
         },
         create: {
           token,
           ownerType: recipientRole,
-          ownerId: recipientId,
+          ownerId: String(recipientId),
         },
       });
       return true;
@@ -40,7 +97,7 @@ const notificationService = {
       await prisma.deviceToken.deleteMany({
         where: {
           token,
-          ...(recipientId ? { ownerId: recipientId } : {}),
+          ...(recipientId ? { ownerId: String(recipientId) } : {}),
         },
       });
       return true;
@@ -79,7 +136,7 @@ const notificationService = {
       const notif = await prisma.notification.create({
         data: {
           id: notifId,
-          recipientId,
+          recipientId: String(recipientId),
           recipientType: recipientRole === 'vendor' ? 'vendor' : (recipientRole === 'admin' ? 'admin' : 'user'),
           title: finalTitle,
           body: finalBody,
@@ -89,11 +146,18 @@ const notificationService = {
         },
       });
 
-      // Dispatch FCM Push Notification to registered devices
+      // 1. Check if recipient has push notifications enabled in profile preferences
+      const isPushEnabled = await this.getNotificationPreference(recipientId, recipientRole);
+      if (!isPushEnabled) {
+        console.log(`🔕 [FCM Push Skipped] Recipient ${recipientRole}:${recipientId} has Push Notifications turned OFF.`);
+        return notif;
+      }
+
+      // 2. Dispatch FCM Push Notification to registered devices
       try {
         const deviceTokens = await prisma.deviceToken.findMany({
           where: {
-            ownerId: recipientId,
+            ownerId: String(recipientId),
             ownerType: recipientRole,
           },
           select: { token: true },
@@ -120,77 +184,83 @@ const notificationService = {
 
       return notif;
     } catch (err) {
-      console.warn('⚠️ In-app notification save warning:', err.message);
+      console.warn('⚠️ Notification record creation warning:', err.message);
       return null;
     }
   },
 
   /**
    * Dispatch push notification via FCM to device tokens
+   * Uses Firebase Admin SDK HTTP v1 Multicast with automatic invalid token cleanup
    */
   async sendFcmPush({ tokens = [], title, body, data = {} }) {
     if (!tokens.length) return;
 
-    const fcmServerKey = process.env.FCM_SERVER_KEY || process.env.FIREBASE_SERVER_KEY;
-    const https = require('https');
+    // Convert all data values to strings for FCM payload compliance
+    const stringData = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (val !== undefined && val !== null) {
+        stringData[key] = typeof val === 'object' ? JSON.stringify(val) : String(val);
+      }
+    }
 
-    for (const token of tokens) {
+    const msgClient = messaging || (admin && typeof admin.messaging === 'function' ? admin.messaging() : null);
+
+    if (msgClient) {
       try {
-        if (fcmServerKey) {
-          const payload = JSON.stringify({
-            to: token,
+        const message = {
+          tokens,
+          notification: {
+            title,
+            body,
+          },
+          data: stringData,
+          android: {
             priority: 'high',
             notification: {
-              title,
-              body,
+              channelId: 'turf_notifications',
               sound: 'default',
-              android_channel_id: 'turf_notifications',
+              icon: 'ic_notification',
+              color: '#00C566',
+              priority: 'high',
+              visibility: 'public',
+              defaultSound: true,
+              defaultVibrateTimings: true,
             },
-            data: {
-              ...data,
-              title,
-              body,
-            },
-          });
+          },
+        };
 
-          const req = https.request(
-            'https://fcm.googleapis.com/fcm/send',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `key=${fcmServerKey}`,
-                'Content-Length': Buffer.byteLength(payload),
-              },
-            },
-            (res) => {
-              let resData = '';
-              res.on('data', (chunk) => { resData += chunk; });
-              res.on('end', async () => {
-                if (res.statusCode === 200) {
-                  try {
-                    const parsed = JSON.parse(resData);
-                    if (parsed.results && parsed.results[0]?.error) {
-                      const errName = parsed.results[0].error;
-                      if (errName === 'NotRegistered' || errName === 'InvalidRegistration') {
-                        await prisma.deviceToken.deleteMany({ where: { token } }).catch(() => {});
-                      }
-                    }
-                  } catch {}
-                }
-              });
+        const response = await msgClient.sendEachForMulticast(message);
+        console.log(`📡 [FCM HTTP v1] Sent ${response.successCount}/${tokens.length} messages successfully.`);
+
+        // Handle invalid/unregistered tokens automatically
+        if (response.failureCount > 0) {
+          const tokensToDelete = [];
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success) {
+              const errorCode = resp.error?.code;
+              if (
+                errorCode === 'messaging/invalid-registration-token' ||
+                errorCode === 'messaging/registration-token-not-registered'
+              ) {
+                tokensToDelete.push(tokens[idx]);
+              }
             }
-          );
-
-          req.on('error', (e) => console.warn('⚠️ FCM send request error:', e.message));
-          req.write(payload);
-          req.end();
-        } else {
-          console.log(`📱 [FCM Push Ready] Notification to token (${token.slice(0, 12)}...): "${title}"`);
+          });
+          if (tokensToDelete.length > 0) {
+            await prisma.deviceToken.deleteMany({
+              where: { token: { in: tokensToDelete } },
+            }).catch(() => {});
+            console.log(`🧹 Cleaned up ${tokensToDelete.length} unregistered/invalid FCM token(s).`);
+          }
         }
-      } catch (err) {
-        console.warn('⚠️ Error sending to token:', err.message);
+      } catch (fcmErr) {
+        console.warn('⚠️ FCM HTTP v1 multicast error:', fcmErr.message);
       }
+    } else {
+      tokens.forEach((t) => {
+        console.log(`📱 [FCM Push Ready] Notification to token (${t.slice(0, 12)}...): "${title}"`);
+      });
     }
   },
 

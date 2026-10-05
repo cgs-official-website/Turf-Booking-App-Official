@@ -1,5 +1,4 @@
-// src/utils/fcmHelper.js
-import { Platform, PermissionsAndroid, Alert } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, AppState, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import { notificationsApi } from '../api/notifications';
@@ -186,22 +185,42 @@ export const fcmHelper = {
             .trim()
         : '';
 
+    const triggerSystemNotification = ({ title, body, data }) => {
+      try {
+        if (NativeModules.LocalNotificationModule) {
+          NativeModules.LocalNotificationModule.showNotification(
+            title,
+            body,
+            data || {}
+          );
+        }
+      } catch (err) {
+        console.warn('⚠️ Native system notification error:', err.message);
+      }
+    };
+
     const showBookingPopup = ({ title, body, data }) => {
       const popupTitle = cleanText(title) || 'New Booking';
       const popupBody = cleanText(body) || 'Tap View Booking to check details.';
 
-      Alert.alert(
-        popupTitle,
-        popupBody,
-        [
-          { text: 'Dismiss', style: 'cancel' },
-          {
-            text: 'View Booking',
-            onPress: () => this.handleNotificationNavigation(navigationRef, data),
-          },
-        ],
-        { cancelable: true }
-      );
+      // Mobile level system notification with logo.png (shown in background/quit or heads-up)
+      triggerSystemNotification({ title: popupTitle, body: popupBody, data });
+
+      // If user is currently in the app, also present interactive dialog
+      if (AppState.currentState === 'active') {
+        Alert.alert(
+          popupTitle,
+          popupBody,
+          [
+            { text: 'Dismiss', style: 'cancel' },
+            {
+              text: 'View Booking',
+              onPress: () => this.handleNotificationNavigation(navigationRef, data),
+            },
+          ],
+          { cancelable: true }
+        );
+      }
     };
 
     // 1. Foreground notification handler (FCM push)

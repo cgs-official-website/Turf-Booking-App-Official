@@ -323,7 +323,7 @@ const adminController = {
 
   /**
    * GET /api/v1/admin/reports
-   * List all vendor/user issue reports
+   * List all vendor/user issue reports and prospective vendor enquiries
    */
   async getAllReports(req, res) {
     const { status, limit = 50 } = req.query;
@@ -334,7 +334,16 @@ const adminController = {
 
       const reports = await prisma.report.findMany({
         where,
-        include: { vendor: true },
+        include: {
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         take: Number(limit),
       });
@@ -348,7 +357,7 @@ const adminController = {
 
   /**
    * PATCH /api/v1/admin/reports/:id
-   * Update report status (open, in-progress, resolved)
+   * Update report status (open, in-progress, resolved) and record resolutionNote
    */
   async updateReportStatus(req, res) {
     const { id } = req.params;
@@ -359,9 +368,22 @@ const adminController = {
         where: { id },
         data: {
           status: status || 'resolved',
+          resolutionNote: resolutionNote || null,
           updatedAt: new Date(),
         },
       });
+
+      // If linked to vendor_enquiries, keep status in sync
+      if (updated.contactInfo && updated.contactInfo.enquiryId) {
+        try {
+          await prisma.vendorEnquiry.update({
+            where: { id: updated.contactInfo.enquiryId },
+            data: { status: status || 'resolved' },
+          });
+        } catch (enqErr) {
+          console.warn('Could not sync status to vendor_enquiries table:', enqErr.message);
+        }
+      }
 
       return sendSuccess(res, { report: updated });
     } catch (err) {

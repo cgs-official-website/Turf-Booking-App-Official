@@ -6,6 +6,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 serviceAccountKey.json
+config/serviceAccountKey.json
+**/serviceAccountKey.json
 *-firebase-adminsdk-*.json
 *.pem
 data/

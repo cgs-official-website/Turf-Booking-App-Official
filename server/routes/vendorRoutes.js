@@ -47,8 +47,10 @@ router.put('/bookings/:id/reject', vendorController.updateBookingStatus);
 router.patch('/turf/:turfId/slots', vendorController.updateSlotOverrides);
 router.get('/reviews', vendorController.getVendorReviews);
 router.delete('/reviews/:id', vendorController.deleteReview);
-router.patch('/reviews/:id/hide', vendorController.toggleReviewVisibility);
 router.post('/report-issue', vendorController.reportIssue);
+router.get('/reports/issue-types', vendorController.getIssueTypes);
+router.post('/reports', vendorController.reportIssue);
+router.get('/reports', vendorController.getMyReports);
 
 // Vendor Turf Management & Slots
 router.get('/turfs', vendorController.getMyTurfs);

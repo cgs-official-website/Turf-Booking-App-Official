@@ -479,15 +479,34 @@ model MatchPlayer {
 }
 
 model Report {
-  id          String       @id @map("id") @db.VarChar(255)
-  vendorId    String       @map("vendor_id") @db.VarChar(255)
-  vendor      Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  issueType   String       @map("issue_type") @db.VarChar(128)
-  description String       @map("description") @db.Text
-  status      ReportStatus @default(open) @map("status")
-  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String       @id @map("id") @db.VarChar(255)
+  vendorId       String?      @map("vendor_id") @db.VarChar(255)
+  vendor         Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  issueType      String       @map("issue_type") @db.VarChar(128)
+  category       String?      @map("category") @db.VarChar(128)
+  description    String       @map("description") @db.Text
+  contactInfo    Json?        @map("contact_info")
+  resolutionNote String?      @map("resolution_note") @db.Text
+  status         ReportStatus @default(open) @map("status")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([vendorId, status])
   @@map("reports")
+}
+
+model VendorEnquiry {
+  id             String   @id @map("id") @db.VarChar(255)
+  turfName       String   @map("turf_name") @db.VarChar(255)
+  vendorName     String   @map("vendor_name") @db.VarChar(255)
+  vendorMobile   String   @map("vendor_mobile") @db.VarChar(32)
+  vendorLocation String   @map("vendor_location") @db.VarChar(255)
+  message        String?  @map("message") @db.Text
+  status         String   @default("pending") @map("status") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([vendorMobile])
+  @@index([status])
+  @@map("vendor_enquiries")
 }

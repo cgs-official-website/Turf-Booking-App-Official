@@ -143,6 +143,45 @@ const notificationController = {
       return sendError(res, 'Failed to mark all notifications as read', 500, 'UPDATE_FAILED');
     }
   },
+
+  /**
+   * GET /api/v1/notifications/preferences
+   * Fetch push notification ON/OFF preference for authenticated user/vendor
+   */
+  async getPreferences(req, res) {
+    const { uid, role } = req.user;
+    try {
+      const pushNotifications = await notificationService.getNotificationPreference(uid, role);
+      return sendSuccess(res, { pushNotifications });
+    } catch (err) {
+      console.error('getPreferences error:', err);
+      return sendError(res, 'Failed to fetch preferences', 500, 'FETCH_FAILED');
+    }
+  },
+
+  /**
+   * PUT /api/v1/notifications/preferences
+   * Update push notification ON/OFF preference for authenticated user/vendor
+   */
+  async updatePreferences(req, res) {
+    const { uid, role } = req.user;
+    const { pushNotifications } = req.body;
+
+    if (typeof pushNotifications !== 'boolean') {
+      return sendError(res, 'pushNotifications boolean field is required', 400, 'INVALID_BODY');
+    }
+
+    try {
+      const updated = await notificationService.setNotificationPreference(uid, role, pushNotifications);
+      return sendSuccess(res, {
+        pushNotifications: updated,
+        message: `Push notifications ${updated ? 'enabled' : 'disabled'} successfully`,
+      });
+    } catch (err) {
+      console.error('updatePreferences error:', err);
+      return sendError(res, 'Failed to update preferences', 500, 'UPDATE_FAILED');
+    }
+  },
 };
 
 module.exports = notificationController;

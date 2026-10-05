@@ -1,12 +1,14 @@
 // @theme-ready ✅
-import React, { useState, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, Switch, Image, Platform,
+  Alert, Switch, Image, Platform, Linking,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logoutVendor } from '../redux/authSlice';
 import { deleteTurf as deleteTurfAction } from '../redux/vendorSlice';
+import { fcmHelper } from '../utils/fcmHelper';
+import { notificationsApi } from '../api/notifications';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import { getImageUrl } from '../api/client';
@@ -83,6 +85,60 @@ const ProfileScreen = ({ navigation }) => {
   const { colors, isDark, toggleTheme } = useTheme();
 
   const [notificationsOn, setNotificationsOn] = useState(true);
+  const [savingNotif, setSavingNotif] = useState(false);
+
+  // Sync saved push notification preference from backend on load
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await notificationsApi.getPreferences();
+        const serverPref = res?.data?.pushNotifications ?? res?.pushNotifications;
+        if (typeof serverPref === 'boolean' && isMounted) {
+          setNotificationsOn(serverPref);
+        }
+      } catch (e) {
+        // Fall back to default enabled
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleToggleNotifications = async () => {
+    if (savingNotif) return;
+    const targetState = !notificationsOn;
+
+    if (targetState === true) {
+      // Check Android permission
+      const hasPermission = await fcmHelper.requestPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Notification Permission Required',
+          'Android is blocking notifications for Turf Vendor App. Please enable notifications in your device settings to receive booking requests.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+    }
+
+    setSavingNotif(true);
+    setNotificationsOn(targetState);
+
+    try {
+      await notificationsApi.updatePreferences(targetState);
+      if (targetState === true) {
+        await fcmHelper.registerDeviceToken();
+      }
+    } catch (err) {
+      setNotificationsOn(!targetState);
+      Alert.alert('Settings Error', 'Could not update notification preference. Please check your connection.');
+    } finally {
+      setSavingNotif(false);
+    }
+  };
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -278,7 +334,7 @@ const ProfileScreen = ({ navigation }) => {
             subLabel="Booking alerts and reminders"
             toggle
             toggleValue={notificationsOn}
-            onToggle={setNotificationsOn}
+            onToggle={handleToggleNotifications}
             colors={colors}
           />
           <MenuItem

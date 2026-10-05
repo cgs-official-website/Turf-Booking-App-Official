@@ -91,19 +91,21 @@ const paymentController = {
           turfName = turfName || 'Turf';
           turfType = turfType || 'Standard';
           const timeSlot = `${confirmedBooking.startTime} - ${confirmedBooking.endTime}`;
-          const notifText = `New Booking: ${turfName} - ${turfType}, ${confirmedBooking.date}, ${timeSlot}`;
+          const notifTitle = 'New Booking Request';
+          const notifBody = `New booking received for ${turfName}, ${timeSlot} on ${confirmedBooking.date}.`;
 
           await notificationService.sendNotification({
             recipientId: vendorId,
             recipientRole: 'vendor',
-            title: notifText,
-            body: notifText,
+            title: notifTitle,
+            body: notifBody,
             type: 'booking',
             data: {
               bookingId: String(bookingId),
+              turfId: String(confirmedBooking.turfId || ''),
               screen: 'BookingDetail',
               type: 'booking',
-              notificationText: notifText,
+              notificationText: notifBody,
               turfName,
               turfType,
               date: confirmedBooking.date,
