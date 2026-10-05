@@ -75,10 +75,11 @@ class AdminApiClient {
     return this.request(`/admin/vendors/pending${cursor ? `?cursor=${cursor}` : ''}`);
   }
 
-  getAllVendors(status, cursor) {
+  getAllVendors(status, cursor, limit) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     if (cursor) params.set('cursor', cursor);
+    if (limit) params.set('limit', limit);
     const qs = params.toString();
     return this.request(`/admin/vendors${qs ? `?${qs}` : ''}`);
   }
@@ -111,11 +112,12 @@ class AdminApiClient {
     return this.request(`/admin/turfs/${turfId}/toggle-status`, { method: 'POST' });
   }
 
-  getAllBookings(status, date, cursor) {
+  getAllBookings(status, date, cursor, limit) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     if (date) params.set('date', date);
     if (cursor) params.set('cursor', cursor);
+    if (limit) params.set('limit', limit);
     const qs = params.toString();
     return this.request(`/admin/bookings${qs ? `?${qs}` : ''}`);
   }

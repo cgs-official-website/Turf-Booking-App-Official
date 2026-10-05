@@ -843,7 +843,7 @@ const bookingService = {
    * Admin booking list (single batch query for turfs and users, keyset pagination)
    */
   async getAllBookingsAdmin({ status, turfId, limit = 50, cursor } = {}) {
-    const take = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const take = Math.min(Math.max(Number(limit) || 50, 1), 5000);
     const where = {};
 
     if (status && status !== 'all') {
