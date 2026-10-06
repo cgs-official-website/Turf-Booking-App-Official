@@ -91,6 +91,21 @@ export default function ExploreScreen({ navigation }) {
 
   const isWishlisted = (id) => wishlist.some((t) => (t._id || t.id) === id);
 
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    if (sort === 'priceLowToHigh') {
+      return (a.pricePerHour || a.price || 0) - (b.pricePerHour || b.price || 0);
+    }
+    if (sort === 'priceHighToLow') {
+      return (b.pricePerHour || b.price || 0) - (a.pricePerHour || a.price || 0);
+    }
+    // Default & topRated: rating descending (highest rating first, unrated at bottom)
+    const countA = typeof a.rating === 'object' ? (a.rating.count ?? a.reviewsCount ?? 0) : (a.reviewsCount ?? 0);
+    const countB = typeof b.rating === 'object' ? (b.rating.count ?? b.reviewsCount ?? 0) : (b.reviewsCount ?? 0);
+    const ratingA = countA === 0 ? 0 : (typeof a.rating === 'object' ? (a.rating.avg || 0) : (Number(a.rating) || a.ratingAvg || a.avgRating || 0));
+    const ratingB = countB === 0 ? 0 : (typeof b.rating === 'object' ? (b.rating.avg || 0) : (Number(b.rating) || b.ratingAvg || b.avgRating || 0));
+    return ratingB - ratingA;
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       <StatusBar barStyle={dark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
@@ -111,7 +126,7 @@ export default function ExploreScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={[styles.headerTitle, { color: C.text }]} numberOfLines={1}>Discover Grounds</Text>
               <Text style={[styles.headerSub, { color: C.subtext }]} numberOfLines={1}>
-                {filtered.length} pitches available for booking
+                {sortedFiltered.length} pitches available for booking
               </Text>
             </View>
           </View>
@@ -193,7 +208,7 @@ export default function ExploreScreen({ navigation }) {
           </View>
         ) : (
           <FlatList
-            data={filtered}
+            data={sortedFiltered}
             keyExtractor={(item) => item._id || item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: 90, paddingTop: 4 }}

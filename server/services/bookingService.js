@@ -482,7 +482,7 @@ const bookingService = {
       throw new BookingError('Access denied', 403, 'FORBIDDEN');
     }
 
-    if (booking.bookingStatus !== 'reserved') {
+    if (!['reserved', 'pending'].includes(booking.bookingStatus)) {
       throw new BookingError(`Cannot create payment order for booking with status '${booking.bookingStatus}'`, 409, 'INVALID_STATUS');
     }
 
@@ -516,7 +516,7 @@ const bookingService = {
       return { updated: false, booking: await populateRelations(booking, { needTurf: true }) };
     }
 
-    if (booking.bookingStatus !== 'reserved') {
+    if (!['reserved', 'pending'].includes(booking.bookingStatus)) {
       throw new BookingError(`Cannot verify payment for booking with status '${booking.bookingStatus}'`, 409, 'INVALID_STATUS');
     }
 
@@ -524,7 +524,7 @@ const bookingService = {
     const updateResult = await prisma.booking.updateMany({
       where: {
         bookingId,
-        bookingStatus: 'reserved',
+        bookingStatus: { in: ['reserved', 'pending'] },
       },
       data: {
         bookingStatus: 'confirmed',
@@ -557,7 +557,7 @@ const bookingService = {
       return { found: true, updated: false, booking: await populateRelations(booking, { needTurf: true }) };
     }
 
-    if (booking.bookingStatus !== 'reserved') {
+    if (!['reserved', 'pending'].includes(booking.bookingStatus)) {
       return { found: true, updated: false, booking: await populateRelations(booking, { needTurf: true }) };
     }
 
@@ -565,7 +565,7 @@ const bookingService = {
     const updateResult = await prisma.booking.updateMany({
       where: {
         bookingId: booking.bookingId,
-        bookingStatus: 'reserved',
+        bookingStatus: { in: ['reserved', 'pending'] },
       },
       data: {
         bookingStatus: 'confirmed',

@@ -126,7 +126,7 @@ const vendorController = {
           images: finalImages,
           amenities: Array.isArray(validated.amenities) ? validated.amenities : [],
           status: 'active',
-          ratingAvg: 5.0,
+          ratingAvg: 0.0,
           reviewsCount: 0,
         },
       });
@@ -703,7 +703,7 @@ const vendorController = {
         counts[star] = (counts[star] || 0) + 1;
         sum += Number(r.rating) || 5;
       });
-      const avgRating = total > 0 ? Number((sum / total).toFixed(1)) : 5.0;
+      const avgRating = total > 0 ? Number((sum / total).toFixed(1)) : 0.0;
 
       return sendSuccess(res, {
         reviews: populated,
@@ -750,8 +750,8 @@ const vendorController = {
           _count: { rating: true },
         });
 
-        const newAvg = agg._avg.rating ? Number(agg._avg.rating.toFixed(1)) : 5.0;
         const newCount = agg._count.rating || 0;
+        const newAvg = newCount > 0 && agg._avg.rating ? Number(agg._avg.rating.toFixed(1)) : 0.0;
 
         await prisma.turf.update({
           where: { id: review.turfId },
@@ -865,7 +865,7 @@ const vendorController = {
           images: Array.isArray(data.images) ? data.images : [],
           amenities,
           status: 'active',
-          ratingAvg: 5.0,
+          ratingAvg: 0.0,
           reviewsCount: 0,
         },
       });

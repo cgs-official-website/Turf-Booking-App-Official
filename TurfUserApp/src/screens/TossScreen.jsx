@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Animated, Easing, ActivityIndicator,
+  Animated, Easing, ActivityIndicator, TextInput,
+  KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
@@ -32,9 +33,11 @@ export default function TossScreen({ route, navigation }) {
   // Coin face alternation during spin
   const [coinFace, setCoinFace] = useState('TOSS'); // 'TOSS' | 'HEAD'
   const coinFaceIntervalRef = useRef(null);
+  const scrollViewRef = useRef(null);
 
   // Sport-specific configuration state
   const [overs, setOvers] = useState(6);
+  const [oversInput, setOversInput] = useState('6');
   const [halfDuration, setHalfDuration] = useState(20);
   const [badmintonPoints, setBadmintonPoints] = useState(21);
   const [badmintonGames, setBadmintonGames] = useState(3);
@@ -54,7 +57,10 @@ export default function TossScreen({ route, navigation }) {
         const m = await matchStorage.getMatch(matchId);
         if (m) {
           setMatch(m);
-          if (m.overs) setOvers(m.overs);
+          if (m.overs) {
+            setOvers(m.overs);
+            setOversInput(String(m.overs));
+          }
         }
       } finally {
         setLoading(false);
@@ -109,8 +115,32 @@ export default function TossScreen({ route, navigation }) {
     });
   };
 
+  const handleOversInputChange = (val) => {
+    const cleaned = val.replace(/[^0-9]/g, '');
+    setOversInput(cleaned);
+    if (cleaned) {
+      const num = parseInt(cleaned, 10);
+      if (num > 0) {
+        setOvers(num);
+      }
+    }
+  };
+
   const handleConfirm = async () => {
     if (!wonBy || !decision || saving) return;
+
+    if (sport === 'cricket') {
+      const parsedInput = parseInt(oversInput, 10);
+      if (isNaN(parsedInput) || parsedInput <= 0) {
+        Alert.alert('Invalid Overs', 'Please enter a valid number of overs (minimum 1 over).');
+        return;
+      }
+      if (parsedInput > 500) {
+        Alert.alert('Invalid Overs', 'Overs cannot exceed 500 overs.');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const tossData = {
@@ -128,6 +158,7 @@ export default function TossScreen({ route, navigation }) {
       if (sport === 'cricket') {
         const battingTeam = decision === 'bat' ? wonBy : (wonBy === 'A' ? 'B' : 'A');
         const bowlingTeam = battingTeam === 'A' ? 'B' : 'A';
+        const finalOvers = parseInt(oversInput, 10);
 
         const innings0 = {
           battingTeam, bowlingTeam,
@@ -139,8 +170,8 @@ export default function TossScreen({ route, navigation }) {
 
         const updated = await matchStorage.updateMatch(matchId, {
           status: 'toss',
-          overs,
-          toss: { ...tossData, overs },
+          overs: finalOvers,
+          toss: { ...tossData, overs: finalOvers },
           currentInningsIndex: 0,
           innings: [innings0],
         });
@@ -306,7 +337,11 @@ export default function TossScreen({ route, navigation }) {
   }
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
@@ -316,7 +351,12 @@ export default function TossScreen({ route, navigation }) {
         <View style={{ width: 38 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={{ paddingBottom: 60 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Coin Box */}
         <View style={styles.coinBox}>
           <Animated.View style={[styles.coin, { transform: [{ perspective: 800 }, { rotateY }, { scale }] }]}>
@@ -466,12 +506,39 @@ export default function TossScreen({ route, navigation }) {
                     <TouchableOpacity
                       key={o}
                       style={[styles.oversPill, overs === o && styles.pillActive]}
-                      onPress={() => setOvers(o)}
+                      onPress={() => {
+                        setOvers(o);
+                        setOversInput(String(o));
+                      }}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.pillText, overs === o && styles.pillTextActive]}>{o}</Text>
                     </TouchableOpacity>
                   ))}
+                </View>
+
+                <View style={styles.customOverWrap}>
+                  <Text style={styles.customOverLabel}>Or enter custom overs:</Text>
+                  <View style={styles.customOverInputRow}>
+                    <TextInput
+                      style={[
+                        styles.customOverInput,
+                        !OVER_OPTIONS.includes(overs) && overs > 0 && styles.customOverInputActive,
+                      ]}
+                      keyboardType="number-pad"
+                      placeholder="e.g. 12"
+                      placeholderTextColor={COLORS.subtext}
+                      value={oversInput}
+                      onChangeText={handleOversInputChange}
+                      onFocus={() => {
+                        setTimeout(() => {
+                          scrollViewRef.current?.scrollToEnd({ animated: true });
+                        }, 200);
+                      }}
+                      maxLength={3}
+                    />
+                    <Text style={styles.customOverSuffix}>Overs</Text>
+                  </View>
                 </View>
               </>
             )}
@@ -736,7 +803,7 @@ export default function TossScreen({ route, navigation }) {
           </View>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -773,6 +840,29 @@ const styles = StyleSheet.create({
 
   oversRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   oversPill:   { paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.lg, alignItems: 'center', backgroundColor: COLORS.bg },
+
+  customOverWrap: { marginTop: SPACING.md },
+  customOverLabel: { fontSize: 12, fontWeight: '700', color: COLORS.subtext, marginBottom: 6 },
+  customOverInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  customOverInput: {
+    width: 90,
+    height: 42,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.text,
+    backgroundColor: COLORS.bg,
+    textAlign: 'center',
+  },
+  customOverInputActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.greenSoft,
+    color: COLORS.primary,
+  },
+  customOverSuffix: { fontSize: 13, fontWeight: '700', color: COLORS.subtext },
 
   spinBtn:     { backgroundColor: COLORS.primary, borderRadius: RADIUS.lg, paddingVertical: 15, alignItems: 'center', marginTop: SPACING.lg, elevation: 2 },
   spinBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },

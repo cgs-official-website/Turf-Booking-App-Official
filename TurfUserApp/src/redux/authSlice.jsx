@@ -62,16 +62,44 @@ export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { getS
   try {
     const token = await AsyncStorage.getItem('token');
     const savedLocation = await AsyncStorage.getItem('userLocation');
+    const savedUserStr = await AsyncStorage.getItem('user');
+    let savedUser = null;
+    if (savedUserStr) {
+      try { savedUser = JSON.parse(savedUserStr); } catch (e) {}
+    }
     const notifSaved = await AsyncStorage.getItem('notificationsOn');
     const notificationsOn = notifSaved !== null ? JSON.parse(notifSaved) : true;
     if (!token) return { token: null, user: null, location: savedLocation, notificationsOn };
+    
     const { auth } = getState();
-    if (auth.user) return { token, user: auth.user, location: savedLocation, notificationsOn };
-    const res = await authApi.getMe();
-    const payload = res?.data || res;
-    return { token, user: payload?.user || payload?.profile || payload, location: savedLocation, notificationsOn };
+    const currentUser = auth.user || savedUser;
+
+    if (token && currentUser) {
+      authApi.getMe().then(res => {
+        const payload = res?.data || res;
+        const freshUser = payload?.user || payload?.profile || (payload?.id ? payload : null);
+        if (freshUser) {
+          AsyncStorage.setItem('user', JSON.stringify(freshUser));
+        }
+      }).catch(() => {});
+      return { token, user: currentUser, location: savedLocation, notificationsOn };
+    }
+
+    try {
+      const res = await Promise.race([
+        authApi.getMe(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+      ]);
+      const payload = res?.data || res;
+      const fetchedUser = payload?.user || payload?.profile || (payload?.id ? payload : null);
+      if (fetchedUser) {
+        await AsyncStorage.setItem('user', JSON.stringify(fetchedUser));
+      }
+      return { token, user: fetchedUser || currentUser, location: savedLocation, notificationsOn };
+    } catch (apiErr) {
+      return { token, user: currentUser, location: savedLocation, notificationsOn };
+    }
   } catch (e) {
-    await AsyncStorage.removeItem('token');
     const savedLocation = await AsyncStorage.getItem('userLocation');
     const notifSaved = await AsyncStorage.getItem('notificationsOn');
     const notificationsOn = notifSaved !== null ? JSON.parse(notifSaved) : true;
@@ -90,11 +118,15 @@ const authSlice = createSlice({
     splashDone:                false,
     locationSet:               false,
     location:                  null,   // string: city name or address
+    userCoords:                null,   // { lat, lng }
     locationPermissionGranted: false,
     darkMode:                  false,
     notificationsOn:           true,
   },
   reducers: {
+    setUserCoords: (state, action) => {
+      state.userCoords = action.payload;
+    },
     toggleNotifications: (state) => {
       state.notificationsOn = !state.notificationsOn;
       AsyncStorage.setItem('notificationsOn', JSON.stringify(state.notificationsOn));
@@ -106,9 +138,16 @@ const authSlice = createSlice({
     setAuth: (state, action) => {
       state.token = action.payload.token;
       state.user  = action.payload.user || action.payload.profile;
+      if (action.payload.token) {
+        AsyncStorage.setItem('token', action.payload.token);
+      }
+      if (action.payload.user || action.payload.profile) {
+        AsyncStorage.setItem('user', JSON.stringify(action.payload.user || action.payload.profile));
+      }
     },
     updateUser: (state, action) => {
       state.user = { ...state.user, ...action.payload };
+      AsyncStorage.setItem('user', JSON.stringify(state.user)).catch(() => {});
     },
     // Pass city name string (e.g. "Perundurai") or null to reset
     setLocation: (state, action) => {
@@ -144,6 +183,7 @@ const authSlice = createSlice({
       state.location                  = null;
       state.locationPermissionGranted = false;
       AsyncStorage.removeItem('token');
+      AsyncStorage.removeItem('user');
     },
   },
   extraReducers: (builder) => {
@@ -193,10 +233,12 @@ const authSlice = createSlice({
         if (a.payload?.notificationsOn !== undefined) {
           s.notificationsOn = a.payload.notificationsOn;
         }
-        if (a.payload?.location) {
-          s.location    = a.payload.location;
+        if (a.payload?.token) {
           s.locationSet = true;
           s.locationPermissionGranted = true;
+        }
+        if (a.payload?.location) {
+          s.location = a.payload.location;
         }
       })
       .addCase(bootstrapAuth.rejected,  (s)    => { s.bootstrapped = true; });
@@ -204,7 +246,7 @@ const authSlice = createSlice({
 });
 
 export const {
-  setAuth, updateUser, setLocation,
+  setAuth, updateUser, setLocation, setUserCoords,
   setLocationPermission, logout, toggleTheme, setSplashDone,
   toggleNotifications, setNotificationsOn,
 } = authSlice.actions;

@@ -748,11 +748,14 @@ const authController = {
 
     const data = {};
     if (parsed.name !== undefined) data.name = parsed.name;
+    if (parsed.email !== undefined) data.email = parsed.email;
     if (parsed.phone !== undefined) data.phone = parsed.phone;
     if (parsed.avatar !== undefined || parsed.photoURL !== undefined) {
       data.avatar = parsed.avatar || parsed.photoURL;
     }
-    if (parsed.location !== undefined) data.location = parsed.location;
+    if (parsed.location !== undefined) {
+      data.location = typeof parsed.location === 'object' ? JSON.stringify(parsed.location) : parsed.location;
+    }
 
     const user = await prisma.user.update({
       where: { id: uid },
@@ -772,6 +775,7 @@ const authController = {
     if (role === 'vendor') {
       const data = {};
       if (body.name !== undefined) data.name = body.name;
+      if (body.email !== undefined) data.email = body.email;
       if (body.phone !== undefined) data.phone = body.phone;
       const vendor = await prisma.vendor.update({ where: { id: uid }, data });
       return sendSuccess(res, { profile: formatVendor(vendor) });
@@ -779,9 +783,10 @@ const authController = {
 
     const data = {};
     if (body.name !== undefined) data.name = body.name;
+    if (body.email !== undefined) data.email = body.email;
     if (body.phone !== undefined) data.phone = body.phone;
     if (body.avatar !== undefined || body.photoURL !== undefined) data.avatar = body.avatar || body.photoURL;
-    if (body.location !== undefined) data.location = body.location;
+    if (body.location !== undefined) data.location = typeof body.location === 'object' ? JSON.stringify(body.location) : body.location;
     const user = await prisma.user.update({ where: { id: uid }, data });
     return sendSuccess(res, { profile: formatUser(user) });
   },

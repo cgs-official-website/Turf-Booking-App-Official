@@ -3,9 +3,21 @@ import { View, Text, StyleSheet } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { RADIUS, FONT } from '../utils/theme';
 
-export function RatingBadge({ rating = 4.8, count, size = 'md' }) {
+export function RatingBadge({ rating, count, size = 'md' }) {
   const isSmall = size === 'sm';
-  const numRating = Number(rating) || 5.0;
+  const numRating = Number(rating);
+  const isUnrated = isNaN(numRating) || numRating <= 0 || count === 0;
+
+  if (isUnrated) {
+    return (
+      <View style={[styles.unratedWrap, isSmall && styles.unratedWrapSmall]}>
+        <Feather name="star" size={isSmall ? 10 : 12} color="#94A3B8" style={{ marginRight: 3 }} />
+        <Text style={[styles.unratedText, isSmall && styles.unratedTextSmall]}>
+          No reviews
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.ratingWrap, isSmall && styles.ratingWrapSmall]}>
@@ -13,7 +25,7 @@ export function RatingBadge({ rating = 4.8, count, size = 'md' }) {
       <Text style={[styles.ratingText, isSmall && styles.ratingTextSmall]}>
         {numRating.toFixed(1)}
       </Text>
-      {count !== undefined && (
+      {count !== undefined && count > 0 && (
         <Text style={[styles.countText, isSmall && styles.countTextSmall]}>
           ({count})
         </Text>
@@ -81,6 +93,26 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   countTextSmall: {
+    fontSize: 9,
+  },
+  unratedWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.round,
+  },
+  unratedWrapSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  unratedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  unratedTextSmall: {
     fontSize: 9,
   },
   statusWrap: {

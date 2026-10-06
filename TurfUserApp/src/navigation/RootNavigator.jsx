@@ -61,7 +61,7 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
-        screenOptions={{ headerShown: false, cardStyle: { backgroundColor: '#fff' } }}
+        screenOptions={{ headerShown: false, cardStyle: { backgroundColor: '#0B132B' } }}
       >
         {showSplash ? (
           // ── Splash: shown until bootstrapAuth completes ──────────────────

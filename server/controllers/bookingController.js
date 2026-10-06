@@ -115,13 +115,40 @@ const bookingController = {
         userId: uid,
       });
 
-      await bookingService.attachRazorpayOrder(id, req.user, order.id);
+      // Create / update Payment database record (reuse existing Payment model)
+      const payRecordId = `pay_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      await prisma.payment.upsert({
+        where: { razorpayOrderId: order.id },
+        create: {
+          id: payRecordId,
+          purpose: 'booking',
+          bookingId: booking.id,
+          userId: uid,
+          vendorId: booking.vendorId,
+          razorpayOrderId: order.id,
+          amount: booking.amount,
+          currency: order.currency || 'INR',
+          status: 'created',
+        },
+        update: {
+          bookingId: booking.id,
+          amount: booking.amount,
+          updatedAt: new Date(),
+        },
+      }).catch((e) => console.warn('⚠️ Payment record creation warning:', e.message));
+
+      const activeKeyId = process.env.RAZORPAY_KEY_ID;
+      if (!activeKeyId || activeKeyId.includes('xxxx') || activeKeyId.includes('your_razorpay')) {
+        return sendError(res, 'Razorpay API Key is missing or invalid in server/.env. Please configure active RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.', 400, 'RAZORPAY_KEY_MISSING');
+      }
 
       return sendSuccess(res, {
         orderId: order.id,
         amount: order.amount,
         currency: order.currency,
         bookingId: booking.id,
+        keyId: activeKeyId,
+        key: activeKeyId,
       });
     } catch (err) {
       if (err instanceof bookingService.BookingError || err.name === 'BookingError') {
@@ -335,58 +362,131 @@ const bookingController = {
    * Submit review after completion
    */
   async addReview(req, res) {
-    const { id } = req.params;
+    const rawBookingId = req.params.id || req.body.bookingId;
     const { uid, role } = req.user;
 
     try {
       const parsed = createReviewSchema.parse(req.body);
       const { rating, comment } = parsed;
 
-      const booking = await bookingService.getById(id);
-      if (!booking) {
-        return sendError(res, 'Booking not found', 404, 'NOT_FOUND');
+      let booking = null;
+      let bookingId = rawBookingId;
+
+      if (bookingId) {
+        booking = await bookingService.getById(bookingId);
+        if (!booking) {
+          booking = await prisma.booking.findFirst({
+            where: {
+              OR: [
+                { bookingId: String(bookingId) },
+                { bookingId: { contains: String(bookingId) } },
+              ],
+            },
+          });
+        }
       }
 
-      if (role !== 'admin' && !req.user.admin && booking.userId !== uid) {
-        return sendError(res, 'Only the player who booked can review', 403, 'FORBIDDEN');
+      if (!booking && parsed.turfId) {
+        // Fallback: lookup user's recent booking for this turf
+        const recentBooking = await prisma.booking.findFirst({
+          where: { userId: String(uid), turfId: String(parsed.turfId) },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (recentBooking) {
+          booking = recentBooking;
+        }
       }
 
-      const turfId = parsed.turfId || booking.turfId;
-      const userProfile = await prisma.user.findUnique({ where: { id: uid } });
+      if (booking) {
+        bookingId = booking.bookingId || booking.id;
+        const bookingUserId = booking.userId || booking.user?.id || booking.user?._id;
+        if (role !== 'admin' && !req.user.admin && String(bookingUserId) !== String(uid)) {
+          return sendError(res, 'Only the player who booked can review', 403, 'FORBIDDEN');
+        }
+      }
+
+      const turfId = parsed.turfId || booking?.turfId || booking?.turf?.id;
+      if (!turfId) {
+        return sendError(res, 'Turf ID is required to submit a review', 400, 'INVALID_INPUT');
+      }
+
+      const userProfile = await prisma.user.findUnique({ where: { id: String(uid) } });
 
       const reviewId = `rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const reviewDoc = await prisma.review.create({
-        data: {
+      const targetBookingId = bookingId || `b_rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+      const reviewDoc = await prisma.review.upsert({
+        where: { bookingId: targetBookingId },
+        create: {
           id: reviewId,
-          bookingId: id,
-          turfId,
-          userId: uid,
-          userName: userProfile?.name || booking.userName || 'Turf Player',
+          bookingId: targetBookingId,
+          turfId: String(turfId),
+          userId: String(uid),
+          userName: userProfile?.name || booking?.userName || 'Turf Player',
           userPhoto: userProfile?.avatar || '',
           rating: Number(rating) || 5,
           comment: comment || '',
         },
+        update: {
+          rating: Number(rating) || 5,
+          comment: comment || '',
+          userName: userProfile?.name || booking?.userName || 'Turf Player',
+          userPhoto: userProfile?.avatar || '',
+        },
       });
 
-      // Update booking review fields via bookingService
-      await bookingService.attachReview(id, req.user, { reviewId: reviewDoc.id });
+      // Update booking review fields via bookingService if booking exists
+      if (bookingId) {
+        try {
+          await bookingService.attachReview(bookingId, req.user, { reviewId: reviewDoc.id });
+        } catch (attachErr) {
+          console.warn('attachReview notice:', attachErr.message);
+        }
+      }
 
-      // Recalculate turf rating summary
+      // Recalculate turf rating summary in database
       if (turfId) {
         const allReviews = await prisma.review.findMany({
-          where: { turfId },
+          where: { turfId: String(turfId) },
           select: { rating: true },
         });
         const totalRatings = allReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
         const avgRating = allReviews.length > 0 ? Number((totalRatings / allReviews.length).toFixed(1)) : Number(rating);
 
         await prisma.turf.update({
-          where: { id: turfId },
+          where: { id: String(turfId) },
           data: {
             ratingAvg: avgRating,
             reviewsCount: allReviews.length,
           },
         });
+
+        // 🔔 Send push notification to the Turf Owner (Vendor)
+        try {
+          const turf = await prisma.turf.findUnique({
+            where: { id: String(turfId) },
+            select: { vendorId: true, name: true },
+          });
+          if (turf && turf.vendorId) {
+            await notificationService.sendNotification({
+              recipientId: String(turf.vendorId),
+              recipientRole: 'vendor',
+              title: 'New Review Received ⭐',
+              body: `${userProfile?.name || 'A player'} submitted a ${Number(rating)}-star review for ${turf.name}: "${comment || 'Great experience!'}"`,
+              type: 'general',
+              data: {
+                type: 'review',
+                screen: 'Reviews',
+                turfId: String(turfId),
+                reviewId: reviewDoc.id,
+                rating: Number(rating),
+              },
+            });
+            console.log(`🔔 Review notification sent to vendor ${turf.vendorId} for turf ${turf.name}`);
+          }
+        } catch (notifErr) {
+          console.warn('⚠️ Vendor notification error:', notifErr.message);
+        }
       }
 
       return sendSuccess(res, { review: reviewDoc, message: 'Review submitted successfully' }, 201);

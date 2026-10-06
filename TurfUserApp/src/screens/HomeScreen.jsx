@@ -44,6 +44,28 @@ const SPORTS = [
 
 const { width } = Dimensions.get('window');
 
+const fetchReverseGeocode = async (lat, lng) => {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+      { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' }, signal: controller.signal }
+    );
+    clearTimeout(timer);
+    const data = await res.json();
+    const addr = data.address || {};
+    const road = addr.road || addr.suburb || addr.neighbourhood;
+    const city = addr.city || addr.town || addr.village || addr.county || addr.state;
+    if (road && city && road !== city) {
+      return `${road}, ${city}`;
+    }
+    return city || road || 'Current Location';
+  } catch (_) {
+    return 'Current Location';
+  }
+};
+
 // ─── Location Permission Screen ───────────────────────────────────────────────
 function LocationPermissionView({ C, dark }) {
   const dispatch = useDispatch();
@@ -55,15 +77,7 @@ function LocationPermissionView({ C, dark }) {
     const onPosSuccess = async (position) => {
       try {
         const { latitude, longitude } = position.coords;
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-          { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' } }
-        );
-        const data = await res.json();
-        const addr = data.address;
-        const cityName =
-          addr.suburb || addr.town || addr.city ||
-          addr.village || addr.county || addr.state || 'Current Location';
+        const cityName = await fetchReverseGeocode(latitude, longitude);
         dispatch(setLocationPermission(cityName));
       } catch {
         dispatch(setLocationPermission('Current Location'));
@@ -83,13 +97,13 @@ function LocationPermissionView({ C, dark }) {
           Geolocation.getCurrentPosition(
             onPosSuccess,
             onPosFail,
-            { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+            { enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 }
           );
         } else {
           onPosFail();
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 3500, maximumAge: 30000 }
     );
   };
 
@@ -129,7 +143,11 @@ export default function HomeScreen({ navigation }) {
   const { C, dark } = useTheme();
 
   const user = useSelector((s) => s.auth.user);
-  const wishlist = useSelector((s) => s.wishlist.wishlist);
+  const wishlist = useSelector((s) => s.wishlist?.wishlist || []);
+  const isWishlisted = useCallback(
+    (id) => Array.isArray(wishlist) && wishlist.some((t) => (t._id || t.id || t) === id),
+    [wishlist]
+  );
   const locationPermissionGranted = useSelector((s) => s.auth.locationPermissionGranted);
   const location = useSelector((s) => s.auth.location);
   const [turfs, setTurfs] = useState([]);
@@ -153,31 +171,15 @@ export default function HomeScreen({ navigation }) {
       const { latitude, longitude } = position.coords;
       setUserCoords({ lat: latitude, lng: longitude });
       setLocationOff(false);
+      // Turn off "Locating..." immediately as position is obtained
+      setIsLocating(false);
 
-      // Reverse geocoding to get real place name (e.g., "Perundurai Road, Erode")
-      let placeName = '';
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-          { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' } }
-        );
-        const data = await res.json();
-        const addr = data.address || {};
-        const road = addr.road || addr.suburb || addr.neighbourhood;
-        const city = addr.city || addr.town || addr.village || addr.county || addr.state;
-        if (road && city && road !== city) {
-          placeName = `${road}, ${city}`;
-        } else {
-          placeName = city || road || 'Current Location';
-        }
-      } catch {
-        placeName = 'Current Location';
-      }
+      // Asynchronously reverse geocode and fetch nearby turfs without blocking UI
+      fetchReverseGeocode(latitude, longitude).then((placeName) => {
+        setCustomLocationName(placeName);
+        dispatch(setLocationPermission(placeName));
+      }).catch(() => { });
 
-      setCustomLocationName(placeName);
-      dispatch(setLocationPermission(placeName));
-
-      // Call API: GET /api/turfs/nearby?lat=..&lng=..&radius=5
       try {
         const res = await nearbyTurfsApi.getNearbyTurfs({
           lat: latitude,
@@ -221,17 +223,17 @@ export default function HomeScreen({ navigation }) {
       }
     };
 
-    // If user already turned on location in mobile (e.g. from notification shade), view location immediately
+    // Fast resolution: try fast location provider / cache first (5 min cache age)
     Geolocation.getCurrentPosition(
       onQuickSuccess,
       () => {
         Geolocation.getCurrentPosition(
           onQuickSuccess,
           onQuickFail,
-          { enableHighAccuracy: false, timeout: 2500, maximumAge: 60000 }
+          { enableHighAccuracy: true, timeout: 3000, maximumAge: 300000 }
         );
       },
-      { enableHighAccuracy: true, timeout: 2500, maximumAge: 30000 }
+      { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }
     );
   }, [onLocationSuccess]);
 
@@ -279,7 +281,6 @@ export default function HomeScreen({ navigation }) {
       setIsLocating(false);
       setNearbyLoading(false);
       setLocationOff(true);
-      // Popup notification when location is off
       Alert.alert(
         'Location is Turned Off',
         'Please turn on GPS / Location services to see turf grounds near you.',
@@ -293,20 +294,18 @@ export default function HomeScreen({ navigation }) {
       );
     };
 
+    // Fast location attempt: use fast cached/fused location first
     Geolocation.getCurrentPosition(
       onLocationSuccess,
       (geoErr) => {
-        if (geoErr && (geoErr.code === 3 || geoErr.code === 2)) {
-          Geolocation.getCurrentPosition(
-            onLocationSuccess,
-            onLocationFailure,
-            { enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 }
-          );
-        } else {
-          onLocationFailure(geoErr);
-        }
+        // Fallback to high accuracy GPS if fast provider failed
+        Geolocation.getCurrentPosition(
+          onLocationSuccess,
+          onLocationFailure,
+          { enableHighAccuracy: true, timeout: 3000, maximumAge: 300000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+      { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }
     );
   }, [onLocationSuccess, handleTurnOnLocation]);
 
@@ -335,9 +334,11 @@ export default function HomeScreen({ navigation }) {
     return () => sub.remove();
   }, [locationOff, onLocationSuccess]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
+      if (showLoading || turfs.length === 0) {
+        setLoading(true);
+      }
       const params = {};
       if (sport) params.sport = sport;
       if (activeFilters.sort) params.sort = activeFilters.sort;
@@ -349,9 +350,9 @@ export default function HomeScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [sport, activeFilters, location]);
+  }, [sport, activeFilters, location, turfs.length]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(true); }, [sport, activeFilters]);
   useEffect(() => {
     dispatch(fetchWishlist());
   }, [dispatch]);
@@ -363,12 +364,12 @@ export default function HomeScreen({ navigation }) {
   }, [locationPermissionGranted, requestLocationAndFetchNearby]);
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([load(), requestLocationAndFetchNearby()]);
+    await Promise.all([load(true), requestLocationAndFetchNearby()]);
   }, [load, requestLocationAndFetchNearby]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      load(false);
       notificationsApi.getAll()
         .then((r) => setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read).length))
         .catch(() => { });
@@ -398,8 +399,13 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  const isWishlisted = (id) => wishlist.some((t) => (t._id || t.id) === id);
-  const sorted = [...turfs].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const getTurfRating = (t) => {
+    if (!t) return 0;
+    const count = typeof t.rating === 'object' ? (t.rating.count ?? t.reviewsCount ?? 0) : (t.reviewsCount ?? 0);
+    if (count === 0) return 0;
+    return typeof t.rating === 'object' ? (t.rating.avg ?? t.ratingAvg ?? 0) : (Number(t.rating) || t.ratingAvg || 0);
+  };
+  const sorted = [...turfs].sort((a, b) => getTurfRating(b) - getTurfRating(a));
   const featured = sorted.slice(0, 4);
   const nearby = sorted.length > 1 ? sorted.slice(1) : sorted;
 

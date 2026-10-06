@@ -63,6 +63,7 @@ export const loginVendor = createAsyncThunk(
       }
 
       await AsyncStorage.setItem('vendorToken', data.token);
+      await AsyncStorage.setItem('vendorData', JSON.stringify(data));
       const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, turfApprovalAcknowledged };
     } catch (err) {
@@ -76,7 +77,7 @@ export const registerVendor = createAsyncThunk(
   async (formDataWithKyc, { rejectWithValue }) => {
     try {
       const { kycData, ...regData } = formDataWithKyc || {};
-      const data = await registerVendorApi(regData);
+      const data = await registerVendorApi(regData || formDataWithKyc);
 
       if (kycData && data?.token) {
         try {
@@ -102,21 +103,51 @@ export const bootstrapAuth = createAsyncThunk(
     try {
       const token = await AsyncStorage.getItem('vendorToken');
       if (!token) return null;
-      const data = await getMeApi();
+
+      const cachedDataStr = await AsyncStorage.getItem('vendorData');
+      let cachedData = null;
+      if (cachedDataStr) {
+        try { cachedData = JSON.parse(cachedDataStr); } catch (e) {}
+      }
+
+      if (cachedData && cachedData.vendor) {
+        const turfApprovalAcknowledged = await getPersistedTurfAck(cachedData.vendor?._id || cachedData.vendor?.uid);
+        getMeApi().then((data) => {
+          if (data?.vendor) {
+            AsyncStorage.setItem('vendorData', JSON.stringify(data)).catch(() => {});
+          }
+        }).catch(() => {});
+        return { ...cachedData, token, turfApprovalAcknowledged };
+      }
+
+      const data = await Promise.race([
+        getMeApi(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      ]);
+
       const vendor = data.vendor || data.profile;
+      if (vendor) {
+        await AsyncStorage.setItem('vendorData', JSON.stringify(data));
+      }
       const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, token, turfApprovalAcknowledged };
     } catch (err) {
-      if (err?.status === 401 || err?.statusCode === 401) {
+      if (err?.response?.status === 401 || err?.status === 401) {
         await AsyncStorage.removeItem('vendorToken');
+        await AsyncStorage.removeItem('vendorData');
         return rejectWithValue('Session expired. Please log in again.');
       }
-      // On network failure or offline startup, keep the token so user is not forced to log in again
-      const token = await AsyncStorage.getItem('vendorToken');
-      if (token) {
-        return { token, offline: true };
+      const cachedDataStr = await AsyncStorage.getItem('vendorData');
+      if (cachedDataStr) {
+        try {
+          const cachedData = JSON.parse(cachedDataStr);
+          if (cachedData && cachedData.vendor) {
+            const turfApprovalAcknowledged = await getPersistedTurfAck(cachedData.vendor?._id || cachedData.vendor?.uid);
+            return { ...cachedData, token, turfApprovalAcknowledged };
+          }
+        } catch (e) {}
       }
-      return rejectWithValue(err.message || 'Authentication failed');
+      return rejectWithValue(err.message);
     }
   }
 );
@@ -143,6 +174,7 @@ export const logoutVendor = createAsyncThunk('auth/logout', async (_, { getState
     console.warn('⚠️ Error unregistering vendor FCM token on logout:', err.message);
   }
   await AsyncStorage.removeItem('vendorToken');
+  await AsyncStorage.removeItem('vendorData');
   await setPersistedTurfAck(vendorId, false);
 });
 

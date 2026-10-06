@@ -186,7 +186,7 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
             <View style={[styles.distBadge, { backgroundColor: C.primaryLight }]}>
               <Feather name="navigation" size={10} color={C.primary} style={{ marginRight: 3 }} />
               <Text style={[styles.distText, { color: C.primary }]}>
-                {item.distanceText || `${item.distance} km`}
+                {typeof item.distance === 'number' && !isNaN(item.distance) ? `${item.distance} km` : (item.distanceText || 'Location unavailable')}
               </Text>
             </View>
           </View>

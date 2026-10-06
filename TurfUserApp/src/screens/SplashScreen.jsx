@@ -168,23 +168,8 @@ export default function SplashScreen() {
 
     // 8. Immediate Coordinated Exit
     const exitTimer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(screenOpacity, {
-          toValue: 0,
-          duration: 180,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(screenTranslateY, {
-          toValue: -15,
-          duration: 180,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        dispatch(setSplashDone());
-      });
-    }, 450);
+      dispatch(setSplashDone());
+    }, 400);
 
     // Hard fallback safety
     const fallbackTimer = setTimeout(() => {

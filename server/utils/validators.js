@@ -140,10 +140,11 @@ const updateScorecardSchema = z.object({
 
 // Review Schema
 const createReviewSchema = z.object({
+  bookingId: z.string().optional(),
   turfId: z.string().optional(),
   rating: z.number().min(1).max(5),
   comment: z.string().optional().default(''),
-});
+}).passthrough();
 
 // Report Issue Schema
 const reportIssueSchema = z.object({

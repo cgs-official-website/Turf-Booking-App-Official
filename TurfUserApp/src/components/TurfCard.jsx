@@ -5,6 +5,7 @@ import {
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
+import { useSelector } from 'react-redux';
 import { RatingBadge } from './RatingBadge';
 import { getImageUrl } from '../api/client';
 import { RADIUS, FONT, SHADOW } from '../utils/theme';
@@ -12,15 +13,69 @@ import { RADIUS, FONT, SHADOW } from '../utils/theme';
 const { width } = Dimensions.get('window');
 const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
+function isValidCoordinate(lat, lng) {
+  if (lat == null || lng == null) return false;
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+  if (isNaN(numLat) || isNaN(numLng)) return false;
+  if (numLat === 0 && numLng === 0) return false;
+  if (numLat < -90 || numLat > 90 || numLng < -180 || numLng > 180) return false;
+  return true;
+}
+
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  if (!isValidCoordinate(lat1, lon1) || !isValidCoordinate(lat2, lon2)) return null;
+  const R = 6371;
+  const radLat1 = (Number(lat1) * Math.PI) / 180;
+  const radLat2 = (Number(lat2) * Math.PI) / 180;
+  const dLatRad = ((Number(lat2) - Number(lat1)) * Math.PI) / 180;
+  const dLonRad = ((Number(lon2) - Number(lon1)) * Math.PI) / 180;
+  const a =
+    Math.sin(dLatRad / 2) * Math.sin(dLatRad / 2) +
+    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLonRad / 2) * Math.sin(dLonRad / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c;
+  return Math.round(d * 10) / 10;
+}
+
+function getDisplayDistance(turf, userCoords) {
+  if (!turf) return 'Location unavailable';
+
+  if (typeof turf.distance === 'number' && !isNaN(turf.distance)) {
+    return `${turf.distance} km`;
+  }
+
+  const uLat = userCoords?.lat ?? userCoords?.latitude;
+  const uLng = userCoords?.lng ?? userCoords?.longitude;
+  if (!isValidCoordinate(uLat, uLng)) {
+    return 'Location unavailable';
+  }
+
+  const turfLat = turf.latitude ?? turf.lat ?? turf.location?.latitude ?? turf.location?.lat ?? turf.location?.geo?.lat;
+  const turfLng = turf.longitude ?? turf.lng ?? turf.location?.longitude ?? turf.location?.lng ?? turf.location?.geo?.lng;
+  if (!isValidCoordinate(turfLat, turfLng)) {
+    return 'Location unavailable';
+  }
+
+  const dist = calculateDistanceKm(uLat, uLng, turfLat, turfLng);
+  if (dist !== null && !isNaN(dist)) {
+    return `${dist} km`;
+  }
+  return 'Location unavailable';
+}
+
 export default function TurfCard({
   turf,
   onPress,
   isFavorite = false,
   onToggleFavorite,
-  variant = 'vertical', // 'featured' | 'vertical' | 'horizontal'
+  variant = 'vertical',
   style,
+  userCoords: propUserCoords,
 }) {
   const { C, dark } = useTheme();
+  const storeUserCoords = useSelector((s) => s.auth.userCoords);
+  const userCoords = propUserCoords || storeUserCoords;
 
   if (!turf) return null;
 
@@ -30,9 +85,10 @@ export default function TurfCard({
   const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
   const price = turf.pricePerHour || turf.pricing?.baseRate || turf.price || 800;
   const locationText = turf.location?.city || turf.location?.address || turf.address || 'Local Venue';
-  const rating = turf.rating?.avg || turf.rating || 4.8;
+  const rating = turf.rating?.avg ?? turf.ratingAvg ?? (typeof turf.rating === 'number' ? turf.rating : 0);
+  const count = turf.rating?.count ?? turf.reviewsCount ?? 0;
   const sports = turf.sportTypes || turf.sports || [];
-  const distance = turf.distance !== undefined ? `${turf.distance} km` : '2.4 km';
+  const distance = getDisplayDistance(turf, userCoords);
 
   if (variant === 'featured') {
     return (
@@ -78,7 +134,7 @@ export default function TurfCard({
 
           {/* Bottom image stats */}
           <View style={styles.bottomFloatingRow}>
-            <RatingBadge rating={rating} />
+            <RatingBadge rating={rating} count={count} />
             <View style={styles.distancePill}>
               <Feather name="navigation" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
               <Text style={styles.distanceText}>{distance}</Text>
@@ -155,7 +211,7 @@ export default function TurfCard({
           <Text style={[styles.verticalTitle, { color: C.text }]} numberOfLines={1}>
             {name}
           </Text>
-          <RatingBadge rating={rating} size="sm" />
+          <RatingBadge rating={rating} count={count} size="sm" />
         </View>
 
         <View style={styles.locationRow}>

@@ -127,7 +127,7 @@ const nearbyTurfsController = {
             images,
             city: t.city || (typeof t.location === 'object' ? t.location?.city : '') || '',
             address: (typeof t.location === 'object' ? t.location?.address : '') || t.city || '',
-            ratingAvg: Number(t.ratingAvg || 5.0),
+            ratingAvg: Number(t.reviewsCount === 0 ? 0 : (t.ratingAvg || 0)),
             reviewsCount: Number(t.reviewsCount || 0),
             latitude: tLat,
             longitude: tLng,

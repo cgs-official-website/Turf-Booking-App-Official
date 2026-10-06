@@ -49,6 +49,19 @@ const paymentController = {
         }
       );
 
+      // Update Payment database record (reuse existing Payment model)
+      if (razorpay_order_id) {
+        await prisma.payment.updateMany({
+          where: { razorpayOrderId: razorpay_order_id },
+          data: {
+            status: 'captured',
+            razorpayPaymentId: razorpay_payment_id,
+            rawPayload: { razorpay_order_id, razorpay_payment_id, razorpay_signature },
+            updatedAt: new Date(),
+          },
+        }).catch((e) => console.warn('⚠️ Payment record update warning:', e.message));
+      }
+
       // Invalidate Redis slot cache and vendor dashboard
       await cacheService.invalidateSlots(confirmedBooking.turfId, confirmedBooking.date);
       if (confirmedBooking.vendorId) {

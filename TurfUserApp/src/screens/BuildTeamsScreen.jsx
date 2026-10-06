@@ -32,8 +32,14 @@ export default function BuildTeamsScreen({ route, navigation }) {
 
       // split players alternately if not already split
       if (m.teams?.A?.playerIds?.length || m.teams?.B?.playerIds?.length) {
-        setTeamA(m.teams.A);
-        setTeamB(m.teams.B);
+        setTeamA({
+          ...m.teams.A,
+          captainId: m.teams.A.captainId || m.teams.A.playerIds[0] || null,
+        });
+        setTeamB({
+          ...m.teams.B,
+          captainId: m.teams.B.captainId || m.teams.B.playerIds[0] || null,
+        });
       } else {
         const ids = effectivePlayers.map((p) => p.id);
         const a = ids.filter((_, i) => i % 2 === 0);
@@ -49,13 +55,29 @@ export default function BuildTeamsScreen({ route, navigation }) {
     return match?.players?.find((p) => p.id === id);
   };
 
+  const setCaptain = (teamKey, playerId) => {
+    if (teamKey === 'A') {
+      setTeamA((t) => ({ ...t, captainId: playerId }));
+    } else {
+      setTeamB((t) => ({ ...t, captainId: playerId }));
+    }
+  };
+
   const swapTeam = (id) => {
     if (teamA.playerIds.includes(id)) {
-      setTeamA((t) => ({ ...t, playerIds: t.playerIds.filter((x) => x !== id) }));
-      setTeamB((t) => ({ ...t, playerIds: [...t.playerIds, id] }));
+      const newA = teamA.playerIds.filter((x) => x !== id);
+      const newB = [...teamB.playerIds, id];
+      const newACaptain = teamA.captainId === id ? (newA[0] || null) : teamA.captainId;
+      const newBCaptain = teamB.captainId || id;
+      setTeamA((t) => ({ ...t, playerIds: newA, captainId: newACaptain }));
+      setTeamB((t) => ({ ...t, playerIds: newB, captainId: newBCaptain }));
     } else {
-      setTeamB((t) => ({ ...t, playerIds: t.playerIds.filter((x) => x !== id) }));
-      setTeamA((t) => ({ ...t, playerIds: [...t.playerIds, id] }));
+      const newB = teamB.playerIds.filter((x) => x !== id);
+      const newA = [...teamA.playerIds, id];
+      const newBCaptain = teamB.captainId === id ? (newB[0] || null) : teamB.captainId;
+      const newACaptain = teamA.captainId || id;
+      setTeamB((t) => ({ ...t, playerIds: newB, captainId: newBCaptain }));
+      setTeamA((t) => ({ ...t, playerIds: newA, captainId: newACaptain }));
     }
   };
 
@@ -124,19 +146,36 @@ export default function BuildTeamsScreen({ route, navigation }) {
         if (!p) return null;
         const isCaptain = team.captainId === id;
         return (
-          <TouchableOpacity key={id} style={styles.playerRow} onPress={() => swapTeam(id)}>
-            <View style={styles.playerLeft}>
+          <View key={id} style={styles.playerRow}>
+            <TouchableOpacity
+              style={styles.playerLeftTouchable}
+              onPress={() => swapTeam(id)}
+              activeOpacity={0.7}
+            >
               <View style={styles.avatar}>
                 <Icon name="person" size={16} color={COLORS.subtext} />
               </View>
               <Text style={styles.playerName}>{p.name}</Text>
-            </View>
-            {isCaptain ? (
-              <Icon name="star" size={18} color="#f59e0b" />
-            ) : (
-              <View style={styles.radio} />
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.captainBtn}
+              onPress={() => setCaptain(label, id)}
+              activeOpacity={0.7}
+            >
+              {isCaptain ? (
+                <View style={styles.captainBadgeActive}>
+                  <Icon name="star" size={14} color="#92400E" />
+                  <Text style={styles.captainBadgeTextActive}>Leader</Text>
+                </View>
+              ) : (
+                <View style={styles.captainBadgeInactive}>
+                  <Icon name="star-outline" size={14} color={COLORS.subtext} />
+                  <Text style={styles.captainBadgeTextInactive}>Set Leader</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         );
       })}
       {team.playerIds.length === 0 && (
@@ -172,7 +211,7 @@ export default function BuildTeamsScreen({ route, navigation }) {
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 100 }}>
         {renderTeam(teamA, 'A')}
         {renderTeam(teamB, 'B')}
-        <Text style={styles.hint}>Tap a player to move them between teams</Text>
+        <Text style={styles.hint}>Tap player to swap teams • Tap ⭐ to set Team Leader</Text>
       </ScrollView>
 
       <View style={styles.footer}>
@@ -263,11 +302,15 @@ const styles = StyleSheet.create({
   teamLogoPlaceholder: { width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center' },
   teamName:    { fontWeight: '800', fontSize: 14, color: COLORS.text },
 
-  playerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 12, marginBottom: SPACING.sm, backgroundColor: '#fff' },
-  playerLeft:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  playerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 10, marginBottom: SPACING.sm, backgroundColor: '#fff' },
+  playerLeftTouchable: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flex: 1, paddingVertical: 2 },
   avatar:      { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.bgSoft, justifyContent: 'center', alignItems: 'center' },
-  playerName:  { fontSize: 14, fontWeight: '600', color: COLORS.text },
-  radio:       { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: COLORS.border },
+  playerName:  { fontSize: 14, fontWeight: '600', color: COLORS.text, flex: 1 },
+  captainBtn:  { paddingVertical: 4, paddingHorizontal: 4 },
+  captainBadgeActive: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#F59E0B', paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.round },
+  captainBadgeTextActive: { fontSize: 11, fontWeight: '800', color: '#92400E' },
+  captainBadgeInactive: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.bgSoft, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 8, paddingVertical: 5, borderRadius: RADIUS.round },
+  captainBadgeTextInactive: { fontSize: 11, fontWeight: '700', color: COLORS.subtext },
   emptyText:   { fontSize: 12, color: COLORS.subtext, fontStyle: 'italic' },
   hint:        { fontSize: 11, color: COLORS.subtext, textAlign: 'center', marginTop: SPACING.sm },
 

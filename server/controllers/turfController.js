@@ -12,9 +12,11 @@ function formatTurf(t) {
   const city = t.city || t.location?.city || '';
   const address = t.location?.address || t.address || city;
   const sports = Array.isArray(t.sports) ? t.sports : (Array.isArray(t.sportTypes) ? t.sportTypes : []);
-  const ratingAvg = typeof t.ratingAvg === 'number' ? t.ratingAvg : (Number(t.rating?.avg) || 5.0);
   const reviewsCount = typeof t.reviewsCount === 'number' ? t.reviewsCount : (Number(t.rating?.count) || 0);
+  const ratingAvg = reviewsCount === 0 ? 0 : (typeof t.ratingAvg === 'number' ? t.ratingAvg : (Number(t.rating?.avg) || 0));
   const images = Array.isArray(t.images) ? t.images : [];
+  const lat = t.latitude ?? t.lat ?? (t.location?.geo?.lat || t.location?.lat || null);
+  const lng = t.longitude ?? t.lng ?? (t.location?.geo?.lng || t.location?.lng || null);
 
   return {
     id: t.id,
@@ -25,10 +27,14 @@ function formatTurf(t) {
     description: t.description || '',
     city,
     address,
+    latitude: lat,
+    longitude: lng,
+    lat,
+    lng,
     location: {
       city,
       address,
-      geo: (t.lat && t.lng) ? { lat: t.lat, lng: t.lng } : (t.location?.geo || null),
+      geo: (lat && lng) ? { lat, lng } : (t.location?.geo || null),
     },
     sportTypes: sports,
     sports,
@@ -134,14 +140,14 @@ const turfController = {
         if (maxPrice) where.pricePerHour.lte = Number(maxPrice);
       }
 
-      // Sorting
-      let orderBy = { createdAt: 'desc' };
+      // Sorting (Default: High rating first)
+      let orderBy = [{ ratingAvg: 'desc' }, { createdAt: 'desc' }];
       if (sort === 'topRated') {
-        orderBy = { ratingAvg: 'desc' };
+        orderBy = [{ ratingAvg: 'desc' }, { createdAt: 'desc' }];
       } else if (sort === 'priceLowToHigh') {
-        orderBy = { pricePerHour: 'asc' };
+        orderBy = [{ pricePerHour: 'asc' }, { ratingAvg: 'desc' }];
       } else if (sort === 'priceHighToLow') {
-        orderBy = { pricePerHour: 'desc' };
+        orderBy = [{ pricePerHour: 'desc' }, { ratingAvg: 'desc' }];
       }
 
       // Pagination cursor

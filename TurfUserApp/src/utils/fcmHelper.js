@@ -232,6 +232,7 @@ export const fcmHelper = {
     // 5. Active In-App & Background Poller for real-time booking notifications
     const pollInterval = setInterval(async () => {
       try {
+        if (AppState.currentState !== 'active') return;
         const res = await notificationsApi.getAll();
         const list = res?.data?.notifications || res?.notifications || [];
         const now = Date.now();

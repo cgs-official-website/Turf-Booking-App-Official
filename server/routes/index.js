@@ -13,6 +13,7 @@ const placesRoutes = require('./placesRoutes');
 const adminRoutes = require('./adminRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
 const enquiryRoutes = require('./enquiryRoutes');
+const reviewRoutes = require('./reviewRoutes');
 const { sendSuccess } = require('../utils/response');
 
 // Health Check
@@ -55,21 +56,7 @@ router.use('/admin', adminRoutes);
 router.use('/enquiries', enquiryRoutes);
 router.use('/inquiries', enquiryRoutes);
 router.use('/vendor-enquiries', enquiryRoutes);
+router.use('/reviews', reviewRoutes);
 router.post('/reports/inquiry', require('../controllers/enquiryController').createEnquiry);
-
-// Public Reviews Stream (Directly from database)
-router.get('/reviews', async (req, res) => {
-  const firestoreService = require('../services/firestoreService');
-  try {
-    const result = await firestoreService.queryWithCursor('reviews', {
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: 12,
-    });
-    return sendSuccess(res, { reviews: result.items || [] });
-  } catch (err) {
-    return sendSuccess(res, { reviews: [] });
-  }
-});
 
 module.exports = router;
