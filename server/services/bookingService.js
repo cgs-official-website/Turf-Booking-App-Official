@@ -269,7 +269,26 @@ const bookingService = {
 
     const { dateObj } = validateBookingInput(payload);
     const courtNumber = resolveCourtNumber(turf, payload.courtNumber);
-    const hourlyRate = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+    let hourlyRate = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+
+    // Check custom price overrides for this date and slot
+    try {
+      const dateStr = payload.date;
+      const override = await prisma.slotOverride.findUnique({
+        where: { turfId_date: { turfId: turf.id, date: dateStr } },
+      });
+      if (override && override.priceOverrides) {
+        const slotKey = `${payload.startTime}-${payload.endTime}`;
+        if (override.priceOverrides[slotKey] !== undefined) {
+          hourlyRate = Number(override.priceOverrides[slotKey]);
+        } else if (override.priceOverrides[payload.startTime] !== undefined) {
+          hourlyRate = Number(override.priceOverrides[payload.startTime]);
+        }
+      }
+    } catch (overrideErr) {
+      console.warn('⚠️ Warning checking slot price override in reserveSlot:', overrideErr.message);
+    }
+
     if (!payload.endTime && payload.startTime) {
       const [sh, sm] = payload.startTime.split(':').map(Number);
       const eh = (sh + 1) % 24;

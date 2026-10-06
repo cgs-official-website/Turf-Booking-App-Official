@@ -92,7 +92,7 @@ const RootNavigator = () => {
     }
   }, [isAuthenticated]);
 
-  if (!splashDone) {
+  if (!splashDone || bootstrapping) {
     return <SplashScreen onFinish={() => setSplashDone(true)} />;
   }
 
@@ -121,6 +121,7 @@ const RootNavigator = () => {
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Vendor Registration' }} />
+            <Stack.Screen name="VendorVerification" component={VendorVerificationScreen} options={{ headerShown: false }} />
             <Stack.Screen name="VendorEnquiry" component={VendorEnquiryScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Terms" component={TermsScreen} options={{ headerShown: false }} />
           </>
@@ -181,6 +182,8 @@ const RootNavigator = () => {
             <Stack.Screen name="UserReviews" component={UserReviewsScreen} options={{ title: 'Reviews' }} />
             <Stack.Screen name="TurfProfile" component={TurfProfileScreen} options={{ headerShown: false }} />
             <Stack.Screen name="LocationSearch" component={LocationSearchScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="VendorVerification" component={VendorVerificationScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TurfVerification" component={TurfVerificationScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ReportIssues" component={ReportIssuesScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Terms" component={TermsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="SubscriptionDetail" component={SubscriptionDetailScreen} options={{ headerShown: false }} />

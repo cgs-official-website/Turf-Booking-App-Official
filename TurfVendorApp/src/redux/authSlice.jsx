@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginVendorApi, registerVendorApi, getMeApi, updateProfileApi } from '../api/auth';
-import { getOnboardingStatus } from '../api/onboarding';
+import { getOnboardingStatus, uploadVendorKyc } from '../api/onboarding';
 
 // ─── Persisted "Turf Approved" acknowledgment ─────────────────────────────────
 // FIX: `turfApprovalAcknowledged` used to live in Redux memory only, so it
@@ -73,13 +73,22 @@ export const loginVendor = createAsyncThunk(
 
 export const registerVendor = createAsyncThunk(
   'auth/registerVendor',
-  async (formData, { rejectWithValue }) => {
+  async (formDataWithKyc, { rejectWithValue }) => {
     try {
-      const data = await registerVendorApi(formData);
-      // Intentionally NOT storing the token / auto-authenticating here —
-      // even though the backend returns one, the desired flow is:
-      // Terms accepted → registration confirmed → back to Login screen
-      // → vendor logs in manually (loginVendor thunk issues its own token).
+      const { kycData, ...regData } = formDataWithKyc || {};
+      const data = await registerVendorApi(regData);
+
+      if (kycData && data?.token) {
+        try {
+          await uploadVendorKyc({
+            ...kycData,
+            token: data.token,
+          });
+        } catch (uploadErr) {
+          console.warn('⚠️ KYC document upload during registration failed:', uploadErr.message);
+        }
+      }
+
       return data;
     } catch (err) {
       return rejectWithValue(err.message);
@@ -95,18 +104,19 @@ export const bootstrapAuth = createAsyncThunk(
       if (!token) return null;
       const data = await getMeApi();
       const vendor = data.vendor || data.profile;
-      const kycStatus = vendor?.kycStatus || 'pending';
-
-      if (kycStatus !== 'approved') {
-        await AsyncStorage.removeItem('vendorToken');
-        return rejectWithValue('Your account is pending Superadmin approval.');
-      }
-
       const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
-      return { ...data, turfApprovalAcknowledged };
+      return { ...data, token, turfApprovalAcknowledged };
     } catch (err) {
-      await AsyncStorage.removeItem('vendorToken');
-      return rejectWithValue(err.message);
+      if (err?.status === 401 || err?.statusCode === 401) {
+        await AsyncStorage.removeItem('vendorToken');
+        return rejectWithValue('Session expired. Please log in again.');
+      }
+      // On network failure or offline startup, keep the token so user is not forced to log in again
+      const token = await AsyncStorage.getItem('vendorToken');
+      if (token) {
+        return { token, offline: true };
+      }
+      return rejectWithValue(err.message || 'Authentication failed');
     }
   }
 );
@@ -284,12 +294,10 @@ const authSlice = createSlice({
       .addCase(bootstrapAuth.pending, (state) => { state.bootstrapping = true; })
       .addCase(bootstrapAuth.fulfilled, (state, action) => {
         state.bootstrapping = false;
-        if (action.payload) {
-          state.vendor = action.payload.vendor;
+        if (action.payload && (action.payload.vendor || action.payload.token)) {
+          if (action.payload.vendor) state.vendor = action.payload.vendor;
+          if (action.payload.token) state.token = action.payload.token;
           state.isAuthenticated = true;
-          // This is the actual fix for the repeated Approved-screen bug:
-          // hydrate from AsyncStorage instead of leaving this at its `false`
-          // initial value on every cold start.
           state.turfApprovalAcknowledged = !!action.payload.turfApprovalAcknowledged;
         }
       })

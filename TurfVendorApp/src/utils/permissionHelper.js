@@ -240,3 +240,38 @@ export const ensureNotificationPermission = async () => {
     return false;
   }
 };
+
+/**
+ * On-demand check for Camera when capturing photos.
+ */
+export const ensureCameraPermission = async () => {
+  if (Platform.OS !== 'android') return true;
+
+  try {
+    const alreadyGranted = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.CAMERA
+    );
+    if (alreadyGranted) return true;
+
+    const result = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.CAMERA
+    );
+    if (result === PermissionsAndroid.RESULTS.GRANTED) return true;
+
+    if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Camera access is permanently denied. Please enable it in Settings to take document photos.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: openAppSettings },
+        ]
+      );
+    }
+    return false;
+  } catch (err) {
+    console.warn('⚠️ ensureCameraPermission error:', err?.message);
+    return false;
+  }
+};
+

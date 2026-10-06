@@ -331,6 +331,15 @@ const ProfileScreen = ({ navigation }) => {
             colors={colors}
           />
           <MenuItem
+            icon="shield"
+            iconBg="rgba(16, 185, 129, 0.12)"
+            iconColor="#10B981"
+            label="Vendor Identity KYC"
+            subLabel="Aadhaar Front/Back and PAN documents"
+            onPress={() => navigation.navigate('VendorVerification')}
+            colors={colors}
+          />
+          <MenuItem
             icon="credit-card"
             iconBg="rgba(168, 85, 247, 0.12)"
             iconColor="#A855F7"

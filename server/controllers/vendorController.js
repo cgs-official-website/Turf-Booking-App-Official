@@ -145,30 +145,74 @@ const vendorController = {
   async vendorVerification(req, res) {
     try {
       const { uid } = req.user;
-      const files = req.files || {};
+      let files = {};
 
-      if (files.aadhaar && files.aadhaar[0]) {
-        const resAadhaar = await storageService.uploadFile(files.aadhaar[0], 'kyc');
-        await prisma.vendorKycDocument.upsert({
-          where: { vendorId_docType: { vendorId: uid, docType: 'aadhaar' } },
-          update: {
-            fileUrl: resAadhaar.url,
-            status: 'pending',
-            rejectionReason: null,
-            reviewedAt: null,
-          },
-          create: {
-            id: `kyc_${uid}_aadhaar`,
-            vendorId: uid,
-            docType: 'aadhaar',
-            fileUrl: resAadhaar.url,
-            status: 'pending',
-          },
+      if (Array.isArray(req.files)) {
+        req.files.forEach((f) => {
+          if (!files[f.fieldname]) files[f.fieldname] = [];
+          files[f.fieldname].push(f);
         });
+      } else if (req.files && typeof req.files === 'object') {
+        files = req.files;
       }
 
-      if (files.pan && files.pan[0]) {
-        const resPan = await storageService.uploadFile(files.pan[0], 'kyc');
+      // Handle Aadhaar Card (Front and Back) or single Aadhaar file
+      const aadhaarFrontDoc = (files.aadhaarFront && files.aadhaarFront[0]) || (files.aadhaar_front && files.aadhaar_front[0]);
+      const aadhaarBackDoc = (files.aadhaarBack && files.aadhaarBack[0]) || (files.aadhaar_back && files.aadhaar_back[0]);
+      const legacyAadhaarDoc = files.aadhaar && files.aadhaar[0];
+
+      if (aadhaarFrontDoc || aadhaarBackDoc || legacyAadhaarDoc) {
+        let frontUrl = null;
+        let backUrl = null;
+
+        if (aadhaarFrontDoc) {
+          const resFront = await storageService.uploadFile(aadhaarFrontDoc, 'kyc');
+          frontUrl = resFront.url;
+        } else if (legacyAadhaarDoc) {
+          const resAadhaar = await storageService.uploadFile(legacyAadhaarDoc, 'kyc');
+          frontUrl = resAadhaar.url;
+        }
+
+        if (aadhaarBackDoc) {
+          const resBack = await storageService.uploadFile(aadhaarBackDoc, 'kyc');
+          backUrl = resBack.url;
+        }
+
+        // Store JSON structure if both sides uploaded, or single string URL
+        let finalAadhaarUrl = frontUrl;
+        if (frontUrl && backUrl) {
+          finalAadhaarUrl = JSON.stringify({ front: frontUrl, back: backUrl });
+        } else if (backUrl && !frontUrl) {
+          finalAadhaarUrl = backUrl;
+        }
+
+        if (finalAadhaarUrl) {
+          await prisma.vendorKycDocument.upsert({
+            where: { vendorId_docType: { vendorId: uid, docType: 'aadhaar' } },
+            update: {
+              fileUrl: finalAadhaarUrl,
+              status: 'pending',
+              rejectionReason: null,
+              reviewedAt: null,
+            },
+            create: {
+              id: `kyc_${uid}_aadhaar`,
+              vendorId: uid,
+              docType: 'aadhaar',
+              fileUrl: finalAadhaarUrl,
+              status: 'pending',
+            },
+          });
+        }
+      }
+
+      const panDoc = (files.pan && files.pan[0]) ||
+                     (files.panCard && files.panCard[0]) ||
+                     (files.pan_card && files.pan_card[0]) ||
+                     (files.panFront && files.panFront[0]);
+
+      if (panDoc) {
+        const resPan = await storageService.uploadFile(panDoc, 'kyc');
         await prisma.vendorKycDocument.upsert({
           where: { vendorId_docType: { vendorId: uid, docType: 'pan' } },
           update: {
@@ -187,8 +231,9 @@ const vendorController = {
         });
       }
 
-      const vendor = await prisma.vendor.findUnique({
+      const vendor = await prisma.vendor.update({
         where: { id: uid },
+        data: { kycStatus: 'pending' },
         include: { kycDocuments: true },
       });
 
@@ -206,7 +251,16 @@ const vendorController = {
   async turfVerification(req, res) {
     try {
       const { uid } = req.user;
-      const files = req.files || {};
+      let files = {};
+
+      if (Array.isArray(req.files)) {
+        req.files.forEach((f) => {
+          if (!files[f.fieldname]) files[f.fieldname] = [];
+          files[f.fieldname].push(f);
+        });
+      } else if (req.files && typeof req.files === 'object') {
+        files = req.files;
+      }
 
       if (files.gst && files.gst[0]) {
         const resGst = await storageService.uploadFile(files.gst[0], 'kyc');
@@ -284,6 +338,7 @@ const vendorController = {
         where: { id: uid },
         include: {
           turfs: { take: 1, orderBy: { createdAt: 'desc' } },
+          kycDocuments: true,
           subscriptions: {
             where: { status: 'active', expiresAt: { gt: new Date() } },
             take: 1,
@@ -301,8 +356,38 @@ const vendorController = {
       const hasActiveSub = vendor.subscriptions && vendor.subscriptions.length > 0;
       const isCompleted = vendor.turfOnboardingComplete || !!turf || vendor.kycStatus === 'pending' || vendor.kycStatus === 'approved';
 
+      const kycDocs = {
+        aadhaarFront: null,
+        aadhaarBack: null,
+        pan: null,
+        kycStatus: vendor.kycStatus || 'pending',
+      };
+
+      if (Array.isArray(vendor.kycDocuments)) {
+        vendor.kycDocuments.forEach((doc) => {
+          if (doc.docType === 'aadhaar') {
+            if (typeof doc.fileUrl === 'string' && doc.fileUrl.trim().startsWith('{')) {
+              try {
+                const parsed = JSON.parse(doc.fileUrl);
+                kycDocs.aadhaarFront = parsed.front || null;
+                kycDocs.aadhaarBack = parsed.back || null;
+              } catch {
+                kycDocs.aadhaarFront = doc.fileUrl;
+              }
+            } else {
+              kycDocs.aadhaarFront = doc.fileUrl;
+            }
+          }
+          if (doc.docType === 'pan') {
+            kycDocs.pan = doc.fileUrl;
+          }
+        });
+      }
+
       return sendSuccess(res, {
         kycStatus: vendor.kycStatus || 'pending',
+        kycDocs,
+        kycDocuments: vendor.kycDocuments || [],
         turfStatus,
         status: turfStatus,
         turfOnboardingComplete: isCompleted,
@@ -937,6 +1022,7 @@ const vendorController = {
         // 6. Detach matches
         await tx.match.updateMany({
           where: { turfId },
+          data: { turfId: null },
         });
 
         // 7. Delete the turf itself
@@ -1091,10 +1177,27 @@ const vendorController = {
 
       let blocked = Array.isArray(override?.blockedSlots) ? [...override.blockedSlots] : [];
 
-      if (action === 'unfreeze') {
+      if (action === 'unfreeze_all' || action === 'unblock_all') {
+        blocked = [];
+      } else if (action === 'freeze_all' || action === 'block_all') {
+        const open = turf.slotConfig?.openTime || '06:00';
+        const close = turf.slotConfig?.closeTime || '23:00';
+        const duration = Number(turf.slotConfig?.slotDurationMins) || 60;
+        const [openH = 6, openM = 0] = String(open).split(':').map(Number);
+        const [closeH = 23, closeM = 0] = String(close).split(':').map(Number);
+        const startMin = openH * 60 + openM;
+        const endMin = closeH * 60 + closeM;
+        const allTimes = [];
+        for (let m = startMin; m < endMin; m += duration) {
+          const sH = String(Math.floor(m / 60)).padStart(2, '0');
+          const sM = String(m % 60).padStart(2, '0');
+          allTimes.push(`${sH}:${sM}`);
+        }
+        blocked = allTimes;
+      } else if (action === 'unfreeze' || action === 'unblock') {
         blocked = blocked.filter((t) => t !== startTime);
       } else {
-        if (!blocked.includes(startTime)) blocked.push(startTime);
+        if (startTime && !blocked.includes(startTime)) blocked.push(startTime);
       }
 
       await prisma.slotOverride.upsert({
@@ -1216,6 +1319,135 @@ const vendorController = {
     } catch (err) {
       console.error('getMyReports error:', err);
       return sendError(res, 'Failed to fetch reports', 500, 'FETCH_FAILED');
+    }
+  },
+
+  /**
+   * GET /api/v1/vendor/bank-details
+   */
+  async getBankDetails(req, res) {
+    try {
+      const { uid } = req.user;
+      const doc = await prisma.document.findUnique({
+        where: {
+          collection_id: {
+            collection: 'payout_vendor',
+            id: String(uid),
+          },
+        },
+      });
+
+      return sendSuccess(res, {
+        bankDetails: doc?.data || {
+          accountHolderName: '',
+          accountNumber: '',
+          ifscCode: '',
+          upiId: '',
+        },
+      });
+    } catch (err) {
+      console.error('getBankDetails error:', err);
+      return sendError(res, 'Failed to fetch bank details', 500, 'FETCH_FAILED');
+    }
+  },
+
+  /**
+   * POST /api/v1/vendor/bank-details
+   */
+  async updateBankDetails(req, res) {
+    try {
+      const { uid } = req.user;
+      const { accountHolderName, accountNumber, ifscCode, upiId } = req.body;
+
+      if (!accountHolderName || !accountNumber || !ifscCode) {
+        return sendError(res, 'Account Holder Name, Account Number, and IFSC Code are required', 400, 'MISSING_FIELDS');
+      }
+
+      const bankData = {
+        accountHolderName: String(accountHolderName).trim(),
+        accountNumber: String(accountNumber).trim(),
+        ifscCode: String(ifscCode).trim().toUpperCase(),
+        upiId: upiId ? String(upiId).trim() : '',
+        updatedAt: new Date().toISOString(),
+      };
+
+      await prisma.document.upsert({
+        where: {
+          collection_id: {
+            collection: 'payout_vendor',
+            id: String(uid),
+          },
+        },
+        update: {
+          data: bankData,
+          updatedAt: new Date(),
+        },
+        create: {
+          collection: 'payout_vendor',
+          id: String(uid),
+          data: bankData,
+        },
+      });
+
+      return sendSuccess(res, {
+        message: 'Bank & Payout details updated successfully',
+        bankDetails: bankData,
+      });
+    } catch (err) {
+      console.error('updateBankDetails error:', err);
+      return sendError(res, 'Failed to update bank details', 500, 'UPDATE_FAILED');
+    }
+  },
+
+  /**
+   * GET /api/v1/vendor/payments
+   * Fetch payment and payout transactions for vendor
+   */
+  async getVendorPayments(req, res) {
+    const { uid } = req.user;
+    try {
+      const payments = await prisma.payment.findMany({
+        where: {
+          OR: [
+            { vendorId: uid },
+            { booking: { vendorId: uid } },
+          ],
+        },
+        include: {
+          booking: {
+            select: {
+              bookingId: true,
+              turfName: true,
+              bookingDate: true,
+              startTime: true,
+              endTime: true,
+              paymentStatus: true,
+              userId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      });
+
+      const formatted = payments.map((p) => ({
+        id: p.id,
+        purpose: p.purpose,
+        bookingId: p.bookingId,
+        amount: Number(p.amount),
+        currency: p.currency,
+        status: p.status,
+        razorpayOrderId: p.razorpayOrderId,
+        razorpayPaymentId: p.razorpayPaymentId,
+        createdAt: p.createdAt,
+        turfName: p.booking?.turfName || 'Turf Booking',
+        bookingDate: p.booking?.bookingDate || null,
+      }));
+
+      return sendSuccess(res, { payments: formatted, count: formatted.length });
+    } catch (err) {
+      console.error('getVendorPayments error:', err);
+      return sendError(res, 'Failed to fetch vendor payments', 500, 'FETCH_FAILED');
     }
   },
 };

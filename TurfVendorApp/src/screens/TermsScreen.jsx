@@ -89,7 +89,7 @@ const TermsScreen = ({ navigation, route }) => {
       return;
     }
     if (formData) {
-      dispatch(registerVendor(formData));
+      dispatch(registerVendor({ ...formData, kycData: route?.params?.kycData }));
     } else {
       navigation.goBack();
     }

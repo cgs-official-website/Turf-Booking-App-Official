@@ -185,10 +185,22 @@ const adminController = {
         take: Number(limit),
       });
 
-      const enrichedItems = vendors.map((v) => ({
-        ...v,
-        turf: v.turfs?.[0] || null,
-      }));
+      const enrichedItems = vendors.map((v) => {
+        const kycDocsObj = {};
+        if (Array.isArray(v.kycDocuments)) {
+          v.kycDocuments.forEach((doc) => {
+            if (doc.docType === 'aadhaar') kycDocsObj.aadhaarUrl = doc.fileUrl;
+            if (doc.docType === 'pan') kycDocsObj.panUrl = doc.fileUrl;
+            if (doc.docType === 'gst') kycDocsObj.gstUrl = doc.fileUrl;
+            if (doc.docType === 'eb_bill' || doc.docType === 'ebBill') kycDocsObj.ebBillUrl = doc.fileUrl;
+          });
+        }
+        return {
+          ...v,
+          kycDocs: kycDocsObj,
+          turf: v.turfs?.[0] || null,
+        };
+      });
 
       return sendPaginated(res, enrichedItems, null, { count: enrichedItems.length });
     } catch (err) {
@@ -212,15 +224,27 @@ const adminController = {
 
       const vendors = await prisma.vendor.findMany({
         where,
-        include: { turfs: true },
+        include: { turfs: true, kycDocuments: true },
         orderBy: { createdAt: 'desc' },
         take: Number(limit),
       });
 
-      const enrichedItems = vendors.map((v) => ({
-        ...v,
-        turf: v.turfs?.[0] || null,
-      }));
+      const enrichedItems = vendors.map((v) => {
+        const kycDocsObj = {};
+        if (Array.isArray(v.kycDocuments)) {
+          v.kycDocuments.forEach((doc) => {
+            if (doc.docType === 'aadhaar') kycDocsObj.aadhaarUrl = doc.fileUrl;
+            if (doc.docType === 'pan') kycDocsObj.panUrl = doc.fileUrl;
+            if (doc.docType === 'gst') kycDocsObj.gstUrl = doc.fileUrl;
+            if (doc.docType === 'eb_bill' || doc.docType === 'ebBill') kycDocsObj.ebBillUrl = doc.fileUrl;
+          });
+        }
+        return {
+          ...v,
+          kycDocs: kycDocsObj,
+          turf: v.turfs?.[0] || null,
+        };
+      });
 
       return sendPaginated(res, enrichedItems, null, { count: enrichedItems.length });
     } catch (err) {

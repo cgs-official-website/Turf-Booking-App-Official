@@ -7,13 +7,22 @@ function getDatabaseUrlWithPoolCap() {
   const originalUrl = process.env.DATABASE_URL || '';
   if (!originalUrl) return originalUrl;
 
-  // Do not add if connection_limit is already present in query params
-  if (/[?&]connection_limit=/.test(originalUrl)) {
-    return originalUrl;
+  try {
+    const urlObj = new URL(originalUrl);
+    if (!urlObj.searchParams.has('connection_limit')) {
+      urlObj.searchParams.set('connection_limit', '10');
+    }
+    if (!urlObj.searchParams.has('connect_timeout')) {
+      urlObj.searchParams.set('connect_timeout', '15');
+    }
+    if (!urlObj.searchParams.has('pool_timeout')) {
+      urlObj.searchParams.set('pool_timeout', '10');
+    }
+    return urlObj.toString();
+  } catch (e) {
+    const separator = originalUrl.includes('?') ? '&' : '?';
+    return `${originalUrl}${separator}connection_limit=10&connect_timeout=15&pool_timeout=10`;
   }
-
-  const separator = originalUrl.includes('?') ? '&' : '?';
-  return `${originalUrl}${separator}connection_limit=10`;
 }
 
 // Global singleton pattern to prevent multiple instances across hot reloads or imports

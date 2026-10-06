@@ -2,7 +2,7 @@
 import React, { useEffect, useLayoutEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchMySubscription, fetchSubscriptionHistory } from '../redux/vendorSlice';
+import { fetchMySubscription, fetchSubscriptionHistory, fetchVendorPayments } from '../redux/vendorSlice';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
@@ -66,9 +66,59 @@ const HistoryCard = ({ invoice, onViewInvoice, colors }) => {
   );
 };
 
+const PaymentTransactionCard = ({ payment, colors }) => {
+  const isCaptured = payment.status === 'captured' || payment.status === 'success' || payment.status === 'paid' || payment.status === 'completed';
+  const statusColor = isCaptured ? '#00C566' : payment.status === 'failed' ? '#EF4444' : '#F59E0B';
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 }, SHADOWS.sm]}>
+      <View style={styles.cardTopRow}>
+        <View style={styles.planTitleBox}>
+          <View style={[styles.awardBadge, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
+            <Feather name="dollar-sign" size={16} color="#3B82F6" />
+          </View>
+          <View>
+            <Text style={[styles.planName, { color: colors.text }]}>{payment.turfName || 'Booking Settlement'}</Text>
+            <Text style={[styles.durationLabel, { color: colors.textSecondary }]}>
+              {payment.purpose ? payment.purpose.replace('_', ' ').toUpperCase() : 'BOOKING PAYMENT'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.statusPill, { backgroundColor: statusColor + '20' }]}>
+          <Text style={[styles.statusPillText, { color: statusColor }]}>
+            {(payment.status || 'SUCCESS').toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+      <View style={styles.detailsRow}>
+        <View style={styles.detailCol}>
+          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>DATE & TIME</Text>
+          <Text style={[styles.detailValue, { color: colors.text }]}>{formatDate(payment.createdAt)}</Text>
+        </View>
+        <View style={styles.detailCol}>
+          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>TRANSACTION AMOUNT</Text>
+          <Text style={[styles.detailAmount, { color: colors.primary }]}>₹{payment.amount}</Text>
+        </View>
+      </View>
+
+      {payment.razorpayPaymentId ? (
+        <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <Text style={{ fontSize: 10, color: colors.textSecondary }}>
+            Razorpay Ref: {payment.razorpayPaymentId}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+};
+
 const MySubscriptionScreen = ({ navigation }) => {
   const dispatch = useDispatch();
-  const { mySubscription, subscriptionHistory, loading } = useSelector((s) => s.vendor);
+  const { mySubscription, subscriptionHistory, payments, paymentsLoading, loading } = useSelector((s) => s.vendor);
   const { colors, isDark } = useTheme();
 
   useLayoutEffect(() => {
@@ -78,6 +128,7 @@ const MySubscriptionScreen = ({ navigation }) => {
   useEffect(() => {
     dispatch(fetchMySubscription());
     dispatch(fetchSubscriptionHistory());
+    dispatch(fetchVendorPayments());
   }, []);
 
   const handleViewInvoice = (invoice) => {
@@ -85,6 +136,7 @@ const MySubscriptionScreen = ({ navigation }) => {
   };
 
   const safeHistory = Array.isArray(subscriptionHistory) ? subscriptionHistory : [];
+  const safePayments = Array.isArray(payments) ? payments : [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -97,7 +149,7 @@ const MySubscriptionScreen = ({ navigation }) => {
         >
           <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: colors.text }]}>Subscription History</Text>
+        <Text style={[styles.navTitle, { color: colors.text }]}>Payments & Subscriptions</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -105,44 +157,61 @@ const MySubscriptionScreen = ({ navigation }) => {
         {/* Banner */}
         <View style={[styles.heroBanner, SHADOWS.md]}>
           <View style={styles.heroTextWrap}>
-            <Text style={styles.heroTitle}>Partner Subscriptions</Text>
-            <Text style={styles.heroSubtitle}>Access invoices, GST receipts & auto-renewal settings</Text>
+            <Text style={styles.heroTitle}>Payments & Subscriptions</Text>
+            <Text style={styles.heroSubtitle}>Access invoices, booking payments & transactions</Text>
           </View>
           <TouchableOpacity
             style={styles.browsePlansBtn}
             onPress={() => navigation.navigate('SubscriptionPlans')}
             activeOpacity={0.8}
           >
-            <Text style={styles.browsePlansText}>View Plans</Text>
+            <Text style={styles.browsePlansText}>Plans</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Billing History List */}
         <Text style={[styles.sectionHeading, { color: colors.text }]}>Billing History & Invoices</Text>
 
         {loading && !safeHistory.length && !mySubscription ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
         ) : safeHistory.length > 0 ? (
           safeHistory.map((inv) => (
-            <HistoryCard key={inv._id} invoice={inv} onViewInvoice={handleViewInvoice} colors={colors} />
+            <HistoryCard key={inv._id || inv.id} invoice={inv} onViewInvoice={handleViewInvoice} colors={colors} />
           ))
         ) : mySubscription ? (
           <HistoryCard invoice={mySubscription} onViewInvoice={handleViewInvoice} colors={colors} />
         ) : (
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
-              <Feather name="credit-card" size={36} color={colors.primary} />
+              <Feather name="credit-card" size={28} color={colors.primary} />
             </View>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No Past Invoices</Text>
             <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-              You currently do not have any active or past subscription invoices recorded.
+              You currently do not have any active or past subscription invoices.
             </Text>
-            <TouchableOpacity
-              style={[styles.subscribeCta, { backgroundColor: colors.primary }]}
-              onPress={() => navigation.navigate('SubscriptionPlans')}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.subscribeCtaText}>Explore Vendor Plans</Text>
-            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Section 2: Recent Payment Transactions */}
+        <Text style={[styles.sectionHeading, { color: colors.text, marginTop: 24 }]}>
+          Booking Payment Transactions
+        </Text>
+
+        {paymentsLoading && !safePayments.length ? (
+          <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+        ) : safePayments.length > 0 ? (
+          safePayments.map((p) => (
+            <PaymentTransactionCard key={p.id || p._id} payment={p} colors={colors} />
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
+              <Feather name="dollar-sign" size={28} color={colors.primary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Payment Transactions Yet</Text>
+            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+              Customer booking payment transactions will appear here automatically.
+            </Text>
           </View>
         )}
       </ScrollView>

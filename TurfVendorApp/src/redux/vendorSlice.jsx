@@ -5,7 +5,7 @@ import {
   addSlotApi, deleteSlotApi, getSlotCalendarApi, freezeSlotApi,
 } from '../api/turfs';
 import {
-  getBookingsApi, getBookingDetailApi, acceptBookingApi, rejectBookingApi,
+  getBookingsApi, getBookingDetailApi, acceptBookingApi, rejectBookingApi, getVendorPaymentsApi,
 } from '../api/bookings';
 import { getDashboardStatsApi, getRevenueApi } from '../api/dashboard';
 import {
@@ -245,6 +245,15 @@ export const markAllNotificationsRead = createAsyncThunk('vendor/markAllNotifica
   } catch (e) { return rejectWithValue(e.message); }
 });
 
+export const fetchVendorPayments = createAsyncThunk('vendor/fetchVendorPayments', async (_, { rejectWithValue }) => {
+  try {
+    const res = await getVendorPaymentsApi();
+    return res?.payments || [];
+  } catch (e) {
+    return rejectWithValue(e.message || 'Failed to fetch vendor payments');
+  }
+});
+
 // ─── Slice ────────────────────────────────────────────────────────────────────
  
 const vendorSlice = createSlice({
@@ -297,6 +306,10 @@ const vendorSlice = createSlice({
     // Notifications
     notifications: [],
     unreadNotificationCount: 0,
+    // Payments & Transactions
+    payments: [],
+    paymentsLoading: false,
+    paymentsError: null,
     // UI
     loading: false,
     error: null,
@@ -505,7 +518,21 @@ const vendorSlice = createSlice({
         state.bookings = Array.isArray(payload) ? payload : (payload?.bookings || payload?.items || []);
       })
       .addCase(fetchBookings.rejected, rejected)
- 
+
+      // Payments
+      .addCase(fetchVendorPayments.pending, (state) => {
+        state.paymentsLoading = true;
+        state.paymentsError = null;
+      })
+      .addCase(fetchVendorPayments.fulfilled, (state, { payload }) => {
+        state.paymentsLoading = false;
+        state.payments = Array.isArray(payload) ? payload : [];
+      })
+      .addCase(fetchVendorPayments.rejected, (state, action) => {
+        state.paymentsLoading = false;
+        state.paymentsError = action.payload;
+      })
+
       .addCase(fetchBookingDetail.pending, pending)
       .addCase(fetchBookingDetail.fulfilled, (state, { payload }) => { state.loading = false; state.selectedBooking = payload.booking; })
       .addCase(fetchBookingDetail.rejected, rejected)

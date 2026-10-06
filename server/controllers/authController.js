@@ -118,8 +118,10 @@ const authController = {
       });
 
       const formatted = formatVendor(vendor);
+      const token = generateSessionToken({ id: vendor.id, uid: vendor.id, email: vendor.email, role: 'vendor' });
       return sendSuccess(res, {
         message: 'Registration submitted successfully. Your account is pending Superadmin approval.',
+        token,
         profile: formatted,
         vendor: formatted,
       });
@@ -727,7 +729,12 @@ const authController = {
     if (role === 'vendor') {
       const data = {};
       if (parsed.name !== undefined) data.name = parsed.name;
+      if (parsed.email !== undefined && parsed.email !== '') data.email = parsed.email;
       if (parsed.phone !== undefined) data.phone = parsed.phone;
+      if (parsed.contact !== undefined) data.phone = parsed.contact;
+      if (parsed.avatar !== undefined || parsed.photoURL !== undefined) {
+        data.avatar = parsed.avatar || parsed.photoURL;
+      }
       if (parsed.turfOnboardingComplete !== undefined) data.turfOnboardingComplete = parsed.turfOnboardingComplete;
       if (parsed.turfApprovalAcknowledged !== undefined) data.turfApprovalAcknowledged = parsed.turfApprovalAcknowledged;
 
