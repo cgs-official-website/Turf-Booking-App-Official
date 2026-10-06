@@ -91,7 +91,10 @@ const RootNavigator = () => {
     }
   }, [isAuthenticated]);
 
-  if (!splashDone) {
+  // Keep showing SplashScreen until BOTH splash animation and auth verification finish
+  const showSplash = !splashDone || bootstrapping;
+
+  if (showSplash) {
     return <SplashScreen onFinish={() => setSplashDone(true)} />;
   }
 
