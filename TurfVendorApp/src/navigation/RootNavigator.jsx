@@ -8,6 +8,7 @@ import { fetchMySubscription } from '../redux/vendorSlice';
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import VendorEnquiryScreen from '../screens/VendorEnquiryScreen';
 import TermsScreen from '../screens/TermsScreen';
 import MainTabs from './MainTabs';
@@ -123,6 +124,7 @@ const RootNavigator = () => {
           // Auth Stack
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Vendor Registration' }} />
             <Stack.Screen name="VendorVerification" component={VendorVerificationScreen} options={{ headerShown: false }} />
             <Stack.Screen name="VendorEnquiry" component={VendorEnquiryScreen} options={{ headerShown: false }} />

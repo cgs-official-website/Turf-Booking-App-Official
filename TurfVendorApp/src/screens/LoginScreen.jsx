@@ -145,7 +145,7 @@ const LoginScreen = ({ navigation }) => {
 
           {/* Forgot Password Link */}
           <TouchableOpacity
-            onPress={() => Alert.alert('Reset Password', 'Please contact support or your administrator to reset your vendor account password.')}
+            onPress={() => navigation.navigate('ForgotPassword')}
             style={styles.forgotLink}
             activeOpacity={0.7}
           >

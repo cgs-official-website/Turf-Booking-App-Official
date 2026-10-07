@@ -806,6 +806,220 @@ const authController = {
   async logout(req, res) {
     return sendSuccess(res, { message: 'Logged out successfully' });
   },
+
+  /**
+   * POST /api/v1/auth/forgot-password
+   * Request password reset OTP for vendor/user
+   */
+  async forgotPassword(req, res) {
+    const { email } = req.body;
+    const role = req.body.role === 'vendor' ? 'vendor' : 'user';
+
+    if (!email || !email.includes('@')) {
+      return sendError(res, 'A valid registered email address is required', 400, 'INVALID_EMAIL');
+    }
+
+    const cleanEmail = String(email).toLowerCase().trim();
+
+    if (role === 'vendor') {
+      const vendorUid = `vendor_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+      const vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { email: { equals: cleanEmail, mode: 'insensitive' } },
+            { id: vendorUid },
+          ],
+        },
+      });
+
+      if (!vendor) {
+        return sendError(res, 'No vendor account found with this email address.', 404, 'VENDOR_NOT_FOUND');
+      }
+
+      // Generate a secure 4-digit OTP
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+      const otpHash = await bcrypt.hash(otp, 10);
+      const ttlSeconds = 300; // 5 minutes
+
+      const redisKey = `otp:reset_password:vendor_${cleanEmail}`;
+      await cacheService.set(redisKey, {
+        otpHash,
+        attempts: 0,
+        verified: false,
+        vendorId: vendor.id,
+        role: 'vendor',
+      }, ttlSeconds);
+
+      try {
+        await nodemailerService.sendPasswordResetOtpEmail(cleanEmail, otp);
+      } catch (mailErr) {
+        console.error('❌ Error sending reset OTP email:', mailErr.message);
+        return sendError(res, 'Failed to send verification email. Please check your email configuration.', 500, 'EMAIL_SEND_FAILED');
+      }
+
+      return sendSuccess(res, {
+        message: 'A 4-digit verification code has been sent to your registered email address.',
+        expiresInSeconds: ttlSeconds,
+      });
+    }
+
+    // User role forgot password
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: cleanEmail, mode: 'insensitive' } },
+    });
+
+    if (!user) {
+      return sendError(res, 'No account found with this email address.', 404, 'USER_NOT_FOUND');
+    }
+
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const ttlSeconds = 300;
+
+    const redisKey = `otp:reset_password:user_${cleanEmail}`;
+    await cacheService.set(redisKey, {
+      otpHash,
+      attempts: 0,
+      verified: false,
+      userId: user.id,
+      role: 'user',
+    }, ttlSeconds);
+
+    await nodemailerService.sendPasswordResetOtpEmail(cleanEmail, otp);
+
+    return sendSuccess(res, {
+      message: 'A 4-digit verification code has been sent to your registered email address.',
+      expiresInSeconds: ttlSeconds,
+    });
+  },
+
+  /**
+   * POST /api/v1/auth/verify-reset-otp
+   * Verify the 4-digit email OTP for password reset
+   */
+  async verifyResetOtp(req, res) {
+    const { email, otp } = req.body;
+    const role = req.body.role === 'vendor' ? 'vendor' : 'user';
+
+    if (!email || !otp) {
+      return sendError(res, 'Email and OTP code are required', 400, 'MISSING_FIELDS');
+    }
+
+    const cleanEmail = String(email).toLowerCase().trim();
+    const cleanOtp = String(otp).trim();
+    const redisKey = `otp:reset_password:${role}_${cleanEmail}`;
+
+    const record = await cacheService.get(redisKey);
+
+    if (!record) {
+      return sendError(res, 'No active password reset request found or code expired. Please request a new code.', 400, 'OTP_EXPIRED');
+    }
+
+    if (record.verified) {
+      return sendError(res, 'This verification code has already been used.', 400, 'OTP_ALREADY_USED');
+    }
+
+    if (record.attempts >= 5) {
+      await cacheService.del(redisKey);
+      return sendError(res, 'Too many incorrect attempts. Please request a new verification code.', 400, 'OTP_MAX_ATTEMPTS');
+    }
+
+    const isValid = await bcrypt.compare(cleanOtp, record.otpHash);
+    if (!isValid) {
+      record.attempts = (record.attempts || 0) + 1;
+      await cacheService.set(redisKey, record, 300);
+      return sendError(res, 'Invalid verification code. Please check your email and try again.', 400, 'INVALID_OTP');
+    }
+
+    // Generate single-use resetToken
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenKey = `otp:reset_token:${role}_${cleanEmail}`;
+
+    await cacheService.set(tokenKey, {
+      resetToken,
+      role,
+      email: cleanEmail,
+    }, 600); // 10 minutes to complete password reset
+
+    // Mark OTP verified
+    record.verified = true;
+    await cacheService.set(redisKey, record, 300);
+
+    return sendSuccess(res, {
+      message: 'OTP verified successfully.',
+      resetToken,
+    });
+  },
+
+  /**
+   * POST /api/v1/auth/reset-password
+   * Set new password after verifying OTP
+   */
+  async resetPassword(req, res) {
+    const { email, resetToken, newPassword } = req.body;
+    const role = req.body.role === 'vendor' ? 'vendor' : 'user';
+
+    if (!email || !resetToken || !newPassword) {
+      return sendError(res, 'Email, reset token, and new password are required', 400, 'MISSING_FIELDS');
+    }
+
+    if (newPassword.length < 6) {
+      return sendError(res, 'Password must be at least 6 characters long', 400, 'INVALID_PASSWORD');
+    }
+
+    const cleanEmail = String(email).toLowerCase().trim();
+    const tokenKey = `otp:reset_token:${role}_${cleanEmail}`;
+    const tokenRecord = await cacheService.get(tokenKey);
+
+    if (!tokenRecord || tokenRecord.resetToken !== resetToken) {
+      return sendError(res, 'Invalid or expired password reset session. Please start over.', 400, 'INVALID_SESSION');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    if (role === 'vendor') {
+      const vendorUid = `vendor_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+      const vendor = await prisma.vendor.findFirst({
+        where: {
+          OR: [
+            { email: { equals: cleanEmail, mode: 'insensitive' } },
+            { id: vendorUid },
+          ],
+        },
+      });
+
+      if (!vendor) {
+        return sendError(res, 'Vendor account not found.', 404, 'VENDOR_NOT_FOUND');
+      }
+
+      await prisma.vendor.update({
+        where: { id: vendor.id },
+        data: { passwordHash },
+      });
+    } else {
+      const user = await prisma.user.findFirst({
+        where: { email: { equals: cleanEmail, mode: 'insensitive' } },
+      });
+
+      if (!user) {
+        return sendError(res, 'User account not found.', 404, 'USER_NOT_FOUND');
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+    }
+
+    // Invalidate single-use reset token and OTP keys
+    await cacheService.del(tokenKey);
+    await cacheService.del(`otp:reset_password:${role}_${cleanEmail}`);
+
+    return sendSuccess(res, {
+      message: 'Password reset successfully. Please sign in with your new password.',
+    });
+  },
 };
 
 module.exports = authController;
