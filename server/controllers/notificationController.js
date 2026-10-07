@@ -1,5 +1,5 @@
 const notificationService = require('../services/notificationService');
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
 const { sendSuccess, sendError } = require('../utils/response');
 
 const notificationController = {
@@ -57,17 +57,31 @@ const notificationController = {
    */
   async getNotifications(req, res) {
     const { uid } = req.user;
-    const result = await firestoreService.queryWithCursor('notifications', {
-      filters: [['recipientId', '==', uid]],
-      limit: 50,
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-    });
 
-    return sendSuccess(res, {
-      notifications: result.items || [],
-      unreadCount: (result.items || []).filter((n) => !n.read).length,
-    });
+    try {
+      const items = await prisma.notification.findMany({
+        where: { recipientId: uid },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+
+      const unreadCount = await prisma.notification.count({
+        where: { recipientId: uid, isRead: false },
+      });
+
+      const notifications = items.map((n) => ({
+        ...n,
+        read: n.isRead,
+      }));
+
+      return sendSuccess(res, {
+        notifications,
+        unreadCount,
+      });
+    } catch (err) {
+      console.error('getNotifications error:', err);
+      return sendError(res, 'Failed to fetch notifications', 500, 'FETCH_FAILED');
+    }
   },
 
   /**
@@ -78,17 +92,30 @@ const notificationController = {
     const { id } = req.params;
     const { uid } = req.user;
 
-    const notif = await firestoreService.getDoc('notifications', id);
-    if (!notif || notif.recipientId !== uid) {
-      return sendError(res, 'Notification not found', 404, 'NOT_FOUND');
+    try {
+      const notif = await prisma.notification.findUnique({ where: { id } });
+      if (!notif || notif.recipientId !== uid) {
+        return sendError(res, 'Notification not found', 404, 'NOT_FOUND');
+      }
+
+      const updated = await prisma.notification.update({
+        where: { id },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
+
+      return sendSuccess(res, {
+        notification: {
+          ...updated,
+          read: updated.isRead,
+        },
+      });
+    } catch (err) {
+      console.error('markRead error:', err);
+      return sendError(res, 'Failed to mark notification as read', 500, 'UPDATE_FAILED');
     }
-
-    const updated = await firestoreService.updateDoc('notifications', id, {
-      read: true,
-      readAt: new Date(),
-    });
-
-    return sendSuccess(res, { notification: updated });
   },
 
   /**
@@ -97,21 +124,63 @@ const notificationController = {
    */
   async markAllRead(req, res) {
     const { uid } = req.user;
-    const result = await firestoreService.queryWithCursor('notifications', {
-      filters: [
-        ['recipientId', '==', uid],
-        ['read', '==', false],
-      ],
-      limit: 100,
-    });
 
-    await Promise.all(
-      (result.items || []).map((n) =>
-        firestoreService.updateDoc('notifications', n.id, { read: true, readAt: new Date() })
-      )
-    );
+    try {
+      await prisma.notification.updateMany({
+        where: {
+          recipientId: uid,
+          isRead: false,
+        },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
 
-    return sendSuccess(res, { message: 'All notifications marked as read' });
+      return sendSuccess(res, { message: 'All notifications marked as read' });
+    } catch (err) {
+      console.error('markAllRead error:', err);
+      return sendError(res, 'Failed to mark all notifications as read', 500, 'UPDATE_FAILED');
+    }
+  },
+
+  /**
+   * GET /api/v1/notifications/preferences
+   * Fetch push notification ON/OFF preference for authenticated user/vendor
+   */
+  async getPreferences(req, res) {
+    const { uid, role } = req.user;
+    try {
+      const pushNotifications = await notificationService.getNotificationPreference(uid, role);
+      return sendSuccess(res, { pushNotifications });
+    } catch (err) {
+      console.error('getPreferences error:', err);
+      return sendError(res, 'Failed to fetch preferences', 500, 'FETCH_FAILED');
+    }
+  },
+
+  /**
+   * PUT /api/v1/notifications/preferences
+   * Update push notification ON/OFF preference for authenticated user/vendor
+   */
+  async updatePreferences(req, res) {
+    const { uid, role } = req.user;
+    const { pushNotifications } = req.body;
+
+    if (typeof pushNotifications !== 'boolean') {
+      return sendError(res, 'pushNotifications boolean field is required', 400, 'INVALID_BODY');
+    }
+
+    try {
+      const updated = await notificationService.setNotificationPreference(uid, role, pushNotifications);
+      return sendSuccess(res, {
+        pushNotifications: updated,
+        message: `Push notifications ${updated ? 'enabled' : 'disabled'} successfully`,
+      });
+    } catch (err) {
+      console.error('updatePreferences error:', err);
+      return sendError(res, 'Failed to update preferences', 500, 'UPDATE_FAILED');
+    }
   },
 };
 

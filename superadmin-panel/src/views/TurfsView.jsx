@@ -15,7 +15,8 @@ export const TurfsView = ({ onUpdateStats }) => {
     setLoading(true);
     try {
       const res = await api.getAllTurfs(statusFilter);
-      setTurfs(res.data?.items || []);
+      const liveTurfs = res.data?.items || res.data?.turfs || [];
+      setTurfs(liveTurfs);
     } catch (err) {
       console.error('Failed to load turfs:', err);
     } finally {

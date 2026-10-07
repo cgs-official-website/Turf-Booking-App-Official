@@ -52,7 +52,7 @@ const openMap = (address, lat, lng) => {
 
 const shareTurf = async (turf) => {
   try {
-    const price = turf.pricing?.baseRate || turf.price || turf.pricePerHour || 800;
+    const price = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
     await Share.share({
       title: turf.name,
       message: `🏟️ ${turf.name}\n📍 ${turf.address || turf.location?.address || turf.city || 'Tamil Nadu'}\n💰 ₹${price}/hour\n\nBook your slot now on Turf Booking App!`,
@@ -81,7 +81,9 @@ export default function TurfDetailScreen({ route, navigation }) {
     Promise.all([turfsApi.getTurf(id), turfsApi.getReviews(id)])
       .then(([t, r]) => {
         setTurf(t?.turf || t);
-        setReviews(r?.reviews || r?.items || []);
+        const rawReviews = r?.reviews || r?.items || [];
+        const sorted = [...rawReviews].sort((a, b) => (b.rating || 5) - (a.rating || 5));
+        setReviews(sorted);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -107,9 +109,9 @@ export default function TurfDetailScreen({ route, navigation }) {
   const address      = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
   const sports       = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
   const amenities    = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
-  const pricePerHour = turf.pricing?.baseRate || turf.price || turf.pricePerHour || 800;
-  const ratingAvg    = typeof turf.rating === 'object' ? (turf.rating.avg || 4.8) : (Number(turf.rating) || 4.8);
-  const reviewCount  = typeof turf.rating === 'object' ? (turf.rating.count || reviews.length || 24) : (turf.reviewsCount || reviews.length || 24);
+  const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+  const reviewCount  = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
+  const ratingAvg    = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
   const openTiming   = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
 
   const openFullscreenGallery = (index = 0) => {
@@ -267,9 +269,15 @@ export default function TurfDetailScreen({ route, navigation }) {
               <Text style={styles.verifiedText}>Verified Pitch Partner</Text>
             </View>
             <View style={[styles.ratingPill, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Ionicons name="star" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
-              <Text style={[styles.ratingNum, { color: C.text }]}>{ratingAvg.toFixed(1)}</Text>
-              <Text style={[styles.ratingCount, { color: C.subtext }]}>({reviewCount})</Text>
+              {reviewCount > 0 ? (
+                <>
+                  <Ionicons name="star" size={13} color="#F59E0B" style={{ marginRight: 4 }} />
+                  <Text style={[styles.ratingNum, { color: C.text }]}>{ratingAvg.toFixed(1)}</Text>
+                  <Text style={[styles.ratingCount, { color: C.subtext }]}>({reviewCount})</Text>
+                </>
+              ) : (
+                <Text style={[styles.ratingCount, { color: C.subtext }]}>No reviews</Text>
+              )}
             </View>
           </View>
 
@@ -398,7 +406,9 @@ export default function TurfDetailScreen({ route, navigation }) {
             <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 0 }]}>Player Reviews</Text>
             <View style={styles.reviewBadgeWrap}>
               <Ionicons name="star" size={13} color="#F59E0B" style={{ marginRight: 3 }} />
-              <Text style={[styles.reviewBadgeText, { color: C.text }]}>{ratingAvg.toFixed(1)} / 5.0</Text>
+              <Text style={[styles.reviewBadgeText, { color: C.text }]}>
+                {reviewCount > 0 ? `${ratingAvg.toFixed(1)} / 5.0` : 'No reviews'}
+              </Text>
             </View>
           </View>
 
@@ -413,7 +423,10 @@ export default function TurfDetailScreen({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            reviews.slice(0, 3).map((rv) => (
+            [...reviews]
+              .sort((a, b) => (b.rating || 5) - (a.rating || 5))
+              .slice(0, 5)
+              .map((rv) => (
               <View
                 key={rv._id || rv.id}
                 style={[styles.reviewCard, { backgroundColor: C.card, borderColor: C.border }]}

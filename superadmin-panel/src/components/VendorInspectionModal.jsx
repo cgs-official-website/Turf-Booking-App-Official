@@ -13,9 +13,23 @@ export const VendorInspectionModal = ({ isOpen, onClose, vendor, onApprove, onRe
   const sub = vendor.subscription || {};
   const uid = vendor.uid || vendor.id;
 
+  // Parse Aadhaar URL if it contains front/back JSON
+  let aadhaarFrontUrl = docs.aadhaarUrl;
+  let aadhaarBackUrl = null;
+  if (typeof docs.aadhaarUrl === 'string' && docs.aadhaarUrl.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(docs.aadhaarUrl);
+      aadhaarFrontUrl = parsed.front || null;
+      aadhaarBackUrl = parsed.back || null;
+    } catch (e) {
+      // fallback to raw string
+    }
+  }
+
   // Collect all available document attachments
   const attachments = [
-    { key: 'aadhaar', title: 'Aadhaar Card', url: docs.aadhaarUrl, category: 'Identity' },
+    aadhaarFrontUrl && { key: 'aadhaar_front', title: aadhaarBackUrl ? 'Aadhaar Card (Front)' : 'Aadhaar Card', url: aadhaarFrontUrl, category: 'Identity' },
+    aadhaarBackUrl && { key: 'aadhaar_back', title: 'Aadhaar Card (Back)', url: aadhaarBackUrl, category: 'Identity' },
     { key: 'pan', title: 'PAN Card', url: docs.panUrl, category: 'Identity' },
     { key: 'gst', title: 'GST Certificate', url: docs.gstUrl, category: 'Business' },
     { key: 'ebBill', title: 'EB / Utility Bill', url: docs.ebBillUrl, category: 'Business' },
@@ -25,7 +39,7 @@ export const VendorInspectionModal = ({ isOpen, onClose, vendor, onApprove, onRe
       url: img,
       category: 'Venue Photo',
     })),
-  ].filter((att) => !!att.url);
+  ].filter((att) => !!att && !!att.url);
 
   const [selectedDoc, setSelectedDoc] = useState(attachments[0] || null);
 

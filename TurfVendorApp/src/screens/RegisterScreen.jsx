@@ -20,11 +20,28 @@ const RegisterScreen = ({ navigation }) => {
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
 
+  const [emailError, setEmailError] = useState(null);
+
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   const set = (key) => (v) => setForm((prev) => ({ ...prev, [key]: v }));
+
+  const validateEmailFormat = (rawEmail) => {
+    const trimmed = (rawEmail || '').trim();
+    if (!trimmed) {
+      setEmailError('Business email is required');
+      return false;
+    }
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmed)) {
+      setEmailError('Please enter a valid email address (e.g. example@gmail.com)');
+      return false;
+    }
+    setEmailError(null);
+    return true;
+  };
 
   const handlePickAvatar = () => {
     launchImageLibrary(
@@ -38,11 +55,21 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   const handleRegister = () => {
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.password || !form.confirmPassword) {
-      Alert.alert('Required Fields', 'Please fill in all registration fields.');
+    const cleanEmail = form.email.trim();
+    const cleanName = form.name.trim();
+    const cleanPhone = form.phone.trim();
+
+    if (!cleanName || !cleanEmail || !cleanPhone || !form.password || !form.confirmPassword) {
+      Alert.alert('Required Fields', 'Please fill in all required fields marked with *.');
       return;
     }
-    if (form.phone.trim().replace(/\D/g, '').length !== 10) {
+
+    if (!validateEmailFormat(cleanEmail)) {
+      Alert.alert('Invalid Business Email', 'Please enter a valid email address (e.g., example@gmail.com) to continue.');
+      return;
+    }
+
+    if (cleanPhone.replace(/\D/g, '').length !== 10) {
       Alert.alert('Invalid Phone', 'Please enter a valid 10-digit mobile number.');
       return;
     }
@@ -56,7 +83,14 @@ const RegisterScreen = ({ navigation }) => {
     }
 
     const { confirmPassword, ...payload } = form;
-    navigation.navigate('Terms', { formData: { ...payload, avatar }, avatar });
+    payload.email = cleanEmail;
+    payload.name = cleanName;
+    payload.phone = cleanPhone;
+
+    navigation.navigate('VendorVerification', {
+      registrationData: { ...payload, avatar },
+      isRegistrationFlow: true,
+    });
   };
 
   return (
@@ -111,7 +145,9 @@ const RegisterScreen = ({ navigation }) => {
           </TouchableOpacity>
 
           {/* Full Name */}
-          <Text style={[styles.label, { color: colors.text }]}>Owner / Vendor Name</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            Owner / Vendor Name <Text style={{ color: '#EF4444' }}>*</Text>
+          </Text>
           <View
             style={[
               styles.inputContainer,
@@ -131,14 +167,16 @@ const RegisterScreen = ({ navigation }) => {
           </View>
 
           {/* Email Address */}
-          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Business Email</Text>
+          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+            Business Email <Text style={{ color: '#EF4444' }}>*</Text>
+          </Text>
           <View
             style={[
               styles.inputContainer,
-              { backgroundColor: colors.inputBg, borderColor: focusedField === 'email' ? colors.primary : colors.border },
+              { backgroundColor: colors.inputBg, borderColor: emailError ? '#EF4444' : focusedField === 'email' ? colors.primary : colors.border },
             ]}
           >
-            <Feather name="mail" size={18} color={focusedField === 'email' ? colors.primary : colors.textSecondary} style={styles.inputIcon} />
+            <Feather name="mail" size={18} color={emailError ? '#EF4444' : focusedField === 'email' ? colors.primary : colors.textSecondary} style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
               placeholder="e.g. rahul@greensports.in"
@@ -148,13 +186,24 @@ const RegisterScreen = ({ navigation }) => {
               autoCorrect={false}
               value={form.email}
               onFocus={() => setFocusedField('email')}
-              onBlur={() => setFocusedField(null)}
-              onChangeText={set('email')}
+              onBlur={() => {
+                setFocusedField(null);
+                validateEmailFormat(form.email);
+              }}
+              onChangeText={(val) => {
+                set('email')(val);
+                if (emailError) validateEmailFormat(val);
+              }}
             />
           </View>
+          {!!emailError && (
+            <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 4, marginLeft: 2 }}>{emailError}</Text>
+          )}
 
           {/* Phone Number */}
-          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Mobile Number</Text>
+          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+            Mobile Number <Text style={{ color: '#EF4444' }}>*</Text>
+          </Text>
           <View
             style={[
               styles.inputContainer,
@@ -178,7 +227,9 @@ const RegisterScreen = ({ navigation }) => {
           </View>
 
           {/* Password */}
-          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Create Password</Text>
+          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+            Create Password <Text style={{ color: '#EF4444' }}>*</Text>
+          </Text>
           <View
             style={[
               styles.inputContainer,
@@ -203,7 +254,9 @@ const RegisterScreen = ({ navigation }) => {
           </View>
 
           {/* Confirm Password */}
-          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Confirm Password</Text>
+          <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+            Confirm Password <Text style={{ color: '#EF4444' }}>*</Text>
+          </Text>
           <View
             style={[
               styles.inputContainer,
@@ -233,7 +286,7 @@ const RegisterScreen = ({ navigation }) => {
             onPress={handleRegister}
             activeOpacity={0.85}
           >
-            <Text style={styles.submitBtnText}>Continue to Turf Setup</Text>
+            <Text style={styles.submitBtnText}>Continue to Identity Verification</Text>
             <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
           </TouchableOpacity>
         </View>

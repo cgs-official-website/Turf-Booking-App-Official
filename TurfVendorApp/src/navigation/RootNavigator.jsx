@@ -8,6 +8,7 @@ import { fetchMySubscription } from '../redux/vendorSlice';
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import VendorEnquiryScreen from '../screens/VendorEnquiryScreen';
 import TermsScreen from '../screens/TermsScreen';
 import MainTabs from './MainTabs';
 import BookingDetailScreen from '../screens/BookingDetailScreen';
@@ -123,6 +124,8 @@ const RootNavigator = () => {
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Vendor Registration' }} />
+            <Stack.Screen name="VendorVerification" component={VendorVerificationScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="VendorEnquiry" component={VendorEnquiryScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Terms" component={TermsScreen} options={{ headerShown: false }} />
           </>
         ) : needsOnboarding ? (
@@ -156,11 +159,14 @@ const RootNavigator = () => {
           </>
         ) : needsReview ? (
           // Review Stack — waiting for super admin approval (Home screen is inaccessible)
-          <Stack.Screen
-            name="TurfUnderReview"
-            component={TurfUnderReviewScreen}
-            options={{ headerShown: false, gestureEnabled: false }}
-          />
+          <>
+            <Stack.Screen
+              name="TurfUnderReview"
+              component={TurfUnderReviewScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
+            <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: 'Booking Details' }} />
+          </>
         ) : (
           // Main App Stack (Active status -> Vendor Dashboard)
           <>
@@ -179,6 +185,8 @@ const RootNavigator = () => {
             <Stack.Screen name="UserReviews" component={UserReviewsScreen} options={{ title: 'Reviews' }} />
             <Stack.Screen name="TurfProfile" component={TurfProfileScreen} options={{ headerShown: false }} />
             <Stack.Screen name="LocationSearch" component={LocationSearchScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="VendorVerification" component={VendorVerificationScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TurfVerification" component={TurfVerificationScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ReportIssues" component={ReportIssuesScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Terms" component={TermsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="SubscriptionDetail" component={SubscriptionDetailScreen} options={{ headerShown: false }} />

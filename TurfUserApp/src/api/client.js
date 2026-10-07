@@ -5,19 +5,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-export const PRODUCTION_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
-export const LOCAL_URL      = 'http://localhost:5000/api/v1';
-export const LAN_URL        = 'http://192.168.0.30:5000/api/v1';
+export const LOCAL_URL      = 'http://127.0.0.1:5000/api/v1';
+export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 export const EMULATOR_URL   = 'http://10.0.2.2:5000/api/v1';
+export const LAN_URL_CURRENT= 'http://192.168.0.23:5000/api/v1';
 
-export const BASE_URL = PRODUCTION_URL;
-export const SERVER_ORIGIN = 'https://turf-booking-app-official-production.up.railway.app';
+export const BASE_URL = LOCAL_URL;
+export const SERVER_ORIGIN = 'http://127.0.0.1:5000';
 
 const CANDIDATE_URLS = [
-  PRODUCTION_URL,
   LOCAL_URL,
-  LAN_URL,
+  LOCAL_HOST_URL,
   Platform.OS === 'android' ? EMULATOR_URL : null,
+  LAN_URL_CURRENT,
 ].filter(Boolean);
 
 export const getImageUrl = (path) => {
@@ -29,7 +29,7 @@ export const getImageUrl = (path) => {
 
 class ApiClient {
   constructor() {
-    this.activeBaseUrl = PRODUCTION_URL;
+    this.activeBaseUrl = LOCAL_URL;
   }
 
   async getToken() {
@@ -51,7 +51,7 @@ class ApiClient {
     for (const baseUrl of urlsToTry) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
         const res = await fetch(`${baseUrl}${path}`, {
           ...options,
@@ -69,8 +69,7 @@ class ApiClient {
     }
 
     throw new Error(
-      lastError?.message ||
-      'Network request failed. Make sure your device is connected to the same Wi-Fi or USB adb reverse is active.'
+      'Cannot reach backend server. Please verify "npm run dev" is running in server terminal and USB adb reverse is active.'
     );
   }
 

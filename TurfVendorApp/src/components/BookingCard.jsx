@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Image, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getImageUrl } from '../api/client';
 import { SIZES, SHADOWS } from '../utils/theme';
@@ -32,8 +32,24 @@ const BookingCard = ({ booking, onPress, onAccept, onReject }) => {
   const initial = userName.charAt(0).toUpperCase() || 'P';
 
   const handleCall = () => {
-    const phone = booking.user?.phone || booking.phone;
-    if (phone) Linking.openURL(`tel:${phone}`);
+    const phone =
+      booking.user?.phone ||
+      booking.user?.contact ||
+      booking.user?.mobile ||
+      booking.phone ||
+      booking.contact ||
+      booking.userPhone ||
+      booking.mobile;
+
+    if (phone) {
+      const cleanPhone = String(phone).replace(/[^0-9+]/g, '');
+      const url = `tel:${cleanPhone}`;
+      Linking.openURL(url).catch(() => {
+        Alert.alert('Player Contact', `Player Number: ${phone}`);
+      });
+    } else {
+      Alert.alert('Player Contact', `Player: ${userName}\nNo mobile number provided for this booking.`);
+    }
   };
 
   return (

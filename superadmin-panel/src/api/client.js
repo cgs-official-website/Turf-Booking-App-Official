@@ -1,9 +1,10 @@
 // src/api/client.js
 export const PRODUCTION_API_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
+export const LOCAL_API_URL = 'http://localhost:5000/api/v1';
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  PRODUCTION_API_URL;
+  LOCAL_API_URL;
 
 class AdminApiClient {
   getToken() {
@@ -74,10 +75,11 @@ class AdminApiClient {
     return this.request(`/admin/vendors/pending${cursor ? `?cursor=${cursor}` : ''}`);
   }
 
-  getAllVendors(status, cursor) {
+  getAllVendors(status, cursor, limit) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     if (cursor) params.set('cursor', cursor);
+    if (limit) params.set('limit', limit);
     const qs = params.toString();
     return this.request(`/admin/vendors${qs ? `?${qs}` : ''}`);
   }
@@ -93,6 +95,11 @@ class AdminApiClient {
     });
   }
 
+  getTurfs(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/turfs${qs ? `?${qs}` : ''}`);
+  }
+
   getAllTurfs(status, cursor) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
@@ -105,11 +112,12 @@ class AdminApiClient {
     return this.request(`/admin/turfs/${turfId}/toggle-status`, { method: 'POST' });
   }
 
-  getAllBookings(status, date, cursor) {
+  getAllBookings(status, date, cursor, limit) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     if (date) params.set('date', date);
     if (cursor) params.set('cursor', cursor);
+    if (limit) params.set('limit', limit);
     const qs = params.toString();
     return this.request(`/admin/bookings${qs ? `?${qs}` : ''}`);
   }
@@ -186,6 +194,35 @@ class AdminApiClient {
     if (cursor) params.set('cursor', cursor);
     const qs = params.toString();
     return this.request(`/admin/reviews${qs ? `?${qs}` : ''}`);
+  }
+
+  // Ecosystem Inquiries & Leads Management
+  submitInquiry(data) {
+    return this.request('/enquiries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAllEnquiries(status, search) {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    if (search) params.set('search', search);
+    const qs = params.toString();
+    return this.request(`/enquiries${qs ? `?${qs}` : ''}`);
+  }
+
+  updateEnquiryStatus(id, status) {
+    return this.request(`/enquiries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  deleteEnquiry(id) {
+    return this.request(`/enquiries/${id}`, {
+      method: 'DELETE',
+    });
   }
 }
 

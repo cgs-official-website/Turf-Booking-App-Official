@@ -28,6 +28,7 @@ router.get('/turfs', adminController.getAllTurfs);
 router.get('/turfs/pending', adminController.getPendingTurfs);
 router.post('/turfs/:turfId/approve', adminController.approveTurf);
 router.post('/turfs/:turfId/toggle-status', adminController.toggleTurfStatus);
+router.delete('/turfs/:turfId', adminController.deleteTurfAdmin);
 
 // Platform Bookings, Matches & Reviews Monitoring
 router.get('/bookings', adminController.getAllBookings);

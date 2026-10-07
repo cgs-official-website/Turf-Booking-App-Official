@@ -100,8 +100,10 @@ export default function MyBookingsScreen({ navigation }) {
     try {
       await bookingsApi.addReview(bookingId, { rating, comment, turfId });
       setBookings((prev) => prev.map((b) => ((b._id || b.id) === bookingId ? { ...b, reviewed: true, isReviewed: true } : b)));
+      Alert.alert('Review Submitted', 'Thank you! Your review has been saved successfully.');
     } catch (err) {
       console.warn('Failed to submit review:', err.message);
+      Alert.alert('Review Failed', err.response?.data?.message || err.message || 'Unable to submit review at this time.');
     } finally {
       setReviewTarget(null);
     }
@@ -220,7 +222,7 @@ export default function MyBookingsScreen({ navigation }) {
                 <View style={[styles.cardFooter, { borderTopColor: C.border }]}>
                   <View>
                     <Text style={[styles.priceLabel, { color: C.caption }]}>Paid Amount</Text>
-                    <Text style={[styles.priceValue, { color: C.primary }]}>₹{item.totalAmount || 800}</Text>
+                    <Text style={[styles.priceValue, { color: C.primary }]}>₹{item.totalAmount ?? item.amount ?? 500}</Text>
                   </View>
 
                   <View style={{ flexDirection: 'row', gap: 8 }}>

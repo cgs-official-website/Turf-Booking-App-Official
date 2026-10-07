@@ -1,15 +1,100 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { KpiCards } from '../components/KpiCards';
-import { Clock, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Clock, ArrowRight, CheckCircle2, FileSpreadsheet, Download, Loader2 } from 'lucide-react';
 import { dedupe } from '../utils/dedupe';
+import { api } from '../api/client';
+import { ExportMenu } from '../components/ExportMenu';
+import { exportToCSV, exportToExcel, formatBookingRecord, formatVendorRecord } from '../utils/exportUtils';
 
 export const OverviewView = ({ stats = {}, recentBookings = [], recentVendors = [], onNavigateTab }) => {
   const uniqueBookings = dedupe(recentBookings);
   const uniqueVendors = dedupe(recentVendors);
+
+  const [loadingBookingsExport, setLoadingBookingsExport] = useState(false);
+  const [loadingVendorsExport, setLoadingVendorsExport] = useState(false);
+
+  const handleExportBookings = async (type) => {
+    setLoadingBookingsExport(true);
+    try {
+      const res = await api.getAllBookings(null, null, null, 1000);
+      const items = res.data?.items || [];
+      if (items.length === 0) {
+        alert('No booking revenue records to export.');
+        return;
+      }
+      const formatted = items.map(formatBookingRecord);
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      if (type === 'csv') {
+        exportToCSV(formatted, `turf_booking_revenue_${dateStamp}.csv`);
+      } else {
+        exportToExcel(formatted, `turf_booking_revenue_${dateStamp}.xlsx`, 'Booking Revenue');
+      }
+    } catch (err) {
+      console.error('Failed to export bookings:', err);
+      alert('Could not export booking records: ' + (err.message || 'Error'));
+    } finally {
+      setLoadingBookingsExport(false);
+    }
+  };
+
+  const handleExportVendors = async (type) => {
+    setLoadingVendorsExport(true);
+    try {
+      const res = await api.getAllVendors(null, null, 1000);
+      const items = res.data?.items || [];
+      if (items.length === 0) {
+        alert('No vendor registration records to export.');
+        return;
+      }
+      const formatted = items.map(formatVendorRecord);
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      if (type === 'csv') {
+        exportToCSV(formatted, `vendor_registration_records_${dateStamp}.csv`);
+      } else {
+        exportToExcel(formatted, `vendor_registration_records_${dateStamp}.xlsx`, 'Vendor Records');
+      }
+    } catch (err) {
+      console.error('Failed to export vendors:', err);
+      alert('Could not export vendor records: ' + (err.message || 'Error'));
+    } finally {
+      setLoadingVendorsExport(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Metric Cards Grid */}
       <KpiCards stats={stats} />
+
+      {/* Quick Export Reports Toolbar */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-4 sm:p-5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border border-slate-700/50">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+              <Download size={16} />
+            </span>
+            <h3 className="font-extrabold text-sm text-white">Platform Analytics & Audit Reports</h3>
+          </div>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Instant CSV & Excel spreadsheet export for financial audits, booking revenue reconciliation, and partner KYC onboarding logs.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <ExportMenu
+            label="Booking Revenue"
+            loading={loadingBookingsExport}
+            onExportCSV={() => handleExportBookings('csv')}
+            onExportExcel={() => handleExportBookings('excel')}
+          />
+          <ExportMenu
+            label="Vendor Records"
+            loading={loadingVendorsExport}
+            onExportCSV={() => handleExportVendors('csv')}
+            onExportExcel={() => handleExportVendors('excel')}
+          />
+        </div>
+      </div>
 
       {/* Two Column Activity Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -98,15 +183,12 @@ export const OverviewView = ({ stats = {}, recentBookings = [], recentVendors = 
                   <div>
                     <p className="font-bold text-slate-900 text-xs">{v.name || 'Partner'}</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {v.businessName || 'Business Partner'} • {v.phone || v.email || 'No contact'}
+                      {v.businessName || 'Business entity'} • {v.turfName || 'Turf Facility'}
                     </p>
                   </div>
-                  <button
-                    onClick={() => onNavigateTab('kyc')}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition"
-                  >
-                    Review
-                  </button>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {v.kycStatus || 'pending'}
+                  </span>
                 </div>
               ))}
             </div>

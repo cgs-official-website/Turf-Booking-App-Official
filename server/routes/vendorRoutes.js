@@ -17,24 +17,15 @@ router.use(requireRole(['vendor', 'admin']));
 
 // Onboarding Steps & Status
 router.post('/onboarding/turf-setup', upload.array('images', 8), vendorController.turfSetup);
-router.post(
-  '/onboarding/verification',
-  upload.fields([
-    { name: 'aadhaar', maxCount: 1 },
-    { name: 'pan', maxCount: 1 },
-  ]),
-  vendorController.vendorVerification
-);
-router.post(
-  '/onboarding/turf-verification',
-  upload.fields([
-    { name: 'gst', maxCount: 1 },
-    { name: 'ebBill', maxCount: 1 },
-  ]),
-  vendorController.turfVerification
-);
+router.post('/onboarding/verification', upload.any(), vendorController.vendorVerification);
+router.post('/onboarding/turf-verification', upload.any(), vendorController.turfVerification);
 router.get('/onboarding/status', vendorController.getOnboardingStatus);
 router.post('/approval-ack', vendorController.acknowledgeApproval);
+
+// Vendor Bank & Payout Details
+router.get('/bank-details', vendorController.getBankDetails);
+router.post('/bank-details', vendorController.updateBankDetails);
+router.get('/payments', vendorController.getVendorPayments);
 
 // Vendor Dashboard & Slot Management
 router.get('/dashboard', vendorController.getDashboard);
@@ -47,8 +38,10 @@ router.put('/bookings/:id/reject', vendorController.updateBookingStatus);
 router.patch('/turf/:turfId/slots', vendorController.updateSlotOverrides);
 router.get('/reviews', vendorController.getVendorReviews);
 router.delete('/reviews/:id', vendorController.deleteReview);
-router.patch('/reviews/:id/hide', vendorController.toggleReviewVisibility);
 router.post('/report-issue', vendorController.reportIssue);
+router.get('/reports/issue-types', vendorController.getIssueTypes);
+router.post('/reports', vendorController.reportIssue);
+router.get('/reports', vendorController.getMyReports);
 
 // Vendor Turf Management & Slots
 router.get('/turfs', vendorController.getMyTurfs);

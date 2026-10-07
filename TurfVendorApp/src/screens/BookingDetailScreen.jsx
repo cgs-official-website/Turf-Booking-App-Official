@@ -72,11 +72,56 @@ const BookingDetailScreen = ({ route, navigation }) => {
   }
 
   const STATUS_COLOR = {
-    pending:   colors.warning,
+    pending: colors.warning,
     confirmed: colors.success,
-    rejected:  colors.error,
+    rejected: colors.error,
     cancelled: colors.textSecondary,
   };
+
+  const formatDate = (rawDate) => {
+    if (!rawDate) return 'N/A';
+    try {
+      const datePart = String(rawDate).split('T')[0];
+      const [y, m, d] = datePart.split('-').map(Number);
+      if (y && m && d) {
+        const testDate = new Date(y, m - 1, d);
+        return testDate.toLocaleDateString('en-IN', {
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+      }
+      return new Date(rawDate).toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return String(rawDate);
+    }
+  };
+
+  const isPaid =
+    booking.paymentStatus === 'success' ||
+    booking.paymentStatus === 'paid' ||
+    booking.paymentMethod === 'razorpay';
+  const isCash =
+    booking.paymentMethod === 'cash' ||
+    booking.paymentMode === 'hand_cash';
+  const paymentStatusText = isPaid
+    ? 'Paid Online'
+    : isCash
+      ? 'Pending (Pay at Turf)'
+      : (booking.paymentStatus ? booking.paymentStatus.toUpperCase() : 'Pending');
+  const paymentStatusColor = isPaid ? (colors.success || '#10B981') : (colors.warning || '#F59E0B');
+
+  const turfTypeName =
+    booking.turfType ||
+    booking.sport ||
+    (Array.isArray(booking.turf?.sports) && booking.turf.sports.join(', ')) ||
+    'Standard Turf';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -94,9 +139,9 @@ const BookingDetailScreen = ({ route, navigation }) => {
           <Feather name="user" size={20} color={colors.primary} />
           <Text style={styles.cardTitle}>User Details</Text>
         </View>
-        <Row label="Name" value={booking.user?.name} styles={styles} />
-        <Row label="Phone" value={booking.user?.phone} styles={styles} />
-        <Row label="Email" value={booking.user?.email} styles={styles} />
+        <Row label="User Name" value={booking.user?.name || booking.userName || 'N/A'} styles={styles} />
+        <Row label="Mobile" value={booking.user?.phone || booking.userPhone || booking.user?.mobile || 'N/A'} styles={styles} />
+        {booking.user?.email && <Row label="Email" value={booking.user.email} styles={styles} />}
       </View>
 
       {/* Booking Info */}
@@ -105,26 +150,27 @@ const BookingDetailScreen = ({ route, navigation }) => {
           <Feather name="file-text" size={20} color={colors.primary} />
           <Text style={styles.cardTitle}>Booking Details</Text>
         </View>
-        <Row label="Turf" value={booking.turf?.name} styles={styles} />
-        <Row label="Date" value={new Date(booking.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })} styles={styles} />
-        <Row label="Time" value={`${booking.startTime} – ${booking.endTime}`} styles={styles} />
-        <Row label="Duration" value={`${booking.duration || 1} hour(s)`} styles={styles} />
-        <Row label="Sport" value={booking.sport || 'Football'} styles={styles} />
+        <Row label="Turf Name" value={booking.turf?.name || booking.turfName || 'N/A'} styles={styles} />
+        <Row label="Turf Type" value={turfTypeName} styles={styles} />
+        <Row label="Date" value={formatDate(booking.date)} styles={styles} />
+        <Row label="Slot Time" value={`${booking.startTime} – ${booking.endTime}`} styles={styles} />
+        {booking.duration && <Row label="Duration" value={`${booking.duration} hour(s)`} styles={styles} />}
       </View>
 
       {/* Payment Info */}
       <View style={[styles.card, SHADOWS.sm]}>
         <View style={styles.cardHeader}>
           <Feather name="credit-card" size={20} color={colors.primary} />
-          <Text style={styles.cardTitle}>Payment</Text>
+          <Text style={styles.cardTitle}>Payment Details</Text>
         </View>
         <Row label="Amount" value={`₹${booking.totalAmount || booking.amount || 800}`} valueColor={colors.success || colors.primary} styles={styles} />
+        <Row label="Payment Status" value={paymentStatusText} valueColor={paymentStatusColor} styles={styles} />
         <Row
           label="Payment Mode"
           value={
-            booking.paymentMethod === 'cash' || booking.paymentMode === 'hand_cash'
+            isCash
               ? '💵 Hand Cash (Collect at Ground)'
-              : '💳 Online Payment (Paid)'
+              : '💳 Online Payment'
           }
           styles={styles}
         />
@@ -184,11 +230,11 @@ const BookingDetailScreen = ({ route, navigation }) => {
 
 const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: SIZES.padding, paddingBottom: 40, gap: 16 }, 
-  
-  statusBanner: { 
-    borderRadius: SIZES.radius, 
-    padding: 16, 
+  content: { padding: SIZES.padding, paddingBottom: 40, gap: 16 },
+
+  statusBanner: {
+    borderRadius: SIZES.radius,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -196,11 +242,11 @@ const getStyles = (colors) => StyleSheet.create({
     borderColor: colors.border
   },
   statusText: { fontSize: SIZES.base + 1, fontWeight: '700', letterSpacing: 0.5 },
-  
-  card: { 
-    backgroundColor: colors.card || colors.background, 
-    borderRadius: SIZES.radius + 4, 
-    padding: 20, 
+
+  card: {
+    backgroundColor: colors.card || colors.background,
+    borderRadius: SIZES.radius + 4,
+    padding: 20,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -209,52 +255,52 @@ const getStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  cardTitle: { 
-    fontSize: SIZES.base + 2, 
-    fontWeight: '700', 
-    color: colors.text, 
-    marginLeft: 10 
+  cardTitle: {
+    fontSize: SIZES.base + 2,
+    fontWeight: '700',
+    color: colors.text,
+    marginLeft: 10
   },
-  
-  row: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    paddingVertical: 10, 
-    borderBottomWidth: 1, 
-    borderBottomColor: colors.border 
+
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
   },
   rowLabel: { fontSize: SIZES.sm + 1, color: colors.textSecondary, flex: 1 },
   rowValue: { fontSize: SIZES.sm + 1, color: colors.text, fontWeight: '600', flex: 1, textAlign: 'right' },
-  
+
   actions: { gap: 12, marginTop: 10 },
-  actionBtn: { 
+  actionBtn: {
     flexDirection: 'row',
-    borderRadius: SIZES.radius, 
-    paddingVertical: 16, 
-    alignItems: 'center', 
+    borderRadius: SIZES.radius,
+    paddingVertical: 16,
+    alignItems: 'center',
     justifyContent: 'center'
   },
   acceptBtn: { backgroundColor: colors.primary },
   rejectBtn: { backgroundColor: colors.error + '15', borderWidth: 1, borderColor: colors.error },
   actionBtnText: { fontSize: SIZES.base, fontWeight: '700', color: colors.onAccent },
   rejectBtnText: { fontSize: SIZES.base, fontWeight: '700', color: colors.error },
-  
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalCard: { 
-    backgroundColor: colors.card || colors.background, 
-    borderTopLeftRadius: 24, 
-    borderTopRightRadius: 24, 
-    padding: 24 
+  modalCard: {
+    backgroundColor: colors.card || colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24
   },
   modalTitle: { fontSize: SIZES.lg, fontWeight: '700', color: colors.text, marginBottom: 16 },
   modalInput: {
-    backgroundColor: colors.inputBg || colors.border, 
+    backgroundColor: colors.inputBg || colors.border,
     borderRadius: SIZES.radius,
-    padding: 16, 
-    fontSize: SIZES.base, 
+    padding: 16,
+    fontSize: SIZES.base,
     color: colors.text,
-    height: 120, 
-    textAlignVertical: 'top', 
+    height: 120,
+    textAlignVertical: 'top',
     marginBottom: 20,
   },
   modalActions: { flexDirection: 'row', gap: 16 },

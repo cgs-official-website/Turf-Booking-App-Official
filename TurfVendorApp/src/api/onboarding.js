@@ -81,7 +81,16 @@ export const createTurfDraft = async (turfPayload) => {
 };
 
 // ---------- STEP 2: VENDOR KYC ----------
-export const uploadVendorKyc = async ({ aadhaarFile, panFile, digilockerVerified, businessName, panNumber }) => {
+export const uploadVendorKyc = async ({
+  aadhaarFile,
+  aadhaarFrontFile,
+  aadhaarBackFile,
+  panFile,
+  digilockerVerified,
+  businessName,
+  panNumber,
+  token,
+}) => {
   const form = new FormData();
   if (businessName) form.append('businessName', businessName);
   if (panNumber) form.append('panNumber', panNumber);
@@ -89,13 +98,31 @@ export const uploadVendorKyc = async ({ aadhaarFile, panFile, digilockerVerified
   if (digilockerVerified) {
     form.append('digilockerVerified', 'true');
   } else {
-    if (aadhaarFile?.uri) {
+    // Aadhaar Front Card
+    if (aadhaarFrontFile?.uri) {
+      form.append('aadhaarFront', {
+        uri: aadhaarFrontFile.uri,
+        name: aadhaarFrontFile.name || 'aadhaar_front.jpg',
+        type: aadhaarFrontFile.type || 'image/jpeg',
+      });
+    } else if (aadhaarFile?.uri) {
       form.append('aadhaar', {
         uri: aadhaarFile.uri,
         name: aadhaarFile.name || 'aadhaar.jpg',
         type: aadhaarFile.type || 'image/jpeg',
       });
     }
+
+    // Aadhaar Back Card
+    if (aadhaarBackFile?.uri) {
+      form.append('aadhaarBack', {
+        uri: aadhaarBackFile.uri,
+        name: aadhaarBackFile.name || 'aadhaar_back.jpg',
+        type: aadhaarBackFile.type || 'image/jpeg',
+      });
+    }
+
+    // PAN Card Front
     if (panFile?.uri) {
       form.append('pan', {
         uri: panFile.uri,
@@ -105,10 +132,15 @@ export const uploadVendorKyc = async ({ aadhaarFile, panFile, digilockerVerified
     }
   }
 
-  const data = await apiRequest('/vendor/onboarding/verification', {
+  const options = {
     method: 'POST',
     body: form,
-  });
+  };
+  if (token) {
+    options.headers = { Authorization: `Bearer ${token}` };
+  }
+
+  const data = await apiRequest('/vendor/onboarding/verification', options);
   return data;
 };
 

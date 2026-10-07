@@ -1,12 +1,15 @@
 // @theme-ready ✅
-import React, { useState, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, Switch, Image, Platform,
+  Alert, Switch, Image, Platform, Linking,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logoutVendor } from '../redux/authSlice';
-import { deleteTurf as deleteTurfAction } from '../redux/vendorSlice';
+import { deleteTurf as deleteTurfAction, fetchMyTurfs } from '../redux/vendorSlice';
+import { fcmHelper } from '../utils/fcmHelper';
+import { notificationsApi } from '../api/notifications';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import { getImageUrl } from '../api/client';
@@ -83,10 +86,70 @@ const ProfileScreen = ({ navigation }) => {
   const { colors, isDark, toggleTheme } = useTheme();
 
   const [notificationsOn, setNotificationsOn] = useState(true);
+  const [savingNotif, setSavingNotif] = useState(false);
+
+  // Sync saved push notification preference from backend on load
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await notificationsApi.getPreferences();
+        const serverPref = res?.data?.pushNotifications ?? res?.pushNotifications;
+        if (typeof serverPref === 'boolean' && isMounted) {
+          setNotificationsOn(serverPref);
+        }
+      } catch (e) {
+        // Fall back to default enabled
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleToggleNotifications = async () => {
+    if (savingNotif) return;
+    const targetState = !notificationsOn;
+
+    if (targetState === true) {
+      // Check Android permission
+      const hasPermission = await fcmHelper.requestPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Notification Permission Required',
+          'Android is blocking notifications for Turf Vendor App. Please enable notifications in your device settings to receive booking requests.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+    }
+
+    setSavingNotif(true);
+    setNotificationsOn(targetState);
+
+    try {
+      await notificationsApi.updatePreferences(targetState);
+      if (targetState === true) {
+        await fcmHelper.registerDeviceToken();
+      }
+    } catch (err) {
+      setNotificationsOn(!targetState);
+      Alert.alert('Settings Error', 'Could not update notification preference. Please check your connection.');
+    } finally {
+      setSavingNotif(false);
+    }
+  };
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchMyTurfs());
+    }, [dispatch])
+  );
 
   const safeTurfs = Array.isArray(turfs) ? turfs : [];
   const safeBookings = Array.isArray(bookings) ? bookings : [];
@@ -98,16 +161,40 @@ const ProfileScreen = ({ navigation }) => {
     ]);
   };
 
-  const handleDeleteTurf = () => {
+  const handleDeleteTurf = async () => {
+    let currentTurfs = safeTurfs;
+    if (currentTurfs.length === 0) {
+      try {
+        const fetched = await dispatch(fetchMyTurfs()).unwrap();
+        if (Array.isArray(fetched)) currentTurfs = fetched;
+      } catch (_) {}
+    }
+
+    const targetTurf = currentTurfs[0] || vendor?.turf;
+    const turfId = targetTurf?._id || targetTurf?.id;
+
+    if (!turfId) {
+      Alert.alert('No Active Turf', 'You do not have any active turf registered to delete.');
+      return;
+    }
+
     Alert.alert(
-      'Delete Turf',
-      'This will permanently delete your active turf, along with all scheduled slots and bookings history. This action cannot be undone.',
+      'Delete Turf & Reset Data',
+      `This will permanently delete "${targetTurf.name || 'your active turf'}", along with all scheduled slots, bookings history, and overrides. This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Permanently',
           style: 'destructive',
-          onPress: () => dispatch(deleteTurfAction()),
+          onPress: async () => {
+            try {
+              await dispatch(deleteTurfAction({ id: turfId, resetData: true })).unwrap();
+              dispatch(fetchMyTurfs());
+              Alert.alert('Reset Complete', 'Your turf and all data have been permanently deleted and reset.');
+            } catch (err) {
+              Alert.alert('Delete Failed', typeof err === 'string' ? err : 'Could not delete turf.');
+            }
+          },
         },
       ]
     );
@@ -169,7 +256,7 @@ const ProfileScreen = ({ navigation }) => {
           {/* Quick Metrics Strip */}
           <View style={[styles.metricsStrip, { borderTopColor: colors.border }]}>
             <View style={styles.metricItem}>
-              <Text style={[styles.metricVal, { color: colors.text }]}>{safeTurfs.length || 1}</Text>
+              <Text style={[styles.metricVal, { color: colors.text }]}>{safeTurfs.length}</Text>
               <Text style={[styles.metricLbl, { color: colors.textSecondary }]}>ACTIVE TURFS</Text>
             </View>
             <View style={[styles.metricDiv, { backgroundColor: colors.border }]} />
@@ -244,6 +331,15 @@ const ProfileScreen = ({ navigation }) => {
             colors={colors}
           />
           <MenuItem
+            icon="shield"
+            iconBg="rgba(16, 185, 129, 0.12)"
+            iconColor="#10B981"
+            label="Vendor Identity KYC"
+            subLabel="Aadhaar Front/Back and PAN documents"
+            onPress={() => navigation.navigate('VendorVerification')}
+            colors={colors}
+          />
+          <MenuItem
             icon="credit-card"
             iconBg="rgba(168, 85, 247, 0.12)"
             iconColor="#A855F7"
@@ -278,7 +374,7 @@ const ProfileScreen = ({ navigation }) => {
             subLabel="Booking alerts and reminders"
             toggle
             toggleValue={notificationsOn}
-            onToggle={setNotificationsOn}
+            onToggle={handleToggleNotifications}
             colors={colors}
           />
           <MenuItem

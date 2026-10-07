@@ -6,43 +6,52 @@ const razorpay = require('../config/razorpay');
  */
 const razorpayService = {
   /**
-   * Create Razorpay Order
+   * Create Razorpay Order via official API
    * @param {number} amountInRupees - Amount in INR (e.g. 500)
-   * @param {string} receiptId - Unique identifier (bookingId / subId)
+   * @param {string} receiptId - Unique identifier (bookingId)
    * @param {Object} notes - Metadata object
    */
   async createOrder(amountInRupees, receiptId, notes = {}) {
-    if (!razorpay) {
-      console.warn('⚠️ Razorpay is not configured. Returning mock order for testing.');
-      return {
-        id: `order_mock_${Date.now()}`,
-        amount: Math.round(amountInRupees * 100),
-        currency: 'INR',
-        receipt: receiptId,
-        status: 'created',
-      };
+    const keyId = process.env.RAZORPAY_KEY_ID || '';
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    const isPlaceholder = !keyId || !keySecret || keyId.includes('xxxx') || keySecret.includes('your_razorpay');
+
+    if (!razorpay || isPlaceholder) {
+      throw new Error('Razorpay API keys are missing or invalid in server/.env. Please configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.');
     }
 
+    const amountInPaise = Math.round(Number(amountInRupees || 0) * 100);
+
     const options = {
-      amount: Math.round(amountInRupees * 100), // convert to paise
+      amount: amountInPaise,
       currency: 'INR',
       receipt: String(receiptId),
       notes,
     };
 
-    return razorpay.orders.create(options);
+    try {
+      return await razorpay.orders.create(options);
+    } catch (err) {
+      console.error('⚠️ Razorpay API order creation error:', err?.message || err);
+      throw new Error(`Razorpay Order Creation Failed: ${err?.message || 'Check Razorpay API Keys'}`);
+    }
   },
 
   /**
-   * Verify Razorpay payment signature from client app
+   * Cryptographically verify Razorpay payment signature using HMAC-SHA256
    */
   verifySignature(orderId, paymentId, razorpaySignature) {
-    if (!process.env.RAZORPAY_KEY_SECRET) {
-      console.warn('⚠️ RAZORPAY_KEY_SECRET missing. Accepting mock signature.');
-      return true;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret || keySecret.includes('your_razorpay') || keySecret.includes('xxxx')) {
+      console.warn('⚠️ RAZORPAY_KEY_SECRET is missing or invalid in .env');
+      return false;
     }
 
-    const hmac = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
+    if (!orderId || !paymentId || !razorpaySignature) {
+      return false;
+    }
+
+    const hmac = crypto.createHmac('sha256', keySecret);
     hmac.update(`${orderId}|${paymentId}`);
     const generatedSignature = hmac.digest('hex');
 
@@ -53,8 +62,7 @@ const razorpayService = {
    * Verify Razorpay Webhook signature
    */
   verifyWebhookSignature(rawBody, signature, webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET) {
-    if (!webhookSecret) {
-      console.warn('⚠️ RAZORPAY_WEBHOOK_SECRET missing in .env');
+    if (!webhookSecret || webhookSecret.includes('your_razorpay')) {
       return false;
     }
 

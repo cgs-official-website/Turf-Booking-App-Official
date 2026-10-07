@@ -27,9 +27,11 @@ export default function BookingConfirmScreen({ route, navigation }) {
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' (Hand Cash) | 'online' (Razorpay / UPI)
   const [paying,        setPaying]        = useState(false);
 
-  const turfId    = turfData?._id || turfData?.id;
-  const total     = turfData?.pricePerHour || turfData?.pricing?.baseRate || 800;
-  const perPerson = Math.round(total / (players || 1));
+  const turfId        = turfData?._id || turfData?.id;
+  const durationHours = Number(route.params?.duration || 1);
+  const hourlyRate    = Number(turfData?.pricePerHour ?? turfData?.price ?? turfData?.pricing?.baseRate ?? 500);
+  const total         = hourlyRate * durationHours;
+  const perPerson     = Math.round(total / (players || 1));
   const rawImage  = turfData?.images?.[0] || turfData?.image;
   const imageUri  = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
 
@@ -63,45 +65,70 @@ export default function BookingConfirmScreen({ route, navigation }) {
 
       // ── Scenario B: Online Payment (UPI / Cards / NetBanking via Razorpay) ──
       const orderRes = await bookingsApi.createPaymentOrder(bookingId);
-      const { orderId, amount, currency } = orderRes.data || orderRes;
+      const orderData = orderRes.data || orderRes;
+      const orderId = orderData.orderId || orderData.id;
+      const amount = orderData.amount;
+      const currency = orderData.currency || 'INR';
+      const keyId = orderData.keyId || orderData.key;
 
-      let paymentResult;
-
-      try {
-        const checkoutOptions = {
-          description: `Pitch Booking: ${turfData?.name || 'Turf'} (${startTime} - ${endTime})`,
-          image: 'https://cdn-icons-png.flaticon.com/512/861/861512.png',
-          currency: currency || 'INR',
-          key: 'rzp_test_placeholder',
-          amount: amount || total * 100,
-          name: turfData?.name || 'Turf Arena',
-          order_id: orderId,
-          prefill: {
-            email: user?.email || 'player@turfapp.com',
-            contact: user?.phone || '9999999999',
-            name: user?.name || 'Player',
-          },
-          theme: { color: C.primary || '#0CB053' },
-        };
-
-        paymentResult = await RazorpayCheckout.open(checkoutOptions);
-      } catch (checkoutErr) {
-        if (checkoutErr?.code === 0 || checkoutErr?.description === 'Payment Cancelled') {
-          Alert.alert('Payment Cancelled', 'You cancelled the payment. The temporary hold will release shortly.');
-          return;
-        }
-        // Simulation fallback in test environment
-        paymentResult = {
-          razorpay_order_id: orderId || `order_${Date.now()}`,
-          razorpay_payment_id: `pay_${Date.now()}`,
-          razorpay_signature: 'rzp_mock_signature',
-        };
+      if (!orderId || !keyId) {
+        throw new Error('Failed to generate Razorpay order. Please check Razorpay keys on backend.');
       }
 
-      // Verify Online Payment with Backend
+      const checkoutOptions = {
+        description: `Pitch Booking: ${turfData?.name || 'Turf'} (${startTime} - ${endTime})`,
+        image: 'https://cdn-icons-png.flaticon.com/512/861/861512.png',
+        currency: currency || 'INR',
+        key: keyId,
+        order_id: orderId,
+        amount: amount || total * 100,
+        name: turfData?.name || 'Turf Arena',
+        prefill: {
+          email: user?.email || 'player@turfapp.com',
+          contact: user?.phone || '9999999999',
+          name: user?.name || 'Player',
+        },
+        theme: { color: C.primary || '#0CB053' },
+      };
+
+      let paymentResult;
+      try {
+        paymentResult = await RazorpayCheckout.open(checkoutOptions);
+      } catch (checkoutErr) {
+        // Handle User Cancellation explicitly
+        const isCancelled = checkoutErr?.code === 0 ||
+          checkoutErr?.description === 'Payment Cancelled' ||
+          (typeof checkoutErr?.description === 'string' && checkoutErr.description.toLowerCase().includes('cancel'));
+
+        if (isCancelled) {
+          Alert.alert('Payment Cancelled', 'You cancelled the payment. The slot was not booked.');
+          return;
+        }
+
+        let failReason = 'Payment could not be completed.';
+        if (typeof checkoutErr === 'string') {
+          failReason = checkoutErr;
+        } else if (checkoutErr?.description) {
+          failReason = checkoutErr.description;
+        } else if (checkoutErr?.error?.description) {
+          failReason = checkoutErr.error.description;
+        } else if (checkoutErr?.message) {
+          failReason = checkoutErr.message;
+        }
+
+        Alert.alert('Payment Failed', failReason);
+        return;
+      }
+
+      if (!paymentResult || !paymentResult.razorpay_payment_id || !paymentResult.razorpay_signature) {
+        Alert.alert('Payment Failed', 'Razorpay payment signature or ID missing.');
+        return;
+      }
+
+      // Verify Online Payment with Backend using cryptographic HMAC-SHA256 signature check
       await paymentsApi.verifyPayment({
         bookingId,
-        razorpay_order_id: paymentResult.razorpay_order_id,
+        razorpay_order_id: paymentResult.razorpay_order_id || orderId,
         razorpay_payment_id: paymentResult.razorpay_payment_id,
         razorpay_signature: paymentResult.razorpay_signature,
       });

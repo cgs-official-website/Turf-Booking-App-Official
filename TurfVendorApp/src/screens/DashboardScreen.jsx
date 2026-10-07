@@ -1,5 +1,5 @@
-// @theme-ready ✅
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
 } from 'react-native';
@@ -42,7 +42,11 @@ const DashboardScreen = ({ navigation }) => {
     if (!plans.length) dispatch(fetchPlans());
   };
 
-  useEffect(() => { loadData(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
   const safeTurfs = Array.isArray(turfs) ? turfs : [];
@@ -225,7 +229,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
               <Icon name="clock" size={18} color="#3B82F6" />
             </View>
-            <Text style={styles.statNumber}>{stats.availableSlots ?? 24}</Text>
+            <Text style={styles.statNumber}>{stats.availableSlots ?? stats.openSlots ?? 0}</Text>
             <Text style={styles.statTitle}>Open Slots</Text>
           </View>
 

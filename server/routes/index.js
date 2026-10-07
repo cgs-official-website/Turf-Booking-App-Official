@@ -12,17 +12,18 @@ const notificationRoutes = require('./notificationRoutes');
 const placesRoutes = require('./placesRoutes');
 const adminRoutes = require('./adminRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
+const enquiryRoutes = require('./enquiryRoutes');
+const reviewRoutes = require('./reviewRoutes');
 const { sendSuccess } = require('../utils/response');
 
 // Health Check
 router.get('/health', async (req, res) => {
-  const { query } = require('../config/db');
+  const prisma = require('../config/prisma');
   let dbOk = false;
   let userCount = 0;
   try {
-    const resCount = await query("SELECT count(*) as count FROM documents WHERE collection = 'users'");
+    userCount = await prisma.user.count();
     dbOk = true;
-    userCount = parseInt(resCount.rows[0]?.count || 0, 10);
   } catch (e) {
     dbOk = false;
   }
@@ -47,9 +48,15 @@ router.use('/payments', paymentRoutes);
 router.use('/vendor', vendorRoutes);
 router.use('/vendor/subscriptions', subscriptionRoutes);
 router.use('/subscription', subscriptionRoutes);
+router.use('/subscriptions', subscriptionRoutes);
 router.use('/matches', matchRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/places', placesRoutes);
 router.use('/admin', adminRoutes);
+router.use('/enquiries', enquiryRoutes);
+router.use('/inquiries', enquiryRoutes);
+router.use('/vendor-enquiries', enquiryRoutes);
+router.use('/reviews', reviewRoutes);
+router.post('/reports/inquiry', require('../controllers/enquiryController').createEnquiry);
 
 module.exports = router;

@@ -75,6 +75,33 @@ export const matchStorage = {
     return match;
   },
 
+  async updateMatch(id, patch = {}) {
+    const all = await readJSON(MATCHES_KEY, {});
+    const existing = all[id] || { id, createdAt: Date.now() };
+    const updated = { ...existing, ...patch, id };
+    all[id] = updated;
+    await writeJSON(MATCHES_KEY, all);
+
+    (async () => {
+      try {
+        await client.patch(`/matches/${id}`, patch);
+      } catch {}
+    })();
+
+    return updated;
+  },
+
+  async addTimeline(id, text) {
+    const all = await readJSON(MATCHES_KEY, {});
+    const m = all[id];
+    if (!m) return;
+    m.timeline = m.timeline || [];
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    m.timeline.unshift({ time: timeStr, text });
+    all[id] = m;
+    await writeJSON(MATCHES_KEY, all);
+  },
+
   async deleteMatch(id) {
     const all = await readJSON(MATCHES_KEY, {});
     delete all[id];
@@ -126,13 +153,36 @@ export const matchStorage = {
 
     return match;
   },
+};
 
-  // ── Recent players ────────────────────────────────────────────────────────
+export const playerStorage = {
   async getRecentPlayers() {
-    return readJSON(RECENT_PLAYERS_KEY, []);
+    const list = await readJSON(RECENT_PLAYERS_KEY, []);
+    const dummyIds = new Set(['p_1', 'p_2', 'p_3', 'p_4']);
+    const dummyNames = new Set(['madhan raj', 'karthik', 'suresh', 'venkatesh']);
+    const filtered = (list || []).filter(
+      (p) => p && !dummyIds.has(p.id) && !dummyNames.has(String(p.name || '').toLowerCase().trim())
+    );
+    if (filtered.length !== (list || []).length) {
+      await writeJSON(RECENT_PLAYERS_KEY, filtered);
+    }
+    return filtered;
   },
 
-  async addRecentPlayers(players) {
+  async addGuestPlayer({ name, phone }) {
+    const guest = {
+      id: genId('guest'),
+      name: name.trim(),
+      phone: phone ? phone.trim() : '',
+      isGuest: true,
+    };
+    const list = await this.getRecentPlayers();
+    const updated = [guest, ...list.filter((p) => p.name.toLowerCase().trim() !== guest.name.toLowerCase().trim())];
+    await writeJSON(RECENT_PLAYERS_KEY, updated);
+    return guest;
+  },
+
+  async addRecentPlayers(players = []) {
     const existing = await readJSON(RECENT_PLAYERS_KEY, []);
     const map = new Map();
     existing.forEach((p) => map.set(p.name.toLowerCase().trim(), p));

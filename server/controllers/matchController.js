@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const firestoreService = require('../services/firestoreService');
+const prisma = require('../config/prisma');
 const notificationService = require('../services/notificationService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const {
@@ -14,6 +14,15 @@ const generateJoinCode = () => {
   return crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 chars, e.g. "9F4A2B"
 };
 
+function formatMatch(m) {
+  if (!m) return null;
+  const playerIds = (m.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+  return {
+    ...m,
+    players: playerIds,
+  };
+}
+
 const matchController = {
   /**
    * POST /api/v1/matches
@@ -21,40 +30,55 @@ const matchController = {
    */
   async createMatch(req, res) {
     const { uid } = req.user;
-    const parsed = createMatchSchema.parse(req.body);
 
-    const joinCode = generateJoinCode();
-    const userProfile = await firestoreService.getDoc('users', uid);
+    try {
+      const parsed = createMatchSchema.parse(req.body);
+      const joinCode = generateJoinCode();
+      const userProfile = await prisma.user.findUnique({ where: { id: uid } });
 
-    const matchData = {
-      ...parsed,
-      createdBy: uid,
-      creatorName: userProfile?.name || 'Player',
-      joinCode,
-      players: [uid],
-      playerProfiles: [{ uid, name: userProfile?.name || 'Player', photoURL: userProfile?.photoURL || '' }],
-      teams: {
+      const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const teams = parsed.teams || {
         teamA: { name: 'Team A', players: [userProfile?.name || 'Player'] },
         teamB: { name: 'Team B', players: [] },
-      },
-      toss: null,
-      status: 'created',
-      scorecard: {
-        innings: [
-          { team: 'Team A', runs: 0, wickets: 0, overs: '0.0', balls: [] },
-          { team: 'Team B', runs: 0, wickets: 0, overs: '0.0', balls: [] },
-        ],
-        currentInning: 0,
-        striker: '',
-        nonStriker: '',
-        bowler: '',
-      },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+      };
 
-    const match = await firestoreService.createDoc('matches', matchData);
-    return sendSuccess(res, { match }, 201);
+      const match = await prisma.match.create({
+        data: {
+          id: matchId,
+          createdBy: uid,
+          creatorName: userProfile?.name || 'Player',
+          joinCode,
+          place: parsed.place || 'Turf Arena',
+          sport: parsed.sport || 'Cricket',
+          matchDate: String(parsed.matchDate || new Date().toISOString().split('T')[0]),
+          matchTime: String(parsed.matchTime || '18:00'),
+          playWithStrangers: Boolean(parsed.playWithStrangers),
+          turfId: parsed.turfId || null,
+          bookingId: parsed.bookingId || null,
+          teams,
+          scorecard: {
+            innings: [
+              { team: 'Team A', runs: 0, wickets: 0, overs: '0.0', balls: [] },
+              { team: 'Team B', runs: 0, wickets: 0, overs: '0.0', balls: [] },
+            ],
+            currentInning: 0,
+            striker: '',
+            nonStriker: '',
+            bowler: '',
+          },
+          status: 'created',
+          players: {
+            create: [{ userId: uid }],
+          },
+        },
+        include: { players: true, turf: true },
+      });
+
+      return sendSuccess(res, { match: formatMatch(match) }, 201);
+    } catch (err) {
+      console.error('createMatch error:', err);
+      return sendError(res, err.message || 'Failed to create match', 400, 'CREATE_FAILED');
+    }
   },
 
   /**
@@ -63,39 +87,38 @@ const matchController = {
    */
   async joinMatch(req, res) {
     const { uid } = req.user;
-    const { joinCode } = joinMatchSchema.parse(req.body);
 
-    const result = await firestoreService.queryWithCursor('matches', {
-      filters: [['joinCode', '==', joinCode.toUpperCase().trim()]],
-      limit: 1,
-    });
-
-    if (result.items.length === 0) {
-      return sendError(res, 'Invalid or expired match join code', 404, 'MATCH_NOT_FOUND');
-    }
-
-    const match = result.items[0];
-    const userProfile = await firestoreService.getDoc('users', uid);
-
-    const players = match.players || [];
-    const playerProfiles = match.playerProfiles || [];
-
-    if (!players.includes(uid)) {
-      players.push(uid);
-      playerProfiles.push({
-        uid,
-        name: userProfile?.name || 'Player',
-        photoURL: userProfile?.photoURL || '',
+    try {
+      const { joinCode } = joinMatchSchema.parse(req.body);
+      const match = await prisma.match.findUnique({
+        where: { joinCode: joinCode.toUpperCase().trim() },
+        include: { players: true },
       });
 
-      await firestoreService.updateDoc('matches', match.id, {
-        players,
-        playerProfiles,
-        updatedAt: new Date(),
-      });
-    }
+      if (!match) {
+        return sendError(res, 'Invalid or expired match join code', 404, 'MATCH_NOT_FOUND');
+      }
 
-    return sendSuccess(res, { match: { ...match, players, playerProfiles } });
+      const isJoined = (match.players || []).some((p) => p.userId === uid);
+      if (!isJoined) {
+        await prisma.matchPlayer.create({
+          data: {
+            matchId: match.id,
+            userId: uid,
+          },
+        });
+      }
+
+      const updated = await prisma.match.findUnique({
+        where: { id: match.id },
+        include: { players: true },
+      });
+
+      return sendSuccess(res, { match: formatMatch(updated) });
+    } catch (err) {
+      console.error('joinMatch error:', err);
+      return sendError(res, err.message || 'Failed to join match', 400, 'JOIN_FAILED');
+    }
   },
 
   /**
@@ -106,27 +129,32 @@ const matchController = {
     const { id } = req.params;
     const { playerIds = [] } = req.body;
 
-    const match = await firestoreService.getDoc('matches', id);
-    if (!match) {
-      return sendError(res, 'Match not found', 404, 'NOT_FOUND');
-    }
+    try {
+      const match = await prisma.match.findUnique({ where: { id } });
+      if (!match) {
+        return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+      }
 
-    if (playerIds.length > 0) {
-      await notificationService.sendToUsers(playerIds, {
-        title: 'Match Invitation 🏏',
-        body: `You have been invited by ${match.creatorName || 'a player'} to join a ${match.sport || 'Cricket'} match at ${match.place || 'the turf'}.`,
-        type: 'match',
-        data: {
-          matchId: id,
-          joinCode: match.joinCode || '',
-        },
+      if (playerIds.length > 0) {
+        await notificationService.sendToUsers(playerIds, {
+          title: 'Match Invitation 🏏',
+          body: `You have been invited by ${match.creatorName || 'a player'} to join a ${match.sport || 'Cricket'} match at ${match.place || 'the turf'}.`,
+          type: 'match',
+          data: {
+            matchId: id,
+            joinCode: match.joinCode || '',
+          },
+        });
+      }
+
+      return sendSuccess(res, {
+        message: 'Invitations sent successfully',
+        invitedCount: playerIds.length,
       });
+    } catch (err) {
+      console.error('invitePlayers error:', err);
+      return sendError(res, 'Failed to invite players', 500, 'INVITE_FAILED');
     }
-
-    return sendSuccess(res, {
-      message: 'Invitations sent successfully',
-      invitedCount: playerIds.length,
-    });
   },
 
   /**
@@ -134,11 +162,22 @@ const matchController = {
    */
   async getMatchById(req, res) {
     const { id } = req.params;
-    const match = await firestoreService.getDoc('matches', id);
-    if (!match) {
-      return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+
+    try {
+      const match = await prisma.match.findUnique({
+        where: { id },
+        include: { players: true, turf: true },
+      });
+
+      if (!match) {
+        return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+      }
+
+      return sendSuccess(res, { match: formatMatch(match) });
+    } catch (err) {
+      console.error('getMatchById error:', err);
+      return sendError(res, 'Failed to fetch match', 500, 'FETCH_FAILED');
     }
-    return sendSuccess(res, { match });
   },
 
   /**
@@ -146,14 +185,23 @@ const matchController = {
    */
   async updateTeams(req, res) {
     const { id } = req.params;
-    const parsed = updateTeamsSchema.parse(req.body);
 
-    const updated = await firestoreService.updateDoc('matches', id, {
-      teams: parsed,
-      updatedAt: new Date(),
-    });
+    try {
+      const parsed = updateTeamsSchema.parse(req.body);
+      const updated = await prisma.match.update({
+        where: { id },
+        data: {
+          teams: parsed,
+          updatedAt: new Date(),
+        },
+        include: { players: true },
+      });
 
-    return sendSuccess(res, { match: updated });
+      return sendSuccess(res, { match: formatMatch(updated) });
+    } catch (err) {
+      console.error('updateTeams error:', err);
+      return sendError(res, 'Failed to update teams', 500, 'UPDATE_FAILED');
+    }
   },
 
   /**
@@ -161,15 +209,24 @@ const matchController = {
    */
   async saveToss(req, res) {
     const { id } = req.params;
-    const parsed = tossSchema.parse(req.body);
 
-    const updated = await firestoreService.updateDoc('matches', id, {
-      toss: parsed,
-      status: 'live',
-      updatedAt: new Date(),
-    });
+    try {
+      const parsed = tossSchema.parse(req.body);
+      const updated = await prisma.match.update({
+        where: { id },
+        data: {
+          toss: parsed,
+          status: 'live',
+          updatedAt: new Date(),
+        },
+        include: { players: true },
+      });
 
-    return sendSuccess(res, { match: updated });
+      return sendSuccess(res, { match: formatMatch(updated) });
+    } catch (err) {
+      console.error('saveToss error:', err);
+      return sendError(res, 'Failed to save toss', 500, 'UPDATE_FAILED');
+    }
   },
 
   /**
@@ -178,18 +235,28 @@ const matchController = {
    */
   async updateScorecard(req, res) {
     const { id } = req.params;
-    const parsed = updateScorecardSchema.parse(req.body);
 
-    const updatePayload = {
-      scorecard: parsed.scorecard,
-      updatedAt: new Date(),
-    };
-    if (parsed.status) {
-      updatePayload.status = parsed.status;
+    try {
+      const parsed = updateScorecardSchema.parse(req.body);
+      const updatePayload = {
+        scorecard: parsed.scorecard,
+        updatedAt: new Date(),
+      };
+      if (parsed.status) {
+        updatePayload.status = parsed.status;
+      }
+
+      const updated = await prisma.match.update({
+        where: { id },
+        data: updatePayload,
+        include: { players: true },
+      });
+
+      return sendSuccess(res, { match: formatMatch(updated) });
+    } catch (err) {
+      console.error('updateScorecard error:', err);
+      return sendError(res, 'Failed to update scorecard', 500, 'UPDATE_FAILED');
     }
-
-    const updated = await firestoreService.updateDoc('matches', id, updatePayload);
-    return sendSuccess(res, { match: updated });
   },
 
   /**
@@ -198,17 +265,29 @@ const matchController = {
    */
   async getMyMatches(req, res) {
     const { uid } = req.user;
-    const { limit = 20, cursor } = req.query;
+    const { limit = 20 } = req.query;
 
-    const result = await firestoreService.queryWithCursor('matches', {
-      filters: [['players', 'array-contains', uid]],
-      orderByField: 'createdAt',
-      orderDirection: 'desc',
-      limit: Number(limit),
-      cursor,
-    });
+    try {
+      const playerRecords = await prisma.matchPlayer.findMany({
+        where: { userId: uid },
+        include: {
+          match: {
+            include: { players: true, turf: true },
+          },
+        },
+        orderBy: { joinedAt: 'desc' },
+        take: Number(limit),
+      });
 
-    return sendPaginated(res, result.items, result.nextCursor, { count: result.items.length });
+      const matches = playerRecords
+        .map((pr) => formatMatch(pr.match))
+        .filter(Boolean);
+
+      return sendPaginated(res, matches, null, { count: matches.length });
+    } catch (err) {
+      console.error('getMyMatches error:', err);
+      return sendError(res, 'Failed to fetch user matches', 500, 'FETCH_FAILED');
+    }
   },
 };
 

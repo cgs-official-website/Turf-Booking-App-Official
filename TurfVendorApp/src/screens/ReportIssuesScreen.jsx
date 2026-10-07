@@ -55,6 +55,7 @@ const ReportIssuesScreen = ({ navigation }) => {
   }, [reportError]);
 
   const handleSubmit = () => {
+    if (reportSubmitting) return;
     if (!description.trim()) {
       Alert.alert('Details Required', 'Please provide a brief description of the issue you are experiencing.');
       return;

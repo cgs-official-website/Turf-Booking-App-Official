@@ -13,8 +13,16 @@ const LOCAL_DB_PATH = path.join(__dirname, '../data/local_db.json');
 async function resetAndSeed() {
   console.log('🔄 Starting PostgreSQL Database Reset & Fresh Seeding...');
 
-  // Ensure schema exists
-  await initSchema();
+  // Ensure schema exists if PostgreSQL is configured
+  try {
+    if (pool) {
+      await initSchema();
+    } else {
+      console.log('ℹ️ DATABASE_URL not configured. PostgreSQL schema initialization skipped (using local storage).');
+    }
+  } catch (err) {
+    console.warn('⚠️ PostgreSQL schema init warning:', err.message);
+  }
 
   const passwordHash = await bcrypt.hash('Password@123', 10);
 
@@ -111,6 +119,10 @@ async function resetAndSeed() {
   };
 
   // 1. Reset Local Fallback JSON DB
+  const dataDir = path.dirname(LOCAL_DB_PATH);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
   fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(freshDb, null, 2), 'utf8');
   console.log('✅ Local Database JSON file reset with clean seed data');
 

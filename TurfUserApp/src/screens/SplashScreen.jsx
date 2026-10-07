@@ -144,10 +144,10 @@ export default function SplashScreen() {
       ]),
     ]).start();
 
-    // 6. Eased Progress Bar Fill
+    // 6. Snappy Progress Bar Fill
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: 2100,
+      duration: 380,
       easing: Easing.bezier(0.4, 0, 0.2, 1),
       useNativeDriver: false,
     }).start();
@@ -156,40 +156,25 @@ export default function SplashScreen() {
     const heroTimer = setTimeout(() => {
       Animated.parallel([
         Animated.sequence([
-          Animated.timing(logoScale, { toValue: 1.08, duration: 180, easing: Easing.bezier(0.22, 1, 0.36, 1), useNativeDriver: true }),
-          Animated.timing(logoScale, { toValue: 1.0, duration: 240, easing: Easing.bezier(0.22, 1, 0.36, 1), useNativeDriver: true }),
+          Animated.timing(logoScale, { toValue: 1.05, duration: 100, useNativeDriver: true }),
+          Animated.timing(logoScale, { toValue: 1.0, duration: 120, useNativeDriver: true }),
         ]),
         Animated.sequence([
-          Animated.timing(heroGlowOpacity, { toValue: 0.5, duration: 200, useNativeDriver: true }),
-          Animated.timing(heroGlowOpacity, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.timing(heroGlowOpacity, { toValue: 0.5, duration: 100, useNativeDriver: true }),
+          Animated.timing(heroGlowOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
         ]),
       ]).start();
-    }, 1500);
+    }, 200);
 
-    // 8. Coordinated Exit
+    // 8. Immediate Coordinated Exit
     const exitTimer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(screenOpacity, {
-          toValue: 0,
-          duration: 260,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(screenTranslateY, {
-          toValue: -20,
-          duration: 260,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        dispatch(setSplashDone());
-      });
-    }, 2400);
+      dispatch(setSplashDone());
+    }, 400);
 
     // Hard fallback safety
     const fallbackTimer = setTimeout(() => {
       dispatch(setSplashDone());
-    }, 3000);
+    }, 600);
 
     return () => {
       clearTimeout(heroTimer);

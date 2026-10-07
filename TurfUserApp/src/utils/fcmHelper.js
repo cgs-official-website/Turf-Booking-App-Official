@@ -1,5 +1,4 @@
-// src/utils/fcmHelper.js
-import { Platform, PermissionsAndroid, Alert } from 'react-native';
+import { Platform, PermissionsAndroid, Alert, AppState, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging from '@react-native-firebase/messaging';
 import { notificationsApi } from '../api/notifications';
@@ -130,7 +129,7 @@ export const fcmHelper = {
     const matchId = payload.matchId;
 
     if (type === 'booking' && bookingId) {
-      navigate('BookingDetail', { bookingId });
+      navigate('BookingDetail', { bookingId, id: bookingId });
     } else if (type === 'match' && matchId) {
       navigate('Match', { matchId });
     } else if (payload.screen === 'Bookings') {
@@ -144,34 +143,66 @@ export const fcmHelper = {
    * Setup listeners for foreground notifications, background taps, and quit-state opens
    */
   setupNotificationListeners(navigationRef) {
+    const shownNotificationIds = new Set();
+
+    const cleanText = (str) =>
+      str
+        ? String(str)
+            .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{200D}\u{FE0F}]/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+        : '';
+
+    const triggerSystemNotification = ({ title, body, data }) => {
+      try {
+        if (NativeModules.LocalNotificationModule) {
+          NativeModules.LocalNotificationModule.showNotification(
+            title,
+            body,
+            data || {}
+          );
+        }
+      } catch (err) {
+        console.warn('⚠️ Native system notification error:', err.message);
+      }
+    };
+
+    const showNotificationAlert = ({ title, body, data }) => {
+      const notifTitle = cleanText(title) || 'Booking Update';
+      const notifBody = cleanText(body) || 'You have an update on your turf booking.';
+
+      // Mobile level system notification with logo.png (shown in background/quit or heads-up)
+      triggerSystemNotification({ title: notifTitle, body: notifBody, data });
+
+      // If user is currently in the app, also present interactive dialog
+      if (AppState.currentState === 'active') {
+        Alert.alert(
+          notifTitle,
+          notifBody,
+          [
+            { text: 'Dismiss', style: 'cancel' },
+            {
+              text: 'View Booking',
+              onPress: () => this.handleNotificationNavigation(navigationRef, data),
+            },
+          ],
+          { cancelable: true }
+        );
+      }
+    };
+
     // 1. Foreground message handler
     const unsubscribeOnMessage = messaging().onMessage(async (remoteMessage) => {
       console.log('🔔 Foreground FCM notification received:', remoteMessage);
 
-      const cleanText = (str) =>
-        str
-          ? String(str)
-              .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{200D}\u{FE0F}]/gu, '')
-              .replace(/\s+/g, ' ')
-              .trim()
-          : '';
-
-      const title = cleanText(remoteMessage?.notification?.title) || 'Notification';
-      const body = cleanText(remoteMessage?.notification?.body) || '';
+      const title = remoteMessage?.notification?.title || remoteMessage?.data?.title || 'Booking Update';
+      const body = remoteMessage?.notification?.body || remoteMessage?.data?.body || '';
       const data = remoteMessage?.data || {};
 
-      Alert.alert(
-        title,
-        body,
-        [
-          { text: 'Dismiss', style: 'cancel' },
-          {
-            text: 'View',
-            onPress: () => this.handleNotificationNavigation(navigationRef, data),
-          },
-        ],
-        { cancelable: true }
-      );
+      const notifId = data.notificationId || remoteMessage?.messageId;
+      if (notifId) shownNotificationIds.add(notifId);
+
+      showNotificationAlert({ title, body, data });
     });
 
     // 2. Notification opened app while in background
@@ -190,7 +221,7 @@ export const fcmHelper = {
           console.log('🚀 Notification opened app from quit state:', remoteMessage);
           setTimeout(() => {
             this.handleNotificationNavigation(navigationRef, remoteMessage.data);
-          }, 1200); // Allow navigation stack to mount
+          }, 1200);
         }
       })
       .catch((err) => console.warn('⚠️ getInitialNotification error:', err.message));
@@ -198,7 +229,34 @@ export const fcmHelper = {
     // 4. Token refresh listener
     const unsubscribeOnTokenRefresh = this.setupTokenRefreshListener();
 
+    // 5. Active In-App & Background Poller for real-time booking notifications
+    const pollInterval = setInterval(async () => {
+      try {
+        if (AppState.currentState !== 'active') return;
+        const res = await notificationsApi.getAll();
+        const list = res?.data?.notifications || res?.notifications || [];
+        const now = Date.now();
+
+        // Check for fresh unread booking notifications in last 90 seconds
+        for (const notif of list) {
+          if (!notif.isRead && !notif.read && (notif.type === 'booking' || notif.data?.type === 'booking')) {
+            const notifTime = new Date(notif.createdAt).getTime();
+            if (now - notifTime < 90000 && !shownNotificationIds.has(notif.id)) {
+              shownNotificationIds.add(notif.id);
+              showNotificationAlert({
+                title: notif.title,
+                body: notif.body,
+                data: notif.data || { bookingId: notif.data?.bookingId, screen: 'BookingDetail', type: 'booking' },
+              });
+              break;
+            }
+          }
+        }
+      } catch {}
+    }, 10000);
+
     return () => {
+      clearInterval(pollInterval);
       unsubscribeOnMessage();
       unsubscribeOnNotificationOpenedApp();
       unsubscribeOnTokenRefresh();

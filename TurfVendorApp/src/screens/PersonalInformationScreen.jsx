@@ -1,5 +1,5 @@
 // @theme-ready ✅
-import React, { useState, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Image, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -8,6 +8,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { updateVendorProfile } from '../redux/authSlice';
+import bankApi from '../api/bankApi';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import { getImageUrl } from '../api/client';
@@ -195,9 +196,42 @@ const PersonalInformationScreen = ({ navigation }) => {
   const [focusedField, setFocusedField] = useState(null);
   const [errors, setErrors] = useState({});
 
+  // Bank & Payout Details state
+  const [accountHolderName, setAccountHolderName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [upiId, setUpiId] = useState('');
+  const [loadingBank, setLoadingBank] = useState(false);
+  const [savingBank, setSavingBank] = useState(false);
+  const [bankSuccess, setBankSuccess] = useState(false);
+
   // Crop & Preview Modal State
   const [tempImageUri, setTempImageUri] = useState(null);
   const [cropModalVisible, setCropModalVisible] = useState(false);
+
+  // Fetch initial bank details on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchBankDetails = async () => {
+      setLoadingBank(true);
+      try {
+        const res = await bankApi.getBankDetails();
+        const bData = res?.data || res || {};
+        if (isMounted) {
+          setAccountHolderName(bData.accountHolderName || bData.accountHolder || '');
+          setAccountNumber(bData.accountNumber || '');
+          setIfscCode(bData.ifscCode || bData.ifsc || '');
+          setUpiId(bData.upiId || bData.upi || '');
+        }
+      } catch (err) {
+        console.log('Error loading bank details:', err);
+      } finally {
+        if (isMounted) setLoadingBank(false);
+      }
+    };
+    fetchBankDetails();
+    return () => { isMounted = false; };
+  }, []);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -240,12 +274,54 @@ const PersonalInformationScreen = ({ navigation }) => {
   const validate = () => {
     const next = {};
     if (!name.trim()) next.name = 'Owner name is required';
-    if (!email.trim()) next.email = 'Email address is required';
+    if (!email.trim()) next.email = 'Enter a valid email address';
     else if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = 'Enter a valid email address';
     if (!contact.trim()) next.contact = 'Contact number is required';
     else if (!/^\d{10}$/.test(contact.trim())) next.contact = 'Enter a valid 10-digit mobile number';
     setErrors(next);
     return Object.keys(next).length === 0;
+  };
+
+  const handleSaveBankDetails = async () => {
+    if (!accountHolderName.trim() && !accountNumber.trim() && !ifscCode.trim() && !upiId.trim()) {
+      Alert.alert('Empty Details', 'Please fill in bank account or UPI details before saving.');
+      return;
+    }
+    const nextErrors = {};
+    if (accountHolderName.trim() || accountNumber.trim() || ifscCode.trim()) {
+      if (!accountHolderName.trim()) nextErrors.accountHolderName = 'Account holder name is required';
+      if (!accountNumber.trim()) nextErrors.accountNumber = 'Account number is required';
+      else if (!/^\d{9,18}$/.test(accountNumber.trim())) nextErrors.accountNumber = 'Enter valid 9-18 digit account number';
+
+      if (!ifscCode.trim()) nextErrors.ifscCode = 'IFSC code is required';
+      else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(ifscCode.trim())) nextErrors.ifscCode = 'Invalid IFSC format (e.g. SBIN0001234)';
+    }
+    if (upiId.trim() && !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId.trim())) {
+      nextErrors.upiId = 'Invalid UPI ID format (e.g. name@upi)';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors((prev) => ({ ...prev, ...nextErrors }));
+      return;
+    }
+
+    setSavingBank(true);
+    setBankSuccess(false);
+    try {
+      await bankApi.updateBankDetails({
+        accountHolderName: accountHolderName.trim(),
+        accountNumber: accountNumber.trim(),
+        ifscCode: ifscCode.trim().toUpperCase(),
+        upiId: upiId.trim(),
+      });
+      setBankSuccess(true);
+      Alert.alert('Bank Details Saved', 'Your payout bank and UPI details have been updated successfully.');
+      setTimeout(() => setBankSuccess(false), 4000);
+    } catch (err) {
+      Alert.alert('Save Failed', err?.message || 'Could not update bank details. Please try again.');
+    } finally {
+      setSavingBank(false);
+    }
   };
 
   const handleSave = async () => {
@@ -391,6 +467,144 @@ const PersonalInformationScreen = ({ navigation }) => {
               />
             </View>
             {errors.contact && <Text style={styles.errorText}>{errors.contact}</Text>}
+          </View>
+
+          {/* Bank & Payout Details Form Card */}
+          <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 16 }, SHADOWS.sm]}>
+            <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Bank & Payout Details</Text>
+            <Text style={[styles.cardHeaderSub, { color: colors.textSecondary }]}>
+              Enter your bank account or UPI ID for direct payout settlements
+            </Text>
+
+            {loadingBank ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ marginTop: 8, fontSize: 12, color: colors.textSecondary }}>Loading bank details...</Text>
+              </View>
+            ) : (
+              <>
+                {bankSuccess && (
+                  <View style={styles.successBanner}>
+                    <Feather name="check-circle" size={16} color="#00C566" style={{ marginRight: 6 }} />
+                    <Text style={styles.successBannerText}>Bank details saved successfully!</Text>
+                  </View>
+                )}
+
+                {/* Account Holder Name */}
+                <Text style={[styles.label, { color: colors.text }]}>Account Holder Name</Text>
+                <View
+                  style={[
+                    styles.inputRow,
+                    { backgroundColor: colors.inputBg, borderColor: focusedField === 'accountHolderName' ? colors.primary : colors.border },
+                    errors.accountHolderName && styles.inputRowError,
+                  ]}
+                >
+                  <Feather name="user-check" size={18} color={focusedField === 'accountHolderName' ? colors.primary : colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    value={accountHolderName}
+                    onFocus={() => setFocusedField('accountHolderName')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={(t) => { setAccountHolderName(t); if (errors.accountHolderName) setErrors((e) => ({ ...e, accountHolderName: null })); }}
+                    placeholder="e.g. John Doe"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                </View>
+                {errors.accountHolderName && <Text style={styles.errorText}>{errors.accountHolderName}</Text>}
+
+                {/* Account Number */}
+                <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Account Number</Text>
+                <View
+                  style={[
+                    styles.inputRow,
+                    { backgroundColor: colors.inputBg, borderColor: focusedField === 'accountNumber' ? colors.primary : colors.border },
+                    errors.accountNumber && styles.inputRowError,
+                  ]}
+                >
+                  <Feather name="credit-card" size={18} color={focusedField === 'accountNumber' ? colors.primary : colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    value={accountNumber}
+                    onFocus={() => setFocusedField('accountNumber')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={(t) => { setAccountNumber(t.replace(/[^0-9]/g, '')); if (errors.accountNumber) setErrors((e) => ({ ...e, accountNumber: null })); }}
+                    placeholder="9 to 18 digit account number"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                  />
+                </View>
+                {errors.accountNumber && <Text style={styles.errorText}>{errors.accountNumber}</Text>}
+
+                {/* IFSC Code */}
+                <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>IFSC Code</Text>
+                <View
+                  style={[
+                    styles.inputRow,
+                    { backgroundColor: colors.inputBg, borderColor: focusedField === 'ifscCode' ? colors.primary : colors.border },
+                    errors.ifscCode && styles.inputRowError,
+                  ]}
+                >
+                  <Feather name="hash" size={18} color={focusedField === 'ifscCode' ? colors.primary : colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text, autoCapitalize: 'characters' }]}
+                    value={ifscCode}
+                    onFocus={() => setFocusedField('ifscCode')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={(t) => { setIfscCode(t.toUpperCase()); if (errors.ifscCode) setErrors((e) => ({ ...e, ifscCode: null })); }}
+                    placeholder="e.g. SBIN0001234"
+                    placeholderTextColor={colors.textSecondary}
+                    autoCapitalize="characters"
+                    maxLength={11}
+                  />
+                </View>
+                {errors.ifscCode && <Text style={styles.errorText}>{errors.ifscCode}</Text>}
+
+                {/* UPI ID */}
+                <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>UPI ID (VPA)</Text>
+                <View
+                  style={[
+                    styles.inputRow,
+                    { backgroundColor: colors.inputBg, borderColor: focusedField === 'upiId' ? colors.primary : colors.border },
+                    errors.upiId && styles.inputRowError,
+                  ]}
+                >
+                  <Feather name="send" size={18} color={focusedField === 'upiId' ? colors.primary : colors.textSecondary} />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    value={upiId}
+                    onFocus={() => setFocusedField('upiId')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={(t) => { setUpiId(t); if (errors.upiId) setErrors((e) => ({ ...e, upiId: null })); }}
+                    placeholder="e.g. name@upi or mobile@paytm"
+                    placeholderTextColor={colors.textSecondary}
+                    autoCapitalize="none"
+                  />
+                </View>
+                {errors.upiId && <Text style={styles.errorText}>{errors.upiId}</Text>}
+
+                {/* Save Bank Details Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.saveBankBtn,
+                    { backgroundColor: colors.primary },
+                    savingBank && { opacity: 0.75 },
+                    { marginTop: 18 },
+                  ]}
+                  activeOpacity={0.85}
+                  onPress={handleSaveBankDetails}
+                  disabled={savingBank}
+                >
+                  {savingBank ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <>
+                      <Feather name="save" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.saveBankBtnText}>Save Bank & Payout Details</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           {/* Save CTA */}
@@ -740,6 +954,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: SIZES.sm,
     fontWeight: '800',
+  },
+  saveBankBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: SIZES.radius,
+  },
+  saveBankBtnText: {
+    color: '#FFFFFF',
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 197, 102, 0.12)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  successBannerText: {
+    color: '#00C566',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

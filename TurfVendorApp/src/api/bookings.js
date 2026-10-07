@@ -16,3 +16,5 @@ export const rejectBookingApi = (id, reason) =>
     method: 'POST',
     body: JSON.stringify({ action: 'reject', reason: reason || 'Slot unavailable' }),
   });
+
+export const getVendorPaymentsApi = () => apiRequest('/vendor/payments');

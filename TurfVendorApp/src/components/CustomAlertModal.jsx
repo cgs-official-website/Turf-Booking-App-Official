@@ -14,11 +14,20 @@ const { width } = Dimensions.get('window');
 const getAlertMeta = (title = '', message = '', buttons = []) => {
   const text = `${title} ${message}`.toLowerCase();
 
-  const hasDestructive = buttons.some((b) => b.style === 'destructive') ||
-    /delete|remove|reject|cancel booking|logout|sign out|permanent/i.test(text);
+  const isExplicitError = /error|failed|missing|invalid|mismatch|weak|warning/i.test(text);
+  const isSuccess = /submitted|success|updated|saved|activated|subscribed|confirmed|approved|complete|kyc/i.test(text);
 
-  const isSuccess = /success|updated|saved|activated|subscribed|confirmed|approved/i.test(text);
-  const isWarning = /error|failed|missing|invalid|mismatch|required|weak|warning/i.test(text);
+  if (isSuccess && !isExplicitError) {
+    return {
+      type: 'success',
+      icon: 'check-circle',
+      iconColor: '#00C566',
+      iconBg: 'rgba(0, 197, 102, 0.12)',
+    };
+  }
+
+  const hasDestructive = buttons.some((b) => b.style === 'destructive') ||
+    /delete|remove|reject|cancel booking|logout|sign out/i.test(text);
 
   if (hasDestructive) {
     return {
@@ -38,7 +47,7 @@ const getAlertMeta = (title = '', message = '', buttons = []) => {
     };
   }
 
-  if (isWarning) {
+  if (isExplicitError) {
     return {
       type: 'warning',
       icon: 'alert-circle',

@@ -29,9 +29,12 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (error && isFocused) {
+      const isNotFound = error.toLowerCase().includes('not found') || error.toLowerCase().includes('create new account');
       const isPending = error.toLowerCase().includes('pending') || error.toLowerCase().includes('approval');
       const isRejected = error.toLowerCase().includes('not approved') || error.toLowerCase().includes('rejected');
-      const title = isPending
+      const title = isNotFound
+        ? 'Account Not Found'
+        : isPending
         ? 'Account Pending Approval'
         : isRejected
         ? 'Account Not Approved'
@@ -167,7 +170,7 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Footer: Register New Turf */}
+        {/* Footer: Register New Turf & Vendor Enquiry */}
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.textSecondary }]}>New partner with a sports facility?</Text>
           <TouchableOpacity
@@ -176,7 +179,19 @@ const LoginScreen = ({ navigation }) => {
             activeOpacity={0.75}
           >
             <Feather name="plus-circle" size={16} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={[styles.registerBtnText, { color: colors.primary }]}>New Account</Text>
+            <Text style={[styles.registerBtnText, { color: colors.primary }]}>Create New Account</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('VendorEnquiry')}
+            style={[
+              styles.registerBtn,
+              { borderColor: colors.border, backgroundColor: colors.card, marginTop: 12 },
+            ]}
+            activeOpacity={0.75}
+          >
+            <Feather name="message-square" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.registerBtnText, { color: colors.primary }]}>Vendor Enquiry</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
