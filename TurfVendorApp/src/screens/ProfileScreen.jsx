@@ -25,8 +25,8 @@ const SectionHeader = ({ title, icon, colors }) => (
 
 const MenuItem = ({
   icon,
-  iconBg = 'rgba(0, 197, 102, 0.1)',
-  iconColor = '#00C566',
+  iconBg = 'rgba(15, 118, 110, 0.1)',
+  iconColor = '#0F766E',
   label,
   subLabel,
   onPress,
@@ -232,7 +232,7 @@ const ProfileScreen = ({ navigation }) => {
               </View>
             )}
             <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={18} color="#00C566" />
+              <Ionicons name="checkmark-circle" size={18} color="#0F766E" />
             </View>
           </View>
 
@@ -245,9 +245,9 @@ const ProfileScreen = ({ navigation }) => {
           </Text>
 
           <View style={styles.badgeRow}>
-            <View style={[styles.statusPill, { backgroundColor: 'rgba(0, 197, 102, 0.12)', borderColor: 'rgba(0, 197, 102, 0.3)' }]}>
-              <View style={[styles.statusDot, { backgroundColor: '#00C566' }]} />
-              <Text style={[styles.statusPillText, { color: '#00C566' }]}>
+            <View style={[styles.statusPill, { backgroundColor: 'rgba(15, 118, 110, 0.12)', borderColor: 'rgba(15, 118, 110, 0.3)' }]}>
+              <View style={[styles.statusDot, { backgroundColor: '#0F766E' }]} />
+              <Text style={[styles.statusPillText, { color: '#0F766E' }]}>
                 {turfStatus === 'active' ? 'VERIFIED PARTNER' : 'VENDOR ACCOUNT'}
               </Text>
             </View>
@@ -314,8 +314,8 @@ const ProfileScreen = ({ navigation }) => {
           />
           <MenuItem
             icon="map-pin"
-            iconBg="rgba(16, 185, 129, 0.12)"
-            iconColor="#10B981"
+            iconBg="rgba(15, 118, 110, 0.12)"
+            iconColor="#0F766E"
             label="Turf Profile & Facilities"
             subLabel="Photos, sports, opening hours & pricing"
             onPress={() => navigation.navigate('TurfProfile')}
@@ -332,8 +332,8 @@ const ProfileScreen = ({ navigation }) => {
           />
           <MenuItem
             icon="shield"
-            iconBg="rgba(16, 185, 129, 0.12)"
-            iconColor="#10B981"
+            iconBg="rgba(15, 118, 110, 0.12)"
+            iconColor="#0F766E"
             label="Vendor Identity KYC"
             subLabel="Aadhaar Front/Back and PAN documents"
             onPress={() => navigation.navigate('VendorVerification')}
@@ -569,14 +569,14 @@ const styles = StyleSheet.create({
   subBadgeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 197, 102, 0.25)',
+    backgroundColor: 'rgba(15, 118, 110, 0.25)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
     gap: 4,
   },
   subBadgeText: {
-    color: '#00C566',
+    color: '#0F766E',
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.5,

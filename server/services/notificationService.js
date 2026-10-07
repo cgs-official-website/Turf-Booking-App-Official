@@ -221,7 +221,7 @@ const notificationService = {
               channelId: 'turf_notifications',
               sound: 'default',
               icon: 'ic_notification',
-              color: '#00C566',
+              color: '#0F766E',
               priority: 'high',
               visibility: 'public',
               defaultSound: true,

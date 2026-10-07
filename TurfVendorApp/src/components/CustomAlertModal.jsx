@@ -21,8 +21,8 @@ const getAlertMeta = (title = '', message = '', buttons = []) => {
     return {
       type: 'success',
       icon: 'check-circle',
-      iconColor: '#00C566',
-      iconBg: 'rgba(0, 197, 102, 0.12)',
+      iconColor: '#0F766E',
+      iconBg: 'rgba(15, 118, 110, 0.12)',
     };
   }
 
@@ -42,8 +42,8 @@ const getAlertMeta = (title = '', message = '', buttons = []) => {
     return {
       type: 'success',
       icon: 'check-circle',
-      iconColor: '#00C566',
-      iconBg: 'rgba(0, 197, 102, 0.12)',
+      iconColor: '#0F766E',
+      iconBg: 'rgba(15, 118, 110, 0.12)',
     };
   }
 

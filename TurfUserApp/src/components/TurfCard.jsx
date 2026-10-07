@@ -112,7 +112,7 @@ export default function TurfCard({
           {/* Top floating badges */}
           <View style={styles.topFloatingRow}>
             <View style={styles.verifiedBadge}>
-              <Feather name="check-circle" size={12} color="#10B981" style={{ marginRight: 4 }} />
+              <Feather name="check-circle" size={12} color="#0F766E" style={{ marginRight: 4 }} />
               <Text style={styles.verifiedText}>Verified Pitch</Text>
             </View>
 

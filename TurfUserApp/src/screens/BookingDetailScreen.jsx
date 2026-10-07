@@ -159,7 +159,7 @@ export default function BookingDetailScreen({ route, navigation }) {
 
           <View style={[styles.summaryRow, { borderBottomWidth: 0 }]}>
             <Text style={[styles.summaryLabel, { color: C.subtext }]}>Payment Status</Text>
-            <Text style={{ color: isPaid ? '#10B981' : (booking.paymentMethod === 'cash' ? '#F59E0B' : '#EF4444'), fontWeight: '800' }}>
+            <Text style={{ color: isPaid ? '#0F766E' : (booking.paymentMethod === 'cash' ? '#F59E0B' : '#EF4444'), fontWeight: '800' }}>
               {isPaid
                 ? 'PAID ONLINE'
                 : (booking.paymentMethod === 'cash' || booking.paymentMode === 'hand_cash'

@@ -7,8 +7,8 @@ import { useTheme } from '../context/ThemeContext';
 
 const STATUS_CONFIG = {
   pending:   { bg: 'rgba(245, 158, 11, 0.12)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.3)', label: 'PENDING' },
-  confirmed: { bg: 'rgba(16, 185, 129, 0.12)', text: '#10B981', border: 'rgba(16, 185, 129, 0.3)', label: 'CONFIRMED' },
-  accepted:  { bg: 'rgba(16, 185, 129, 0.12)', text: '#10B981', border: 'rgba(16, 185, 129, 0.3)', label: 'CONFIRMED' },
+  confirmed: { bg: 'rgba(15, 118, 110, 0.12)', text: '#0F766E', border: 'rgba(15, 118, 110, 0.3)', label: 'CONFIRMED' },
+  accepted:  { bg: 'rgba(15, 118, 110, 0.12)', text: '#0F766E', border: 'rgba(15, 118, 110, 0.3)', label: 'CONFIRMED' },
   rejected:  { bg: 'rgba(239, 68, 68, 0.12)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.3)', label: 'REJECTED' },
   cancelled: { bg: 'rgba(156, 163, 175, 0.12)', text: '#9CA3AF', border: 'rgba(156, 163, 175, 0.3)', label: 'CANCELLED' },
 };

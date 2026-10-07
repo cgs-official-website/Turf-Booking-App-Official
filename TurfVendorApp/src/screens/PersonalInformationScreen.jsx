@@ -485,7 +485,7 @@ const PersonalInformationScreen = ({ navigation }) => {
               <>
                 {bankSuccess && (
                   <View style={styles.successBanner}>
-                    <Feather name="check-circle" size={16} color="#00C566" style={{ marginRight: 6 }} />
+                    <Feather name="check-circle" size={16} color="#0F766E" style={{ marginRight: 6 }} />
                     <Text style={styles.successBannerText}>Bank details saved successfully!</Text>
                   </View>
                 )}
@@ -858,7 +858,7 @@ const styles = StyleSheet.create({
     height: 264,
     borderRadius: 132,
     borderWidth: 2.5,
-    borderColor: '#00C566',
+    borderColor: '#0F766E',
   },
   cropGuideText: {
     color: '#94A3B8',
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#00C566',
+    backgroundColor: '#0F766E',
   },
 
   cropBottomBar: {
@@ -970,13 +970,13 @@ const styles = StyleSheet.create({
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 197, 102, 0.12)',
+    backgroundColor: 'rgba(15, 118, 110, 0.12)',
     padding: 10,
     borderRadius: 8,
     marginBottom: 12,
   },
   successBannerText: {
-    color: '#00C566',
+    color: '#0F766E',
     fontSize: 12,
     fontWeight: '600',
   },

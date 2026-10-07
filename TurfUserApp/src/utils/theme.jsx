@@ -17,16 +17,16 @@ export const LIGHT_COLORS = {
   // Borders & Dividers
   border:       '#E2E8F0',    // Clean subtle border
   borderSubtle: '#F1F5F9',
-  borderFocus:  '#10B981',
+  borderFocus:  '#0F766E',
 
   // Primary Sports Brand (Emerald Action)
-  primary:      '#0CB053',    // Turf Emerald Green
-  primaryDark:  '#065F46',    // Deep Forest Green
+  primary:      '#0F766E',    // Turf Emerald Green
+  primaryDark:  '#0d655e',    // Deep Forest Green
   primaryLight: '#D1FAE5',    // Soft Mint highlight
-  primaryGradient: ['#0CB053', '#059669'],
+  primaryGradient: ['#0F766E', '#0d655e'],
 
   // Secondary & Energy Accents
-  accent:       '#10B981',
+  accent:       '#0F766E',
   secondary:    '#0F172A',    // Deep Stadium Navy
   orange:       '#F97316',    // Cricket ball orange
   orangeBg:     '#FFEDD5',
@@ -36,7 +36,7 @@ export const LIGHT_COLORS = {
   blueBg:       '#DBEAFE',
 
   // Semantic Status Colors
-  success:      '#10B981',    // Confirmed / Available
+  success:      '#0F766E',    // Confirmed / Available
   successBg:    '#D1FAE5',
   warning:      '#F59E0B',    // Held / Pending
   warningBg:    '#FEF3C7',
@@ -69,13 +69,13 @@ export const DARK_COLORS = {
   // Borders & Dividers
   border:       '#223249',    // High-contrast slate border
   borderSubtle: '#18273D',
-  borderFocus:  '#10B981',
+  borderFocus:  '#0F766E',
 
   // Primary Sports Brand (Emerald Action)
-  primary:      '#10B981',    // Vibrant Emerald for Dark Mode
+  primary:      '#0F766E',    // Vibrant Emerald for Dark Mode
   primaryDark:  '#059669',
   primaryLight: '#064E3B',    // Deep Mint glow
-  primaryGradient: ['#10B981', '#059669'],
+  primaryGradient: ['#0F766E', '#059669'],
 
   // Secondary & Energy Accents
   accent:       '#34D399',

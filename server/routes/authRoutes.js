@@ -17,6 +17,13 @@ router.post('/verify-otp', authController.verifyPhoneOtp); // Alias for mobile a
 router.post('/otp/send-email', otpRateLimiter, authController.sendEmailOtp);
 router.post('/otp/verify-email', authController.verifyEmailOtp);
 
+// Password Reset Endpoints
+router.post('/forgot-password', otpRateLimiter, authController.forgotPassword);
+router.post('/verify-reset-otp', authController.verifyResetOtp);
+router.post('/reset-password', authController.resetPassword);
+router.post('/vendor/auth/forgot-password', otpRateLimiter, authController.forgotPassword);
+router.post('/vendor/auth/reset-password', authController.resetPassword);
+
 // Google Sign-In Endpoint
 router.post('/google', verifyFirebaseToken, authController.googleAuth);
 

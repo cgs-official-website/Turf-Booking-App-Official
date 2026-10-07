@@ -115,7 +115,7 @@ const BookingDetailScreen = ({ route, navigation }) => {
     : isCash
       ? 'Pending (Pay at Turf)'
       : (booking.paymentStatus ? booking.paymentStatus.toUpperCase() : 'Pending');
-  const paymentStatusColor = isPaid ? (colors.success || '#10B981') : (colors.warning || '#F59E0B');
+  const paymentStatusColor = isPaid ? (colors.success || '#0F766E') : (colors.warning || '#F59E0B');
 
   const turfTypeName =
     booking.sport ||

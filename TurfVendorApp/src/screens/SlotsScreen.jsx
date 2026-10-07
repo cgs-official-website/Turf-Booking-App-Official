@@ -76,9 +76,9 @@ const getNextDays = (count = 14) => {
 const getStatusMeta = (colors) => ({
   available: {
     label: 'Available',
-    color: colors.success || '#10B981',
-    bg: 'rgba(16, 185, 129, 0.08)',
-    border: 'rgba(16, 185, 129, 0.28)',
+    color: colors.success || '#0F766E',
+    bg: 'rgba(15, 118, 110, 0.08)',
+    border: 'rgba(15, 118, 110, 0.28)',
     actionText: 'Block',
     actionColor: '#EF4444',
   },
@@ -104,7 +104,7 @@ const getStatusMeta = (colors) => ({
     bg: 'rgba(107, 114, 128, 0.1)',
     border: 'rgba(107, 114, 128, 0.25)',
     actionText: 'Unblock',
-    actionColor: colors.success || '#10B981',
+    actionColor: colors.success || '#0F766E',
   },
   completed: {
     label: 'Completed',
@@ -392,10 +392,10 @@ const SlotsScreen = ({ navigation }) => {
             onPress={() => setFilterType(filterType === 'available' ? 'all' : 'available')}
             activeOpacity={0.7}
           >
-            <View style={[styles.statIconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
-              <Feather name="check-circle" size={14} color={colors.success || '#10B981'} />
+            <View style={[styles.statIconBadge, { backgroundColor: 'rgba(15, 118, 110, 0.12)' }]}>
+              <Feather name="check-circle" size={14} color={colors.success || '#0F766E'} />
             </View>
-            <Text style={[styles.statNum, { color: colors.success || '#10B981' }]}>
+            <Text style={[styles.statNum, { color: colors.success || '#0F766E' }]}>
               {String(slotCounts?.available ?? availableSlots.length).padStart(2, '0')}
             </Text>
             <Text style={styles.statLabel}>AVAILABLE</Text>
@@ -620,7 +620,7 @@ const SlotsScreen = ({ navigation }) => {
                             <Text style={styles.modalCancelText}>Cancel</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
-                            style={[styles.modalActionBtn, modalSlot.status === 'frozen' ? { backgroundColor: colors.success || '#10B981' } : { backgroundColor: colors.error || '#EF4444' }]}
+                            style={[styles.modalActionBtn, modalSlot.status === 'frozen' ? { backgroundColor: colors.success || '#0F766E' } : { backgroundColor: colors.error || '#EF4444' }]}
                             disabled={slotActionLoading}
                             onPress={() => doFreeze(modalSlot, modalSlot.status === 'frozen' ? 'unfreeze' : 'freeze')}
                             activeOpacity={0.85}
@@ -888,7 +888,7 @@ const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors,
                 key={l}
                 style={[
                   calModalStyles.weekLabel,
-                  { color: idx === 0 || idx === 6 ? (colors.primary || '#10B981') : colors.textSecondary },
+                  { color: idx === 0 || idx === 6 ? (colors.primary || '#0F766E') : colors.textSecondary },
                 ]}
               >
                 {l}
@@ -907,8 +907,8 @@ const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors,
                   key={c.key}
                   style={[
                     calModalStyles.cell,
-                    c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#10B981' }],
-                    c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#10B981' }],
+                    c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#0F766E' }],
+                    c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#0F766E' }],
                   ]}
                   onPress={() => onSelectDate(c.date)}
                   activeOpacity={0.7}
@@ -918,7 +918,7 @@ const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors,
                       calModalStyles.cellText,
                       { color: colors.text },
                       c.isSelected && calModalStyles.selectedCellText,
-                      c.isToday && !c.isSelected && { color: colors.primary || '#10B981', fontWeight: '700' },
+                      c.isToday && !c.isSelected && { color: colors.primary || '#0F766E', fontWeight: '700' },
                       c.isPast && !c.isSelected && { color: colors.textSecondary, opacity: 0.45 },
                     ]}
                   >
@@ -936,7 +936,7 @@ const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors,
               style={[calModalStyles.footerBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F3F4F6' }]}
               activeOpacity={0.7}
             >
-              <Text style={[calModalStyles.footerBtnText, { color: colors.primary || '#10B981' }]}>Today</Text>
+              <Text style={[calModalStyles.footerBtnText, { color: colors.primary || '#0F766E' }]}>Today</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={onClose}
@@ -1016,7 +1016,7 @@ const calModalStyles = StyleSheet.create({
   },
   selectedCell: {
     elevation: 3,
-    shadowColor: '#10B981',
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,

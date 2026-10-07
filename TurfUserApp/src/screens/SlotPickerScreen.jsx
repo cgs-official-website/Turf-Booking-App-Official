@@ -124,7 +124,7 @@ export default function SlotPickerScreen({ route, navigation }) {
       }
     }
 
-    return { status: 'available', label: 'Available', color: '#10B981', isAvail: true };
+    return { status: 'available', label: 'Available', color: '#0F766E', isAvail: true };
   };
 
   const endSlots = useMemo(() => {

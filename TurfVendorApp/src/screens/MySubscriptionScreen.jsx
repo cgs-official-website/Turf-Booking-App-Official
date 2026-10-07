@@ -68,7 +68,7 @@ const HistoryCard = ({ invoice, onViewInvoice, colors }) => {
 
 const PaymentTransactionCard = ({ payment, colors }) => {
   const isCaptured = payment.status === 'captured' || payment.status === 'success' || payment.status === 'paid' || payment.status === 'completed';
-  const statusColor = isCaptured ? '#00C566' : payment.status === 'failed' ? '#EF4444' : '#F59E0B';
+  const statusColor = isCaptured ? '#0F766E' : payment.status === 'failed' ? '#EF4444' : '#F59E0B';
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, marginTop: 10 }, SHADOWS.sm]}>
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   browsePlansBtn: {
-    backgroundColor: '#00C566',
+    backgroundColor: '#0F766E',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -322,13 +322,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   statusPill: {
-    backgroundColor: 'rgba(0, 197, 102, 0.12)',
+    backgroundColor: 'rgba(15, 118, 110, 0.12)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   statusPillText: {
-    color: '#00C566',
+    color: '#0F766E',
     fontSize: 9,
     fontWeight: '800',
   },
