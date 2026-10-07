@@ -229,7 +229,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
               <Icon name="clock" size={18} color="#3B82F6" />
             </View>
-            <Text style={styles.statNumber}>{stats.availableSlots ?? 24}</Text>
+            <Text style={styles.statNumber}>{stats.availableSlots ?? stats.openSlots ?? 0}</Text>
             <Text style={styles.statTitle}>Open Slots</Text>
           </View>
 

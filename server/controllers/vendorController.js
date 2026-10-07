@@ -34,6 +34,94 @@ function formatVendor(v) {
   };
 }
 
+/**
+ * Calculate dynamic live open slots for today for a vendor
+ * Formula:
+ * - Start with total slots for today based on operating hours (e.g. 06:00 to 23:00)
+ * - Automatically subtract past/expired hours for today (e.g. startMin < currentMinutes)
+ * - Subtract slots booked by customers
+ * - Subtract slots blocked/frozen by vendor
+ */
+async function calculateVendorTodayOpenSlots(vendorId) {
+  const { dateStr: todayStr, timeStr: currentTimeStr } = bookingService.getKolkataTimeInfo();
+  const [curH, curM] = currentTimeStr.split(':').map(Number);
+  const currentMin = (isNaN(curH) ? 0 : curH) * 60 + (isNaN(curM) ? 0 : curM);
+
+  const turfs = await prisma.turf.findMany({
+    where: { vendorId },
+  });
+
+  if (!turfs || turfs.length === 0) {
+    return 0;
+  }
+
+  let totalAvailableSlots = 0;
+
+  for (const t of turfs) {
+    const open = t.slotConfig?.openTime || '06:00';
+    const close = t.slotConfig?.closeTime || '23:00';
+    const duration = Number(t.slotConfig?.slotDurationMins) || 60;
+
+    const [openH = 6, openM = 0] = String(open).split(':').map(Number);
+    const [closeH = 23, closeM = 0] = String(close).split(':').map(Number);
+    const startMin = (isNaN(openH) ? 6 : openH) * 60 + (isNaN(openM) ? 0 : openM);
+    const endMin = (isNaN(closeH) ? 23 : closeH) * 60 + (isNaN(closeM) ? 0 : closeM);
+
+    let bookedSlots = [];
+    try {
+      bookedSlots = await bookingService.activeForSlot(t.id, todayStr);
+    } catch (err) {
+      console.warn('activeForSlot check error:', err.message);
+    }
+
+    let blocked = [];
+    try {
+      const override = await prisma.slotOverride.findUnique({
+        where: { turfId_date: { turfId: t.id, date: todayStr } },
+      });
+      if (override && Array.isArray(override.blockedSlots)) {
+        blocked = override.blockedSlots;
+      }
+    } catch (err) {
+      console.warn('Error reading slot overrides:', err.message);
+    }
+
+    for (let m = startMin; m < endMin; m += duration) {
+      // Past / expired slots check:
+      // If slot start minute is before current minute, it is expired/past
+      if (m < currentMin) {
+        continue;
+      }
+
+      const sH = String(Math.floor(m / 60)).padStart(2, '0');
+      const sM = String(m % 60).padStart(2, '0');
+      const eH = String(Math.floor((m + duration) / 60)).padStart(2, '0');
+      const eM = String((m + duration) % 60).padStart(2, '0');
+      const startTime = `${sH}:${sM}`;
+      const endTime = `${eH}:${eM}`;
+      const slotKey = `${startTime}-${endTime}`;
+
+      // Customer booked check:
+      const isBooked = bookedSlots.some((x) => {
+        const xEnd = x.endTime || `${String(Number(x.startTime.split(':')[0]) + 1).padStart(2, '0')}:${x.startTime.split(':')[1] || '00'}`;
+        return x.startTime < endTime && xEnd > startTime;
+      });
+      if (isBooked) {
+        continue;
+      }
+
+      // Vendor blocked check:
+      if (blocked.includes(startTime) || blocked.includes(slotKey)) {
+        continue;
+      }
+
+      totalAvailableSlots++;
+    }
+  }
+
+  return totalAvailableSlots;
+}
+
 const vendorController = {
   formatVendor,
 
@@ -431,7 +519,16 @@ const vendorController = {
 
       const cached = await cacheService.get(cacheKey);
       if (cached) {
-        return sendSuccess(res, cached);
+        const availableSlots = await calculateVendorTodayOpenSlots(uid);
+        const updatedPayload = {
+          ...cached,
+          stats: {
+            ...cached.stats,
+            availableSlots,
+            openSlots: availableSlots,
+          },
+        };
+        return sendSuccess(res, updatedPayload);
       }
 
       const { dateStr: todayStr } = bookingService.getKolkataTimeInfo();
@@ -449,6 +546,7 @@ const vendorController = {
         .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
 
       const pendingRequests = allBookings.filter((b) => b.status === 'pending');
+      const availableSlots = await calculateVendorTodayOpenSlots(uid);
 
       const payload = {
         stats: {
@@ -457,12 +555,14 @@ const vendorController = {
           totalRevenue,
           todayRevenue,
           pendingRequestsCount: pendingRequests.length,
+          availableSlots,
+          openSlots: availableSlots,
         },
         todaySchedule: todayBookings,
         recentBookings: allBookings.slice(0, 5),
       };
 
-      await cacheService.set(cacheKey, payload, 60);
+      await cacheService.set(cacheKey, payload, 30);
 
       return sendSuccess(res, payload);
     } catch (err) {
@@ -1212,6 +1312,7 @@ const vendorController = {
       });
 
       await cacheService.invalidateSlots(turfId, dateStr);
+      await cacheService.del(`vendor:dashboard:${uid}`);
 
       return sendSuccess(res, {
         date: dateStr,
