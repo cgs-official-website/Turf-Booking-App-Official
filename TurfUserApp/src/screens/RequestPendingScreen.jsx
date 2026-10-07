@@ -135,7 +135,7 @@ export default function RequestPendingScreen({ route, navigation }) {
                 : (dark ? '#1A2E20' : '#ECFDF5'),
               borderColor: isRejected || isCancelled || isExpired
                 ? '#EF4444'
-                : '#10B981',
+                : '#0F766E',
             },
           ]}
         >
@@ -145,7 +145,7 @@ export default function RequestPendingScreen({ route, navigation }) {
               {
                 backgroundColor: isRejected || isCancelled || isExpired
                   ? '#EF4444'
-                  : '#10B981',
+                  : '#0F766E',
               },
             ]}
           >

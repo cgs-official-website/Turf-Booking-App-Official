@@ -19,7 +19,7 @@ const { width, height } = Dimensions.get('window');
 const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
 const AMENITY_CONFIG = {
-  'FIFA Approved Turf': { icon: 'award', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
+  'FIFA Approved Turf': { icon: 'award', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
   Floodlights:          { icon: 'sun', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
   Parking:              { icon: 'truck', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.12)' },
   'Locker Room':        { icon: 'lock', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
@@ -28,13 +28,13 @@ const AMENITY_CONFIG = {
   'Mineral Water':      { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
   'Water Dispenser':    { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
   Cafeteria:            { icon: 'coffee', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)' },
-  Dugout:               { icon: 'shield', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
+  Dugout:               { icon: 'shield', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
   CCTV:                 { icon: 'video', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },
   'First Aid':          { icon: 'plus-circle', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
   'Cricket Nets':       { icon: 'grid', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
   'Bowling Machine':    { icon: 'zap', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)' },
   'Badminton Courts':   { icon: 'activity', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  'Tennis Court':       { icon: 'circle', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
+  'Tennis Court':       { icon: 'circle', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
   'Basketball Court':   { icon: 'disc', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
 };
 
@@ -251,7 +251,7 @@ export default function TurfDetailScreen({ route, navigation }) {
 
               {/* Elegant Modern Photo Count Pill */}
               <View style={styles.photoCountPill}>
-                <Ionicons name="images-outline" size={13} color="#10B981" style={{ marginRight: 5 }} />
+                <Ionicons name="images-outline" size={13} color="#0F766E" style={{ marginRight: 5 }} />
                 <Text style={styles.photoCountCurrent}>{imgIndex + 1}</Text>
                 <Text style={styles.photoCountDivider}> / </Text>
                 <Text style={styles.photoCountTotal}>{images.length}</Text>
@@ -264,8 +264,8 @@ export default function TurfDetailScreen({ route, navigation }) {
         <View style={styles.contentWrap}>
           {/* Top Badge & Rating Strip */}
           <View style={styles.badgeRow}>
-            <View style={[styles.verifiedPill, { backgroundColor: 'rgba(16, 185, 129, 0.14)' }]}>
-              <Feather name="check-circle" size={13} color="#10B981" style={{ marginRight: 5 }} />
+            <View style={[styles.verifiedPill, { backgroundColor: 'rgba(15, 118, 110, 0.14)' }]}>
+              <Feather name="check-circle" size={13} color="#0F766E" style={{ marginRight: 5 }} />
               <Text style={styles.verifiedText}>Verified Pitch Partner</Text>
             </View>
             <View style={[styles.ratingPill, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -287,7 +287,7 @@ export default function TurfDetailScreen({ route, navigation }) {
           {/* Quick Info Grid (3 Pillars) */}
           <View style={[styles.quickInfoGrid, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
             <View style={styles.infoCol}>
-              <View style={[styles.infoIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <View style={[styles.infoIconCircle, { backgroundColor: 'rgba(15, 118, 110, 0.12)' }]}>
                 <Feather name="clock" size={16} color={C.primary} />
               </View>
               <Text style={[styles.infoVal, { color: C.text }]}>{openTiming}</Text>
@@ -730,7 +730,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
   },
   verifiedText: {
-    color: '#10B981',
+    color: '#0F766E',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -1078,7 +1078,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   thumbBoxActive: {
-    borderColor: '#10B981',
+    borderColor: '#0F766E',
     opacity: 1,
     transform: [{ scale: 1.08 }],
   },

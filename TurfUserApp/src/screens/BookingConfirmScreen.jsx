@@ -394,7 +394,7 @@ export default function BookingConfirmScreen({ route, navigation }) {
 
           <View style={styles.invoiceRow}>
             <Text style={[styles.invoiceItem, { color: C.subtext }]}>Convenience Fee & Taxes</Text>
-            <Text style={[styles.invoiceVal, { color: '#10B981', fontWeight: '700' }]}>FREE</Text>
+            <Text style={[styles.invoiceVal, { color: '#0F766E', fontWeight: '700' }]}>FREE</Text>
           </View>
 
           <View style={[styles.invoiceDivider, { backgroundColor: C.border }]} />
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B981',
+    backgroundColor: '#0F766E',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: RADIUS.round,
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
   },
   badgePillText: {
-    color: '#10B981',
+    color: '#0F766E',
     fontSize: 10,
     fontWeight: '800',
   },

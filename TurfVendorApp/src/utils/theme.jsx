@@ -2,8 +2,8 @@ import { StyleSheet } from 'react-native';
 
 // ---- Light palette (existing colors, unchanged) ----------------------------
 export const lightColors = {
-  primary: '#00C566',
-  primaryDark: '#00A855',
+  primary: '#0F766E',
+  primaryDark: '#0D655E',
   primaryLight: '#E6FFF4',
   secondary: '#1A1A2E',
   background: '#F8F9FA',
@@ -15,7 +15,7 @@ export const lightColors = {
   border: '#E5E7EB',
   error: '#EF4444',
   warning: '#F59E0B',
-  success: '#10B981',
+  success: '#0F766E',
   card: '#FFFFFF',
   inputBg: '#F3F4F6',
   shadow: 'rgba(0,0,0,0.08)',
@@ -24,7 +24,7 @@ export const lightColors = {
 
 // ---- Dark palette ------------------------------------------------------------
 export const darkColors = {
-  primary: '#00C566',
+  primary: '#0F766E',
   primaryDark: '#00A855',
   primaryLight: '#0F3D2A',
   secondary: '#0F0F1A',

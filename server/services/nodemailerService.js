@@ -43,7 +43,7 @@ const nodemailerService = {
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-        <h2 style="color: #10b981; text-align: center;">Turf Booking App</h2>
+        <h2 style="color: #0F766E; text-align: center;">Turf Booking App</h2>
         <p style="font-size: 16px; color: #333;">Hello,</p>
         <p style="font-size: 16px; color: #555;">Your one-time verification code is:</p>
         <div style="text-align: center; margin: 24px 0;">
@@ -95,7 +95,7 @@ const nodemailerService = {
     const htmlContent = `
       <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 20px;">
-          <h2 style="color: #10b981; margin: 0; font-size: 24px; font-weight: 800;">Turf Booking Partner</h2>
+          <h2 style="color: #0F766E; margin: 0; font-size: 24px; font-weight: 800;">Turf Booking Partner</h2>
           <p style="color: #6b7280; font-size: 14px; margin-top: 4px;">Vendor Password Reset Request</p>
         </div>
         <div style="padding: 20px; background-color: #f9fafb; border-radius: 8px; border: 1px solid #f3f4f6;">

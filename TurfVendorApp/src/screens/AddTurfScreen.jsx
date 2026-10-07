@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   rupeeSign: {
     fontSize: SIZES.base,
     fontWeight: '800',
-    color: '#00C566',
+    color: '#0F766E',
     marginRight: 6,
   },
   input: {

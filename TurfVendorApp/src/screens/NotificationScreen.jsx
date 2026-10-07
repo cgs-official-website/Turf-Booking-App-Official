@@ -50,8 +50,8 @@ const buildBookingNotifications = (bookings = [], colors) => (Array.isArray(book
     title = 'Booking Confirmed';
     body = `Slot for ${b.userName || 'Player'} on ${b.date || 'selected date'} is confirmed`;
     icon = 'check-circle';
-    iconBg = 'rgba(0, 197, 102, 0.12)';
-    iconColor = '#00C566';
+    iconBg = 'rgba(15, 118, 110, 0.12)';
+    iconColor = '#0F766E';
   } else if (b.status === 'rejected' || b.status === 'cancelled') {
     title = 'Booking Cancelled';
     body = `Reservation for ${b.userName || 'Player'} has been cancelled`;

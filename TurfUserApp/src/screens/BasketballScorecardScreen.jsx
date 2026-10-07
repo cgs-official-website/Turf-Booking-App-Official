@@ -554,7 +554,7 @@ export default function BasketballScorecardScreen({ route, navigation }) {
               </Text>
               <View style={styles.ptsBtnGroup}>
                 <TouchableOpacity
-                  style={[styles.ptBtn, { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}
+                  style={[styles.ptBtn, { backgroundColor: '#ECFDF5', borderColor: '#0F766E' }]}
                   onPress={() => addPoints('A', 1)}
                 >
                   <Text style={[styles.ptBtnText, { color: '#047857' }]}>+1 FT</Text>
@@ -581,7 +581,7 @@ export default function BasketballScorecardScreen({ route, navigation }) {
               </Text>
               <View style={styles.ptsBtnGroup}>
                 <TouchableOpacity
-                  style={[styles.ptBtn, { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}
+                  style={[styles.ptBtn, { backgroundColor: '#ECFDF5', borderColor: '#0F766E' }]}
                   onPress={() => addPoints('B', 1)}
                 >
                   <Text style={[styles.ptBtnText, { color: '#047857' }]}>+1 FT</Text>
@@ -800,7 +800,7 @@ export default function BasketballScorecardScreen({ route, navigation }) {
                 .map((p) => (
                   <TouchableOpacity
                     key={p.id}
-                    style={[styles.chip, subInPlayer === p.id && { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}
+                    style={[styles.chip, subInPlayer === p.id && { backgroundColor: '#ECFDF5', borderColor: '#0F766E' }]}
                     onPress={() => setSubInPlayer(p.id)}
                   >
                     <Text style={[styles.chipText, subInPlayer === p.id && { color: '#047857', fontWeight: '800' }]}>

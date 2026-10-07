@@ -93,8 +93,8 @@ const ReportIssuesScreen = ({ navigation }) => {
         </View>
 
         <ScrollView contentContainerStyle={styles.successContent} showsVerticalScrollIndicator={false}>
-          <View style={[styles.successIconCircle, { backgroundColor: 'rgba(0, 197, 102, 0.12)' }]}>
-            <Ionicons name="checkmark-circle" size={72} color="#00C566" />
+          <View style={[styles.successIconCircle, { backgroundColor: 'rgba(15, 118, 110, 0.12)' }]}>
+            <Ionicons name="checkmark-circle" size={72} color="#0F766E" />
           </View>
 
           <Text style={[styles.successTitle, { color: colors.text }]}>Ticket Submitted!</Text>

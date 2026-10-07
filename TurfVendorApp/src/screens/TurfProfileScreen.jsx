@@ -258,7 +258,7 @@ const TurfProfileScreen = ({ navigation, route }) => {
               <Image source={{ uri: getImageUrl(logo) }} style={styles.heroLogo} />
             ) : (
               <View style={styles.heroLogoFallback}>
-                <Ionicons name="football" size={28} color="#00C566" />
+                <Ionicons name="football" size={28} color="#0F766E" />
               </View>
             )}
             <View style={styles.cameraBadge}>
@@ -586,7 +586,7 @@ const getStyles = (colors) => StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#00C566',
+    backgroundColor: '#0F766E',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -605,12 +605,12 @@ const getStyles = (colors) => StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00C566',
+    backgroundColor: '#0F766E',
   },
   liveTagText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#00C566',
+    color: '#0F766E',
     letterSpacing: 0.5,
   },
   heroTurfName: {
@@ -703,7 +703,7 @@ const getStyles = (colors) => StyleSheet.create({
   rupeeSign: {
     fontSize: SIZES.base,
     fontWeight: '800',
-    color: '#00C566',
+    color: '#0F766E',
     marginRight: 8,
   },
   priceTextInput: {

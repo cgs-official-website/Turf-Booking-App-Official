@@ -95,7 +95,7 @@ export const Turf3DCanvas = () => {
       // Green Grass Pitch Surface
       const grassGrad = ctx.createLinearGradient(-pitchWidth / 2, -pitchHeight / 2, pitchWidth / 2, pitchHeight / 2);
       grassGrad.addColorStop(0, '#059669');
-      grassGrad.addColorStop(0.5, '#10b981');
+      grassGrad.addColorStop(0.5, '#0F766E');
       grassGrad.addColorStop(1, '#047857');
       ctx.fillStyle = grassGrad;
 

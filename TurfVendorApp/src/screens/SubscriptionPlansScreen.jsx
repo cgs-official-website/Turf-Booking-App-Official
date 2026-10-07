@@ -155,7 +155,7 @@ const SubscriptionPlansScreen = ({ route, navigation }) => {
           <View style={[styles.activePlanCard, SHADOWS.md]}>
             <View style={styles.activePlanTop}>
               <View style={styles.activePill}>
-                <Ionicons name="checkmark-circle" size={14} color="#00C566" />
+                <Ionicons name="checkmark-circle" size={14} color="#0F766E" />
                 <Text style={styles.activePillText}>CURRENT ACTIVE PLAN</Text>
               </View>
               <Text style={styles.activeExpiry}>
@@ -186,7 +186,7 @@ const SubscriptionPlansScreen = ({ route, navigation }) => {
                   styles.planCard,
                   {
                     backgroundColor: isPopular ? (isDark ? '#0F172A' : '#FFFFFF') : colors.card,
-                    borderColor: isPopular ? colors.primary : (isFree ? '#10B981' : colors.border),
+                    borderColor: isPopular ? colors.primary : (isFree ? '#0F766E' : colors.border),
                   },
                   isPopular && styles.popularPlanCard,
                   isFree && { borderWidth: 2 },
@@ -195,7 +195,7 @@ const SubscriptionPlansScreen = ({ route, navigation }) => {
               >
                 {/* Free or Popular Ribbon */}
                 {isFree ? (
-                  <View style={[styles.popularBadge, { backgroundColor: '#10B981' }]}>
+                  <View style={[styles.popularBadge, { backgroundColor: '#0F766E' }]}>
                     <Feather name="gift" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
                     <Text style={styles.popularBadgeText}>100% FREE STARTER</Text>
                   </View>
@@ -213,7 +213,7 @@ const SubscriptionPlansScreen = ({ route, navigation }) => {
 
                 {/* Price Display */}
                 <View style={styles.priceRow}>
-                  <Text style={[styles.currencySign, { color: isFree ? '#10B981' : colors.primary }]}>₹</Text>
+                  <Text style={[styles.currencySign, { color: isFree ? '#0F766E' : colors.primary }]}>₹</Text>
                   <Text style={[styles.priceNumber, { color: colors.text }]}>{plan.price}</Text>
                   <Text style={[styles.priceCycle, { color: colors.textSecondary }]}>
                     /{plan.durationDays >= 365 ? 'year' : `${plan.durationDays || 30} days`}
@@ -241,8 +241,8 @@ const SubscriptionPlansScreen = ({ route, navigation }) => {
                     {
                       backgroundColor: isCurrentPlan
                         ? colors.inputBg
-                        : (isFree ? '#10B981' : (isPopular ? colors.primary : colors.card)),
-                      borderColor: isCurrentPlan ? colors.border : (isFree ? '#10B981' : colors.primary),
+                        : (isFree ? '#0F766E' : (isPopular ? colors.primary : colors.card)),
+                      borderColor: isCurrentPlan ? colors.border : (isFree ? '#0F766E' : colors.primary),
                     },
                     SHADOWS.sm,
                   ]}
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
     borderWidth: 1.5,
-    borderColor: '#00C566',
+    borderColor: '#0F766E',
   },
   activePlanTop: {
     flexDirection: 'row',
@@ -350,13 +350,13 @@ const styles = StyleSheet.create({
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 197, 102, 0.15)',
+    backgroundColor: 'rgba(15, 118, 110, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   activePillText: {
-    color: '#00C566',
+    color: '#0F766E',
     fontSize: 10,
     fontWeight: '800',
     marginLeft: 4,

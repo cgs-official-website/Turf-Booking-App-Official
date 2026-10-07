@@ -90,7 +90,7 @@ export default function TurfUnderReviewScreen({ navigation }) {
       {/* Top Bar with Logout */}
       <View style={styles.topBar}>
         <View style={styles.brandPill}>
-          <MaterialCommunityIcons name="shield-airplane" size={16} color="#10B981" />
+          <MaterialCommunityIcons name="shield-airplane" size={16} color="#0F766E" />
           <Text style={styles.brandPillText}>PARTNER ONBOARDING</Text>
         </View>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
@@ -144,7 +144,7 @@ export default function TurfUnderReviewScreen({ navigation }) {
             </View>
             <View style={styles.stepInfo}>
               <Text style={[styles.stepTitle, { color: colors.text }]}>Partner Plan Activated</Text>
-              <Text style={[styles.stepDesc, { color: '#10B981', fontWeight: '700' }]}>
+              <Text style={[styles.stepDesc, { color: '#0F766E', fontWeight: '700' }]}>
                 {planName} • Active
               </Text>
             </View>
@@ -260,15 +260,15 @@ const getStyles = (colors, isDark) =>
     brandPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(16, 185, 129, 0.12)',
+      backgroundColor: 'rgba(15, 118, 110, 0.12)',
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: 'rgba(16, 185, 129, 0.25)',
+      borderColor: 'rgba(15, 118, 110, 0.25)',
     },
     brandPillText: {
-      color: '#10B981',
+      color: '#0F766E',
       fontSize: 10,
       fontWeight: '900',
       letterSpacing: 0.6,
@@ -382,7 +382,7 @@ const getStyles = (colors, isDark) =>
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: '#10B981',
+      backgroundColor: '#0F766E',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
@@ -410,7 +410,7 @@ const getStyles = (colors, isDark) =>
     stepConnectorActive: {
       width: 2,
       height: 16,
-      backgroundColor: '#10B981',
+      backgroundColor: '#0F766E',
       marginLeft: 13,
       marginVertical: 2,
     },

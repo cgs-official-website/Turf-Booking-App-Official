@@ -200,8 +200,8 @@ const SubscribeScreen = ({ route, navigation }) => {
         {/* Payment Gateway Notice */}
         <Text style={[styles.sectionHeading, { color: colors.text }]}>Payment Protection</Text>
         <View style={[styles.securityCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
-          <View style={[styles.shieldBox, { backgroundColor: 'rgba(0, 197, 102, 0.12)' }]}>
-            <Ionicons name="shield-checkmark" size={22} color="#00C566" />
+          <View style={[styles.shieldBox, { backgroundColor: 'rgba(15, 118, 110, 0.12)' }]}>
+            <Ionicons name="shield-checkmark" size={22} color="#0F766E" />
           </View>
           <View style={styles.securityTextWrap}>
             <Text style={[styles.securityTitle, { color: colors.text }]}>256-Bit Encrypted Checkout</Text>

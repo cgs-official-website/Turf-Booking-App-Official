@@ -760,7 +760,7 @@ export default function FootballScorecardScreen({ route, navigation }) {
             <Text style={styles.modalLabel}>Result:</Text>
             <View style={styles.teamChoiceRow}>
               <TouchableOpacity
-                style={[styles.teamChoiceBtn, penaltyResult === 'scored' && { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}
+                style={[styles.teamChoiceBtn, penaltyResult === 'scored' && { backgroundColor: '#ECFDF5', borderColor: '#0F766E' }]}
                 onPress={() => setPenaltyResult('scored')}
               >
                 <Text style={{ fontWeight: '800', color: '#047857' }}>✅ Scored</Text>
@@ -845,7 +845,7 @@ export default function FootballScorecardScreen({ route, navigation }) {
                 .map((p) => (
                   <TouchableOpacity
                     key={p.id}
-                    style={[styles.chip, subInPlayer === p.id && { backgroundColor: '#ECFDF5', borderColor: '#10B981' }]}
+                    style={[styles.chip, subInPlayer === p.id && { backgroundColor: '#ECFDF5', borderColor: '#0F766E' }]}
                     onPress={() => setSubInPlayer(p.id)}
                   >
                     <Text style={[styles.chipText, subInPlayer === p.id && { color: '#047857', fontWeight: '800' }]}>

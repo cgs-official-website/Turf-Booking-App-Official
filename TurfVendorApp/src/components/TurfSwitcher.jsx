@@ -9,7 +9,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const STATUS_CONFIG = {
-  active: { label: 'ACTIVE', color: '#00C566', bg: 'rgba(0, 197, 102, 0.12)' },
+  active: { label: 'ACTIVE', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
   pending: { label: 'REVIEW', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
   rejected: { label: 'REJECTED', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
   inactive: { label: 'INACTIVE', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },

@@ -395,13 +395,13 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(0, 197, 102, 0.45)',
+    backgroundColor: 'rgba(15, 118, 110, 0.45)',
   },
 
   // Particle Atmosphere
   particle: {
     position: 'absolute',
-    backgroundColor: '#00C566',
+    backgroundColor: '#0F766E',
   },
 
   // Logo Card
@@ -413,8 +413,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(0, 197, 102, 0.3)',
-    shadowColor: '#00C566',
+    borderColor: 'rgba(15, 118, 110, 0.3)',
+    shadowColor: '#0F766E',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 18,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   titleVendor: {
     fontSize: 23,
     fontWeight: '900',
-    color: '#00C566',
+    color: '#0F766E',
     letterSpacing: 2.5,
   },
   tagline: {
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#00C566',
+    backgroundColor: '#0F766E',
     borderRadius: 2,
     overflow: 'hidden',
     position: 'relative',
