@@ -244,6 +244,15 @@ export default function ProfileScreen({ navigation }) {
             onPress={() => navigation.navigate('Bookings')}
           />
           <MenuItem
+            icon="award"
+            label="Match History"
+            subLabel="Past matches, scorecards & results"
+            iconBg="rgba(245, 158, 11, 0.12)"
+            iconColor="#F59E0B"
+            colors={C}
+            onPress={() => navigation.navigate('MatchHistory')}
+          />
+          <MenuItem
             icon="heart"
             label="Saved Arenas & Wishlist"
             subLabel="Your favorite turf facilities"

@@ -322,14 +322,6 @@ const SlotsScreen = ({ navigation }) => {
             <Text style={styles.screenTitle}>Slot Calendar</Text>
             <Text style={styles.screenSub}>Real-time availability & block management</Text>
           </View>
-          <TouchableOpacity
-            style={styles.templateBtn}
-            onPress={() => setTemplateOpen(true)}
-            activeOpacity={0.7}
-          >
-            <Feather name="settings" size={14} color={colors.primary} />
-            <Text style={styles.templateBtnText}>Templates</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Turf Selector Strip (If Multiple Turfs) */}

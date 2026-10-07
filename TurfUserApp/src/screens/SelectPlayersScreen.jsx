@@ -69,8 +69,38 @@ export default function SelectPlayersScreen({ route, navigation }) {
     try {
       const chosen = players.filter((p) => selected[p.id]);
 
+      // Map player id -> name for name resolution across match history & scorecards
+      const playerNames = { ...(match?.playerNames || {}) };
+      chosen.forEach((p) => {
+        if (p && p.id && p.name) {
+          playerNames[p.id] = p.name;
+        }
+      });
+
+      // Partition only the chosen players into Team A and Team B
+      const playerIds = chosen.map((p) => p.id);
+      const teamAPlayerIds = playerIds.filter((_, i) => i % 2 === 0);
+      const teamBPlayerIds = playerIds.filter((_, i) => i % 2 === 1);
+
+      const teamA = {
+        name: match?.teams?.A?.name || 'Team A',
+        logo: match?.teams?.A?.logo || null,
+        playerIds: teamAPlayerIds,
+        players: chosen.filter((p) => teamAPlayerIds.includes(p.id)),
+        captainId: teamAPlayerIds[0] || null,
+      };
+      const teamB = {
+        name: match?.teams?.B?.name || 'Team B',
+        logo: match?.teams?.B?.logo || null,
+        playerIds: teamBPlayerIds,
+        players: chosen.filter((p) => teamBPlayerIds.includes(p.id)),
+        captainId: teamBPlayerIds[0] || null,
+      };
+
       await matchStorage.updateMatch(matchId, {
         players: chosen,
+        playerNames,
+        teams: { A: teamA, B: teamB },
         playWithStrangers: match?.playWithStrangers,
       });
 

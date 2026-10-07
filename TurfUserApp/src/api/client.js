@@ -40,21 +40,23 @@ class ApiClient {
     }
   }
 
-  async fetchWithFallback(path, options) {
+  async fetchWithFallback(path, options = {}) {
     // Try current active base URL first
     const urlsToTry = [
       this.activeBaseUrl,
       ...CANDIDATE_URLS.filter((u) => u !== this.activeBaseUrl),
     ];
 
+    const { signal: _inheritedSignal, ...cleanOptions } = options;
+
     let lastError = null;
     for (const baseUrl of urlsToTry) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         const res = await fetch(`${baseUrl}${path}`, {
-          ...options,
+          ...cleanOptions,
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -68,8 +70,11 @@ class ApiClient {
       }
     }
 
+    const msg = lastError?.message || '';
     throw new Error(
-      'Cannot reach backend server. Please verify "npm run dev" is running in server terminal and USB adb reverse is active.'
+      msg && !msg.toLowerCase().includes('abort')
+        ? msg
+        : 'Cannot reach backend server. Please verify "npm run dev" is running in server terminal and USB adb reverse is active.'
     );
   }
 

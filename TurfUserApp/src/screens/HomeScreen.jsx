@@ -528,6 +528,19 @@ export default function HomeScreen({ navigation }) {
 
             <TouchableOpacity
               style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
+              onPress={() => navigation.navigate('MatchHistory')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.quickIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                <Feather name="award" size={16} color="#D97706" />
+              </View>
+              <Text style={[styles.quickTitle, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                History
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
               onPress={() => navigation.navigate('Bookings')}
               activeOpacity={0.8}
             >

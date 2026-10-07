@@ -122,7 +122,7 @@ export default function BookingDetailScreen({ route, navigation }) {
             <View style={[styles.ticketRow, { marginTop: 14 }]}>
               <View style={styles.ticketCol}>
                 <Text style={[styles.ticketLabel, { color: C.subtext }]}>SPORT</Text>
-                <Text style={[styles.ticketVal, { color: C.text }]}>{booking.sport || 'Football'}</Text>
+                <Text style={[styles.ticketVal, { color: C.text }]}>{booking.sport || booking.turfType || 'Standard'}</Text>
               </View>
               <View style={styles.ticketCol}>
                 <Text style={[styles.ticketLabel, { color: C.subtext }]}>STATUS</Text>

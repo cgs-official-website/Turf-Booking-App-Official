@@ -28,10 +28,46 @@ export const matchStorage = {
 
   async getAllMatches() {
     const all = await readJSON(MATCHES_KEY, {});
-    return Object.values(all).sort((a, b) => b.createdAt - a.createdAt);
+    return Object.values(all).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  },
+
+  async getMyMatches(statusFilter) {
+    // 1. Read local copy first
+    const all = await readJSON(MATCHES_KEY, {});
+    let localMatches = Object.values(all);
+
+    // 2. Try fetching latest user matches from backend
+    try {
+      const url = `/matches/mine${statusFilter ? `?status=${statusFilter}` : ''}`;
+      const serverRes = await client.get(url);
+      const serverList = serverRes?.matches || serverRes?.data || (Array.isArray(serverRes) ? serverRes : null);
+
+      if (Array.isArray(serverList)) {
+        serverList.forEach((m) => {
+          if (m && m.id) {
+            all[m.id] = { ...all[m.id], ...m };
+          }
+        });
+        await writeJSON(MATCHES_KEY, all);
+
+        let result = serverList;
+        if (statusFilter) {
+          result = result.filter((m) => (m.status || '').toLowerCase() === statusFilter.toLowerCase());
+        }
+        return result;
+      }
+    } catch (e) {
+      // Offline fallback
+    }
+
+    if (statusFilter) {
+      localMatches = localMatches.filter((m) => (m.status || '').toLowerCase() === statusFilter.toLowerCase());
+    }
+    return localMatches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   },
 
   async getMatch(id) {
+    if (!id) return null;
     // 1. Read local copy first (instant)
     const all = await readJSON(MATCHES_KEY, {});
     const local = all[id] || null;
@@ -39,8 +75,16 @@ export const matchStorage = {
     // 2. Fetch latest live match state from backend if online
     try {
       const serverRes = await client.get(`/matches/${id}`);
-      if (serverRes?.match) {
-        const merged = { ...local, ...serverRes.match, id };
+      const serverMatch = serverRes?.match || serverRes?.data;
+      if (serverMatch) {
+        // If local has rich player objects, preserve them so guest names/roles aren't overwritten by simple user IDs
+        const localHasRichPlayers = Array.isArray(local?.players) && local.players.some((p) => typeof p === 'object');
+        const mergedPlayers = localHasRichPlayers ? local.players : (serverMatch.players || local?.players || []);
+
+        const localHasTeams = Boolean(local?.teams?.A?.playerIds?.length || local?.teams?.B?.playerIds?.length);
+        const mergedTeams = localHasTeams ? local.teams : (serverMatch.teams || local?.teams);
+
+        const merged = { ...serverMatch, ...local, players: mergedPlayers, teams: mergedTeams, id };
         all[id] = merged;
         await writeJSON(MATCHES_KEY, all);
         return merged;
@@ -60,12 +104,14 @@ export const matchStorage = {
     all[match.id] = match;
     await writeJSON(MATCHES_KEY, all);
 
-    // 2. Sync to cloud backend in background for real-time live viewers
+    // 2. Sync to cloud backend in background for real-time live viewers & database persistence
     (async () => {
       try {
         await client.patch(`/matches/${match.id}/scorecard`, {
-          scorecard: match.scorecard || match.innings || {},
+          scorecard: match.scorecard || match.innings || match.football || match.badminton || match.volleyball || match.basketball || match.tennis || {},
           status: match.status || 'live',
+          teams: match.teams,
+          toss: match.toss,
         });
       } catch (err) {
         // Offline / sync queued
@@ -84,7 +130,12 @@ export const matchStorage = {
 
     (async () => {
       try {
-        await client.patch(`/matches/${id}`, patch);
+        await client.patch(`/matches/${id}/scorecard`, {
+          scorecard: updated.scorecard || updated.innings || updated.football || updated.badminton || updated.volleyball || updated.basketball || updated.tennis || {},
+          status: updated.status || 'live',
+          teams: updated.teams,
+          toss: updated.toss,
+        });
       } catch {}
     })();
 
@@ -109,18 +160,20 @@ export const matchStorage = {
   },
 
   async createMatch(data = {}) {
-    const id = genId('match');
+    const localId = genId('match');
     const match = {
-      id,
-      status: 'draft', // draft -> upcoming -> toss -> live -> completed
+      id: localId,
+      status: 'created', // created -> live -> completed
       createdAt: Date.now(),
-      place: data.place || '',
+      place: data.place || 'Turf Arena',
       sport: data.sport || 'Cricket',
       date: data.date || 'Today',
       time: data.time || '07:00 PM',
       playWithStrangers: !!data.playWithStrangers,
       bookingId: data.bookingId || null,
+      turfId: data.turfId || null,
       overs: data.overs || 6,
+      lastManEnabled: data.lastManEnabled ?? false,
       players: [], // [{ id, name, role }]
       teams: {
         A: { name: 'Team A', captainId: null, playerIds: [] },
@@ -132,24 +185,33 @@ export const matchStorage = {
       timeline: [], // [{ time, text }]
     };
 
-    const all = await readJSON(MATCHES_KEY, {});
-    all[id] = match;
-    await writeJSON(MATCHES_KEY, all);
+    // Attempt synchronous backend match creation to acquire PostgreSQL match ID & join code
+    try {
+      const serverRes = await client.post('/matches', {
+        id: localId,
+        place: match.place,
+        sport: match.sport,
+        date: match.date,
+        time: match.time,
+        overs: match.overs,
+        playWithStrangers: match.playWithStrangers,
+        bookingId: match.bookingId,
+        turfId: match.turfId,
+        teams: match.teams,
+      });
 
-    // Sync match creation to cloud backend in background
-    (async () => {
-      try {
-        await client.post('/matches', {
-          place: match.place,
-          sport: match.sport,
-          date: match.date,
-          time: match.time,
-          overs: match.overs,
-          playWithStrangers: match.playWithStrangers,
-          bookingId: match.bookingId,
-        });
-      } catch {}
-    })();
+      const serverMatch = serverRes?.match || serverRes?.data;
+      if (serverMatch?.id) {
+        match.id = serverMatch.id;
+        match.joinCode = serverMatch.joinCode;
+      }
+    } catch (err) {
+      console.warn('Backend match creation sync failed (will store locally):', err);
+    }
+
+    const all = await readJSON(MATCHES_KEY, {});
+    all[match.id] = match;
+    await writeJSON(MATCHES_KEY, all);
 
     return match;
   },

@@ -93,10 +93,10 @@ const BookingCard = ({ booking, onPress, onAccept, onReject }) => {
           <Text style={styles.chipText}>{booking.startTime} - {booking.endTime}</Text>
         </View>
 
-        {!!booking.gameType && (
+        {!!(booking.sport || booking.turfType || booking.gameType) && (
           <View style={styles.chip}>
             <Ionicons name="football-outline" size={13} color={colors.primary} />
-            <Text style={styles.chipText}>{booking.gameType}</Text>
+            <Text style={styles.chipText}>{booking.sport || booking.turfType || booking.gameType}</Text>
           </View>
         )}
       </View>

@@ -118,8 +118,8 @@ const BookingDetailScreen = ({ route, navigation }) => {
   const paymentStatusColor = isPaid ? (colors.success || '#10B981') : (colors.warning || '#F59E0B');
 
   const turfTypeName =
-    booking.turfType ||
     booking.sport ||
+    booking.turfType ||
     (Array.isArray(booking.turf?.sports) && booking.turf.sports.join(', ')) ||
     'Standard Turf';
 

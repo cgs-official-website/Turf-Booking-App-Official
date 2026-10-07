@@ -33,10 +33,12 @@ function getBowler(inn, id) {
   return inn.bowlers[id];
 }
 
-function applyBall(inning, kind) {
+function applyBall(inning, kind, lastManEnabled = false) {
   const inn = clone(inning);
   const striker = getBatter(inn, inn.strikerId);
   const bowler = getBowler(inn, inn.currentBowlerId);
+
+  const isSoloBatter = lastManEnabled && !inn.nonStrikerId;
 
   if (['0', '1', '2', '3', '4', '6'].includes(kind)) {
     const runs = parseInt(kind, 10);
@@ -44,10 +46,17 @@ function applyBall(inning, kind) {
     if (bowler) { bowler.runs += runs; bowler.balls += 1; }
     inn.totalRuns += runs;
     inn.legalBalls += 1;
-    if (runs % 2 === 1) [inn.strikerId, inn.nonStrikerId] = [inn.nonStrikerId, inn.strikerId];
-    if (inn.legalBalls % 6 === 0) {
-      [inn.strikerId, inn.nonStrikerId] = [inn.nonStrikerId, inn.strikerId];
-      inn.currentBowlerId = null;
+
+    if (!isSoloBatter && inn.nonStrikerId) {
+      if (runs % 2 === 1) [inn.strikerId, inn.nonStrikerId] = [inn.nonStrikerId, inn.strikerId];
+      if (inn.legalBalls % 6 === 0) {
+        [inn.strikerId, inn.nonStrikerId] = [inn.nonStrikerId, inn.strikerId];
+        inn.currentBowlerId = null;
+      }
+    } else {
+      if (inn.legalBalls % 6 === 0) {
+        inn.currentBowlerId = null;
+      }
     }
   } else if (kind === 'W') {
     if (striker) { striker.balls += 1; striker.out = true; }
@@ -57,8 +66,11 @@ function applyBall(inning, kind) {
     if (inn.legalBalls % 6 === 0) {
       inn.currentBowlerId = null;
     }
-    if (inn.battingQueue.length > 0) {
+    if (inn.battingQueue && inn.battingQueue.length > 0) {
       inn.strikerId = inn.battingQueue.shift();
+    } else if (lastManEnabled && inn.nonStrikerId) {
+      inn.strikerId = inn.nonStrikerId;
+      inn.nonStrikerId = null;
     } else {
       inn.strikerId = null; // all out
     }
@@ -194,7 +206,8 @@ export default function ScorecardScreen({ route, navigation }) {
 
     undoStack.current.push(clone({ innings: match.innings, currentInningsIndex: match.currentInningsIndex, status: match.status }));
 
-    const updatedInning = applyBall(inn, kind);
+    const lastManEnabled = Boolean(match.lastManEnabled || match.toss?.lastManEnabled || match.scorecard?.lastManEnabled);
+    const updatedInning = applyBall(inn, kind, lastManEnabled);
     const battingTeamSize = match.teams[updatedInning.battingTeam].playerIds.length;
     const allOut = updatedInning.strikerId === null;
     const oversDone = updatedInning.legalBalls >= match.overs * 6;

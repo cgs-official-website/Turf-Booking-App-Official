@@ -76,7 +76,7 @@ const TurfProfileScreen = ({ navigation, route }) => {
   const styles = getStyles(colors);
 
   const dispatch = useDispatch();
-  const { turf, loading } = useSelector((s) => s.vendor);
+  const { turf, activeTurfId, loading } = useSelector((s) => s.vendor);
 
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -105,15 +105,21 @@ const TurfProfileScreen = ({ navigation, route }) => {
   const [turfImages, setTurfImages] = useState([]);
   const [amenitiesEditMode, setAmenitiesEditMode] = useState(false);
 
+  const [showAddSportModal, setShowAddSportModal] = useState(false);
+  const [newSportInput, setNewSportInput] = useState('');
+  const [showAddAmenityModal, setShowAddAmenityModal] = useState(false);
+  const [newAmenityInput, setNewAmenityInput] = useState('');
+
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  useEffect(() => {
-    dispatch(fetchMyTurf());
-  }, []);
-
   const logoDirtyRef = React.useRef(false);
+
+  useEffect(() => {
+    logoDirtyRef.current = false;
+    dispatch(fetchMyTurf(activeTurfId));
+  }, [activeTurfId]);
 
   useEffect(() => {
     if (!turf) return;
@@ -132,10 +138,16 @@ const TurfProfileScreen = ({ navigation, route }) => {
     setWeekendPrice(String(turf.weekendPrice ?? '1200'));
     setBallPrice(String(turf.ballPrice ?? '50'));
     setWeekendEveningPrice(String(turf.weekendEveningPrice ?? '1400'));
-    if (turf.sports?.length) setSports(turf.sports);
-    if (turf.selectedSports?.length) setSelectedSports(turf.selectedSports);
-    if (turf.amenities?.length) setAmenities(turf.amenities);
-    if (turf.selectedAmenities?.length) setSelectedAmenities(turf.selectedAmenities);
+    
+    const turfSportsList = turf.sports?.length ? turf.sports : (turf.sportTypes?.length ? turf.sportTypes : []);
+    if (turfSportsList.length > 0) {
+      setSports((prev) => Array.from(new Set([...prev, ...turfSportsList])));
+      setSelectedSports(turfSportsList);
+    }
+    if (turf.amenities?.length) {
+      setAmenities((prev) => Array.from(new Set([...prev, ...turf.amenities])));
+      setSelectedAmenities(turf.amenities);
+    }
     if (turf.images?.length) setTurfImages(turf.images);
   }, [turf]);
 
@@ -219,16 +231,51 @@ const TurfProfileScreen = ({ navigation, route }) => {
     setSaving(true);
     try {
       await dispatch(updateTurfAmenities({
-        sports, amenities, selectedSports, selectedAmenities,
+        sports: selectedSports,
+        selectedSports,
+        amenities: selectedAmenities,
+        selectedAmenities,
         images: turfImages,
       })).unwrap();
-      Alert.alert('Profile Saved', 'Your turf facilities and amenities have been updated.');
+      Alert.alert('Profile Saved', 'Your turf sports and facilities have been updated.');
       setAmenitiesEditMode(false);
     } catch (err) {
       Alert.alert('Save Failed', typeof err === 'string' ? err : 'Please try again.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAddSport = () => {
+    const val = newSportInput.trim();
+    if (!val) {
+      Alert.alert('Invalid Name', 'Please enter a valid sport name.');
+      return;
+    }
+    if (!sports.some((s) => s.toLowerCase() === val.toLowerCase())) {
+      setSports((prev) => [...prev, val]);
+    }
+    if (!selectedSports.some((s) => s.toLowerCase() === val.toLowerCase())) {
+      setSelectedSports((prev) => [...prev, val]);
+    }
+    setNewSportInput('');
+    setShowAddSportModal(false);
+  };
+
+  const handleAddAmenity = () => {
+    const val = newAmenityInput.trim();
+    if (!val) {
+      Alert.alert('Invalid Name', 'Please enter a valid amenity name.');
+      return;
+    }
+    if (!amenities.some((a) => a.toLowerCase() === val.toLowerCase())) {
+      setAmenities((prev) => [...prev, val]);
+    }
+    if (!selectedAmenities.some((a) => a.toLowerCase() === val.toLowerCase())) {
+      setSelectedAmenities((prev) => [...prev, val]);
+    }
+    setNewAmenityInput('');
+    setShowAddAmenityModal(false);
   };
 
   const toggleSelected = (list, setList, key) => {
@@ -453,7 +500,14 @@ const TurfProfileScreen = ({ navigation, route }) => {
         {/* Tab 3: Sports & Amenities */}
         {activeTab === 3 && (
           <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Sports Offered</Text>
+            <View style={styles.imagesHeaderRow}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Sports Offered</Text>
+              <TouchableOpacity style={styles.addPhotosBtn} onPress={() => setShowAddSportModal(true)} activeOpacity={0.7}>
+                <Feather name="plus-circle" size={15} color={colors.primary} />
+                <Text style={[styles.addPhotosText, { color: colors.primary }]}>Add Sport</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.chipGrid}>
               {sports.map((s) => {
                 const isSelected = selectedSports.includes(s);
@@ -474,7 +528,14 @@ const TurfProfileScreen = ({ navigation, route }) => {
               })}
             </View>
 
-            <Text style={[styles.cardTitle, { color: colors.text, marginTop: 22 }]}>Turf Amenities</Text>
+            <View style={[styles.imagesHeaderRow, { marginTop: 22 }]}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Turf Amenities</Text>
+              <TouchableOpacity style={styles.addPhotosBtn} onPress={() => setShowAddAmenityModal(true)} activeOpacity={0.7}>
+                <Feather name="plus-circle" size={15} color={colors.primary} />
+                <Text style={[styles.addPhotosText, { color: colors.primary }]}>Add Amenity</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.chipGrid}>
               {amenities.map((a) => {
                 const isSelected = selectedAmenities.includes(a);
@@ -520,6 +581,56 @@ const TurfProfileScreen = ({ navigation, route }) => {
             <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSaveAmenities} disabled={saving} activeOpacity={0.85}>
               {saving ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.submitBtnText}>Save Turf Profile</Text>}
             </TouchableOpacity>
+
+            {/* Modal to Add Custom Sport */}
+            <Modal visible={showAddSportModal} transparent animationType="fade" onRequestClose={() => setShowAddSportModal(false)}>
+              <View style={styles.modalOverlay}>
+                <View style={[styles.modalSheet, { backgroundColor: colors.card, padding: 20 }, SHADOWS.md]}>
+                  <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 14 }]}>Add New Sport</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. Volleyball, Pickleball, Hockey"
+                    placeholderTextColor={colors.textSecondary}
+                    value={newSportInput}
+                    onChangeText={setNewSportInput}
+                    autoFocus
+                  />
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, gap: 10 }}>
+                    <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAddSportModal(false)}>
+                      <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary, paddingHorizontal: 20, marginTop: 0 }]} onPress={handleAddSport}>
+                      <Text style={styles.submitBtnText}>Add</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+
+            {/* Modal to Add Custom Amenity */}
+            <Modal visible={showAddAmenityModal} transparent animationType="fade" onRequestClose={() => setShowAddAmenityModal(false)}>
+              <View style={styles.modalOverlay}>
+                <View style={[styles.modalSheet, { backgroundColor: colors.card, padding: 20 }, SHADOWS.md]}>
+                  <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 14 }]}>Add New Amenity</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
+                    placeholder="e.g. Wi-Fi, First Aid, Dugout"
+                    placeholderTextColor={colors.textSecondary}
+                    value={newAmenityInput}
+                    onChangeText={setNewAmenityInput}
+                    autoFocus
+                  />
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16, gap: 10 }}>
+                    <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAddAmenityModal(false)}>
+                      <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary, paddingHorizontal: 20, marginTop: 0 }]} onPress={handleAddAmenity}>
+                      <Text style={styles.submitBtnText}>Add</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         )}
       </ScrollView>

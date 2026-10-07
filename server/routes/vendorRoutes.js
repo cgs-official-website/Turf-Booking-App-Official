@@ -29,6 +29,7 @@ router.get('/payments', vendorController.getVendorPayments);
 
 // Vendor Dashboard & Slot Management
 router.get('/dashboard', vendorController.getDashboard);
+router.get('/dashboard/stats', vendorController.getDashboard);
 router.get('/bookings', vendorController.getVendorBookings);
 router.get('/bookings/:id', vendorController.getBookingDetail);
 router.post('/bookings/:id/accept', vendorController.updateBookingStatus);

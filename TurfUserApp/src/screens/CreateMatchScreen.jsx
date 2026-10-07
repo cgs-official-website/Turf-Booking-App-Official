@@ -135,9 +135,9 @@ export default function CreateMatchScreen({ route, navigation }) {
           onPress={() => setSportModal(true)}
           activeOpacity={0.8}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 8 }}>
             {getSportIconComponent(sport, 16, C.primary)}
-            <Text style={[styles.inputText, { marginLeft: 8, color: C.text }]}>
+            <Text style={[styles.inputText, { marginLeft: 8, color: C.text }]} numberOfLines={1}>
               {sport || 'Choose sport'}
             </Text>
           </View>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, AppState,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -27,44 +27,68 @@ const DashboardScreen = ({ navigation }) => {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const {
-    dashboardStats, bookings, loading, turfs, plans, mySubscription,
+    dashboardStats, bookings, loading, turfs, plans, mySubscription, activeTurfId,
   } = useSelector((s) => s.vendor);
   const { vendor } = useSelector((s) => s.auth);
 
   const [period, setPeriod] = useState('month'); // 'today' | 'month'
 
-  const loadData = () => {
-    dispatch(fetchDashboard());
-    dispatch(fetchBookings());
+  const loadData = useCallback(() => {
+    dispatch(fetchDashboard(activeTurfId));
+    dispatch(fetchBookings(activeTurfId));
     dispatch(fetchMyTurfs());
     dispatch(fetchMySubscription());
     dispatch(fetchNotifications());
     if (!plans.length) dispatch(fetchPlans());
-  };
+  }, [dispatch, activeTurfId, plans.length]);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [])
+    }, [loadData])
   );
+
+  useEffect(() => {
+    if (activeTurfId) {
+      dispatch(fetchDashboard(activeTurfId));
+      dispatch(fetchBookings(activeTurfId));
+    }
+  }, [activeTurfId]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        loadData();
+      }
+    });
+    return () => subscription.remove();
+  }, [loadData]);
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
   const safeTurfs = Array.isArray(turfs) ? turfs : [];
   const safePlans = Array.isArray(plans) ? plans : [];
 
-  const pendingBookings = safeBookings.filter((b) => b && b.status === 'pending');
-  const confirmedBookings = safeBookings.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status));
+  const activeBookings = useMemo(() => {
+    if (!activeTurfId) return safeBookings;
+    return safeBookings.filter((b) => {
+      const bTurfId = b.turfId || b.turf?._id || b.turf?.id;
+      return !bTurfId || bTurfId === activeTurfId;
+    });
+  }, [safeBookings, activeTurfId]);
+
+  const pendingBookings = activeBookings.filter((b) => b && b.status === 'pending');
+  const confirmedBookings = activeBookings.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status));
   const rejectedCount = useMemo(
-    () => safeBookings.filter((b) => b && b.status === 'rejected').length,
-    [safeBookings]
+    () => activeBookings.filter((b) => b && b.status === 'rejected').length,
+    [activeBookings]
   );
   const oldestPending = useMemo(
     () => [...pendingBookings].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))[0],
     [pendingBookings]
   );
   const recentBookings = useMemo(
-    () => [...safeBookings].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date)).slice(0, 3),
-    [safeBookings]
+    () => [...activeBookings].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date)).slice(0, 3),
+    [activeBookings]
   );
   const topPlan = useMemo(
     () => [...safePlans].sort((a, b) => b.price - a.price)[0],
@@ -76,7 +100,7 @@ const DashboardScreen = ({ navigation }) => {
     confirmedBookings.reduce((sum, b) => sum + (Number(b.totalAmount || b.amount) || 0), 0)
   );
   const todayBookingsCount = stats.todayBookingsCount ?? (
-    safeBookings.filter((b) => b.date === new Date().toISOString().split('T')[0]).length
+    activeBookings.filter((b) => b.date === new Date().toISOString().split('T')[0]).length
   );
 
   return (
@@ -202,10 +226,6 @@ const DashboardScreen = ({ navigation }) => {
         {/* Overview Stats Grid */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Performance</Text>
-          <View style={styles.monthPill}>
-            <Text style={styles.monthPillText}>This Month</Text>
-            <Icon name="calendar" size={12} color={colors.primary} />
-          </View>
         </View>
 
         <View style={styles.statsGrid}>
@@ -213,7 +233,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.statIconWrap, { backgroundColor: colors.primaryLight }]}>
               <Icon name="calendar" size={18} color={colors.primary} />
             </View>
-            <Text style={styles.statNumber}>{stats.totalBookings ?? safeBookings.length}</Text>
+            <Text style={styles.statNumber}>{stats.todayBookingsCount ?? stats.totalBookings ?? todayBookingsCount}</Text>
             <Text style={styles.statTitle}>Total Bookings</Text>
           </View>
 
@@ -221,7 +241,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
               <Icon name="check-circle" size={18} color={colors.success} />
             </View>
-            <Text style={styles.statNumber}>{stats.confirmedBookings ?? confirmedBookings.length}</Text>
+            <Text style={styles.statNumber}>{stats.confirmedBookings ?? stats.todayConfirmedBookings ?? 0}</Text>
             <Text style={styles.statTitle}>Accepted</Text>
           </View>
 
@@ -237,7 +257,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.statIconWrap, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
               <Icon name="x-circle" size={18} color={colors.error} />
             </View>
-            <Text style={styles.statNumber}>{stats.rejectedBookings ?? rejectedCount}</Text>
+            <Text style={styles.statNumber}>{stats.rejectedBookings ?? stats.todayRejectedBookings ?? 0}</Text>
             <Text style={styles.statTitle}>Declined</Text>
           </View>
         </View>

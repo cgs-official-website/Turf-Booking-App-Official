@@ -111,14 +111,15 @@ export const toggleFreezeSlot = createAsyncThunk(
 // they all reuse the generic updateTurfApi(id, payload) against whichever
 // turf is currently active/selected.
 const resolveActiveTurfId = (state) =>
-  state.vendor.turf?._id ||
-  state.vendor.selectedTurf?._id ||
   state.vendor.activeTurfId ||
-  state.vendor.turfs[0]?._id;
+  state.vendor.selectedTurf?._id ||
+  state.vendor.turf?._id ||
+  state.vendor.turfs[0]?._id ||
+  state.vendor.turfs[0]?.id;
 
-export const fetchMyTurf = createAsyncThunk('vendor/fetchMyTurf', async (_, { getState, rejectWithValue }) => {
+export const fetchMyTurf = createAsyncThunk('vendor/fetchMyTurf', async (turfId, { getState, rejectWithValue }) => {
   try {
-    const id = resolveActiveTurfId(getState());
+    const id = turfId || resolveActiveTurfId(getState());
     if (id) return await getTurfByIdApi(id);
     const res = await getMyTurfsApi();
     return { turf: res.turfs?.[0] || null };
@@ -143,8 +144,11 @@ export const updateTurfAmenities = createAsyncThunk('vendor/updateTurfAmenities'
 
 // ─── Booking Thunks ───────────────────────────────────────────────────────────
  
-export const fetchBookings = createAsyncThunk('vendor/fetchBookings', async (turfId, { rejectWithValue }) => {
-  try { return await getBookingsApi(turfId); } catch (e) { return rejectWithValue(e.message); }
+export const fetchBookings = createAsyncThunk('vendor/fetchBookings', async (turfId, { getState, rejectWithValue }) => {
+  try {
+    const id = turfId || resolveActiveTurfId(getState());
+    return await getBookingsApi(id);
+  } catch (e) { return rejectWithValue(e.message); }
 });
  
 export const fetchBookingDetail = createAsyncThunk('vendor/fetchBookingDetail', async (id, { rejectWithValue }) => {
@@ -175,12 +179,18 @@ export const deleteReview = createAsyncThunk('vendor/deleteReview', async (id, {
 
 // ─── Dashboard Thunks ────────────────────────────────────────────────────────
  
-export const fetchDashboard = createAsyncThunk('vendor/fetchDashboard', async (_, { rejectWithValue }) => {
-  try { return await getDashboardStatsApi(); } catch (e) { return rejectWithValue(e.message); }
+export const fetchDashboard = createAsyncThunk('vendor/fetchDashboard', async (turfId, { getState, rejectWithValue }) => {
+  try {
+    const id = turfId || resolveActiveTurfId(getState());
+    return await getDashboardStatsApi(id);
+  } catch (e) { return rejectWithValue(e.message); }
 });
  
-export const fetchRevenue = createAsyncThunk('vendor/fetchRevenue', async (period, { rejectWithValue }) => {
-  try { return await getRevenueApi(period); } catch (e) { return rejectWithValue(e.message); }
+export const fetchRevenue = createAsyncThunk('vendor/fetchRevenue', async ({ period, turfId }, { getState, rejectWithValue }) => {
+  try {
+    const id = turfId || resolveActiveTurfId(getState());
+    return await getRevenueApi(period, id);
+  } catch (e) { return rejectWithValue(e.message); }
 });
  
 // ─── Subscription Thunks ─────────────────────────────────────────────────────
@@ -321,7 +331,15 @@ const vendorSlice = createSlice({
     clearSelectedTurf: (state) => { state.selectedTurf = null; },
     clearSelectedBooking: (state) => { state.selectedBooking = null; },
     clearPendingOrder: (state) => { state.pendingOrder = null; },
-    setActiveTurf: (state, action) => { state.activeTurfId = action.payload; },
+    setActiveTurf: (state, action) => {
+      state.activeTurfId = action.payload;
+      if (Array.isArray(state.turfs)) {
+        const found = state.turfs.find((t) => (t._id || t.id) === action.payload);
+        if (found) {
+          state.turf = found;
+        }
+      }
+    },
     clearReportSubmitted: (state) => {
       state.reportSubmitted = null;
       state.reportError = null;

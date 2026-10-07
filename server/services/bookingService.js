@@ -309,6 +309,24 @@ const bookingService = {
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
     const bookingId = generateBookingId();
 
+    // Sport validation
+    const supportedSports = (Array.isArray(turf.sports) && turf.sports.length > 0)
+      ? turf.sports
+      : ((Array.isArray(turf.sportTypes) && turf.sportTypes.length > 0) ? turf.sportTypes : []);
+
+    let bookingSport = payload.sport ? String(payload.sport).trim() : null;
+    if (bookingSport) {
+      if (supportedSports.length > 0) {
+        const match = supportedSports.find((s) => s.toLowerCase() === bookingSport.toLowerCase());
+        if (!match) {
+          throw new BookingError(`Sport '${bookingSport}' is not offered at ${turf.name}.`, 400, 'INVALID_SPORT');
+        }
+        bookingSport = match;
+      }
+    } else {
+      bookingSport = supportedSports[0] || 'General';
+    }
+
     try {
       const created = await withRetry(() => prisma.$transaction(async (tx) => {
         // 1. Clear expired reservations overlapping this slot:
@@ -317,7 +335,6 @@ const bookingService = {
           where: {
             turfId: turf.id,
             courtNumber,
-            bookingDate: dateObj,
             startTime: { lt: payload.endTime },
             endTime: { gt: payload.startTime },
             bookingStatus: 'reserved',
@@ -365,6 +382,7 @@ const bookingService = {
                 startTime: payload.startTime,
                 endTime: payload.endTime,
                 totalAmount: price,
+                sport: bookingSport,
                 holdExpiresAt: expiresAt,
                 updatedAt: now,
               },
@@ -393,7 +411,7 @@ const bookingService = {
             bookingStatus: 'reserved',
             paymentStatus: 'pending',
             courtNumber,
-            sport: payload.sport || (turf.sportTypes ? turf.sportTypes[0] : 'General'),
+            sport: bookingSport,
             holdExpiresAt: expiresAt,
             createdAt: now,
             updatedAt: now,

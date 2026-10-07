@@ -104,39 +104,33 @@ const slotOverrideSchema = z.object({
 
 // Match / Scorecard Schemas
 const createMatchSchema = z.object({
-  place: z.string().min(1, 'Venue / Place is required'),
-  sport: z.string().min(1, 'Sport is required'),
+  place: z.string().optional().default('Turf Arena'),
+  sport: z.string().optional().default('Cricket'),
   date: z.string().optional().default('Today'),
   time: z.string().optional().default('07:00 PM'),
   playWithStrangers: z.boolean().optional().default(false),
-  turfId: z.string().optional(),
-  bookingId: z.string().optional(),
-});
+  turfId: z.string().optional().nullable(),
+  bookingId: z.string().optional().nullable(),
+}).passthrough();
 
 const joinMatchSchema = z.object({
   joinCode: z.string().min(4, 'Valid 4-6 char join code is required'),
 });
 
 const updateTeamsSchema = z.object({
-  teamA: z.object({
-    name: z.string(),
-    players: z.array(z.string()),
-  }),
-  teamB: z.object({
-    name: z.string(),
-    players: z.array(z.string()),
-  }),
-});
+  teamA: z.any().optional(),
+  teamB: z.any().optional(),
+}).passthrough();
 
 const tossSchema = z.object({
-  winner: z.string().min(1),
-  decision: z.enum(['bat', 'bowl']),
-});
+  winner: z.string().optional(),
+  decision: z.string().optional(),
+}).passthrough();
 
 const updateScorecardSchema = z.object({
-  status: z.enum(['created', 'live', 'completed']).optional(),
-  scorecard: z.record(z.any()),
-});
+  status: z.enum(['created', 'toss', 'live', 'completed']).optional(),
+  scorecard: z.any().optional(),
+}).passthrough();
 
 // Review Schema
 const createReviewSchema = z.object({

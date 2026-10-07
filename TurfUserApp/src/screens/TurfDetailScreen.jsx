@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
   ActivityIndicator, FlatList, Dimensions, Platform,
-  Linking, Share, StatusBar, StyleSheet, Modal,
+  Linking, Share, StatusBar, StyleSheet, Modal, Alert,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import Feather from 'react-native-vector-icons/Feather';
@@ -73,6 +73,7 @@ export default function TurfDetailScreen({ route, navigation }) {
   const [modalVisible,  setModalVisible]  = useState(false);
   const [modalIndex,    setModalIndex]    = useState(0);
   const [loading,       setLoading]       = useState(true);
+  const [selectedSport, setSelectedSport] = useState(null);
 
   const sliderRef      = useRef(null);
   const modalSliderRef = useRef(null);
@@ -80,10 +81,18 @@ export default function TurfDetailScreen({ route, navigation }) {
   useEffect(() => {
     Promise.all([turfsApi.getTurf(id), turfsApi.getReviews(id)])
       .then(([t, r]) => {
-        setTurf(t?.turf || t);
+        const loadedTurf = t?.turf || t;
+        setTurf(loadedTurf);
         const rawReviews = r?.reviews || r?.items || [];
         const sorted = [...rawReviews].sort((a, b) => (b.rating || 5) - (a.rating || 5));
         setReviews(sorted);
+
+        const availableSports = (Array.isArray(loadedTurf?.sports) && loadedTurf.sports.length > 0)
+          ? loadedTurf.sports
+          : ((Array.isArray(loadedTurf?.sportTypes) && loadedTurf.sportTypes.length > 0) ? loadedTurf.sportTypes : []);
+        if (availableSports.length === 1) {
+          setSelectedSport(availableSports[0]);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -338,19 +347,37 @@ export default function TurfDetailScreen({ route, navigation }) {
           {/* ── Sports Supported ── */}
           <Text style={[styles.sectionTitle, { color: C.text }]}>Sports & Pitch Formats</Text>
           <View style={styles.sportsRow}>
-            {sports.map((s, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.sportChip,
-                  { backgroundColor: C.card, borderColor: C.border },
-                  SHADOW.subtle,
-                ]}
-              >
-                {getSportIconComponent(s, 16, C.primary)}
-                <Text style={[styles.sportChipText, { color: C.text }]}>{s}</Text>
-              </View>
-            ))}
+            {sports.map((s, idx) => {
+              const isSelected = selectedSport === s;
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.sportChip,
+                    {
+                      backgroundColor: isSelected ? C.primary : C.card,
+                      borderColor: isSelected ? C.primary : C.border,
+                    },
+                    SHADOW.subtle,
+                  ]}
+                  onPress={() => setSelectedSport(s)}
+                  activeOpacity={0.8}
+                >
+                  {getSportIconComponent(s, 16, isSelected ? '#FFFFFF' : C.primary)}
+                  <Text
+                    style={[
+                      styles.sportChipText,
+                      {
+                        color: isSelected ? '#FFFFFF' : C.text,
+                        fontWeight: isSelected ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {s}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {/* ── Amenities & Ground Facilities ── */}
@@ -473,14 +500,42 @@ export default function TurfDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.bookBtn, { backgroundColor: C.primary }]}
-          onPress={() => navigation.navigate('SlotPicker', { turf: { ...turf, _id: turf._id || turf.id } })}
-          activeOpacity={0.88}
-        >
-          <Text style={styles.bookBtnText}>Select Slot & Book</Text>
-          <Feather name="arrow-right" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
-        </TouchableOpacity>
+        {(() => {
+          const availableSports = (Array.isArray(turf.sports) && turf.sports.length > 0)
+            ? turf.sports
+            : ((Array.isArray(turf.sportTypes) && turf.sportTypes.length > 0) ? turf.sportTypes : []);
+          const needsSelection = availableSports.length > 1 && !selectedSport;
+          const chosenSport = selectedSport || (availableSports.length === 1 ? availableSports[0] : null);
+
+          return (
+            <TouchableOpacity
+              style={[
+                styles.bookBtn,
+                { backgroundColor: needsSelection ? '#F59E0B' : C.primary },
+              ]}
+              onPress={() => {
+                if (needsSelection) {
+                  Alert.alert(
+                    'Select a Sport',
+                    'Please tap on a sport chip under "Sports & Pitch Formats" before choosing a slot.',
+                  );
+                  return;
+                }
+
+                navigation.navigate('SlotPicker', {
+                  turf: { ...turf, _id: turf._id || turf.id },
+                  sport: chosenSport || availableSports[0] || 'Football',
+                });
+              }}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.bookBtnText}>
+                {needsSelection ? 'Choose a Sport First' : (chosenSport ? `Select Slot (${chosenSport})` : 'Select Slot & Book')}
+              </Text>
+              <Feather name={needsSelection ? 'grid' : 'arrow-right'} size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
+          );
+        })()}
       </View>
 
       {/* ── Fullscreen Interactive Image Viewer Lightbox Modal ── */}

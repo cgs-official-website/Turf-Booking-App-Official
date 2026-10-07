@@ -31,6 +31,8 @@ import BadmintonScorecardScreen from '../screens/BadmintonScorecardScreen';
 import VolleyballScorecardScreen from '../screens/VolleyballScorecardScreen';
 import BasketballScorecardScreen from '../screens/BasketballScorecardScreen';
 import TennisScorecardScreen   from '../screens/TennisScorecardScreen';
+import MatchHistoryScreen      from '../screens/MatchHistoryScreen';
+import PastMatchDetailsScreen  from '../screens/PastMatchDetailsScreen';
 
 import { createNavigationContainerRef } from '@react-navigation/native';
 
@@ -109,6 +111,8 @@ export default function RootNavigator() {
             <Stack.Screen name="VolleyballScorecard" component={VolleyballScorecardScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="BasketballScorecard" component={BasketballScorecardScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="TennisScorecard"     component={TennisScorecardScreen}     options={{ presentation: 'card' }} />
+            <Stack.Screen name="MatchHistory"        component={MatchHistoryScreen}        options={{ presentation: 'card' }} />
+            <Stack.Screen name="PastMatchDetails"    component={PastMatchDetailsScreen}    options={{ presentation: 'card' }} />
           </>
         )}
       </Stack.Navigator>

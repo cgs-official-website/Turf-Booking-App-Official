@@ -41,7 +41,7 @@ export default function BookingConfirmScreen({ route, navigation }) {
       // 1. Reserve slot in backend with atomic hold
       const reserveRes = await bookingsApi.reserve({
         turfId,
-        sport: sport || (turfData?.sportTypes ? turfData.sportTypes[0] : 'Football'),
+        sport: sport || (turfData?.sports ? turfData.sports[0] : (turfData?.sportTypes ? turfData.sportTypes[0] : undefined)),
         date,
         startTime,
         endTime,

@@ -53,7 +53,7 @@ const TurfBookingsScreen = ({ navigation }) => {
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const dispatch = useDispatch();
-  const { bookings, loading } = useSelector((s) => s.vendor);
+  const { bookings, loading, activeTurfId } = useSelector((s) => s.vendor);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
@@ -61,21 +61,31 @@ const TurfBookingsScreen = ({ navigation }) => {
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
 
-  useEffect(() => { dispatch(fetchBookings()); }, []);
+  useEffect(() => {
+    dispatch(fetchBookings(activeTurfId));
+  }, [activeTurfId]);
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
 
+  const activeBookings = useMemo(() => {
+    if (!activeTurfId) return safeBookings;
+    return safeBookings.filter((b) => {
+      const bTurfId = b.turfId || b.turf?._id || b.turf?.id;
+      return !bTurfId || bTurfId === activeTurfId;
+    });
+  }, [safeBookings, activeTurfId]);
+
   const counts = useMemo(() => {
     return {
-      all: safeBookings.length,
-      pending: safeBookings.filter((b) => b && b.status === 'pending').length,
-      confirmed: safeBookings.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status)).length,
-      rejected: safeBookings.filter((b) => b && b.status === 'rejected').length,
+      all: activeBookings.length,
+      pending: activeBookings.filter((b) => b && b.status === 'pending').length,
+      confirmed: activeBookings.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status)).length,
+      rejected: activeBookings.filter((b) => b && b.status === 'rejected').length,
     };
-  }, [safeBookings]);
+  }, [activeBookings]);
 
   const filtered = useMemo(() => {
-    let result = safeBookings;
+    let result = activeBookings;
     if (filter === 'confirmed') {
       result = result.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status));
     } else if (filter !== 'all') {
@@ -88,11 +98,11 @@ const TurfBookingsScreen = ({ navigation }) => {
     if (dateFilter !== 'all') result = result.filter((b) => matchesDateFilter(b.date, dateFilter));
     if (gameFilter !== 'all') {
       result = result.filter(
-        (b) => (b.gameType || b.sport || '').toLowerCase() === gameFilter.toLowerCase()
+        (b) => (b.sport || b.turfType || b.gameType || '').toLowerCase() === gameFilter.toLowerCase()
       );
     }
     return result;
-  }, [safeBookings, filter, search, dateFilter, gameFilter]);
+  }, [activeBookings, filter, search, dateFilter, gameFilter]);
 
   const dateLabel = DATE_OPTIONS.find((o) => o.key === dateFilter)?.label || 'Date';
   const gameLabel = gameFilter === 'all' ? 'All Games' : gameFilter;

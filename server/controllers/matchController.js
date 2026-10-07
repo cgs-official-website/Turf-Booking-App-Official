@@ -36,10 +36,21 @@ const matchController = {
       const joinCode = generateJoinCode();
       const userProfile = await prisma.user.findUnique({ where: { id: uid } });
 
-      const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const teams = parsed.teams || {
+      const matchId = req.body.id || `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const teams = parsed.teams || req.body.teams || {
         teamA: { name: 'Team A', players: [userProfile?.name || 'Player'] },
         teamB: { name: 'Team B', players: [] },
+      };
+
+      const scorecard = parsed.scorecard || req.body.scorecard || {
+        innings: [
+          { team: 'Team A', runs: 0, wickets: 0, overs: '0.0', balls: [] },
+          { team: 'Team B', runs: 0, wickets: 0, overs: '0.0', balls: [] },
+        ],
+        currentInning: 0,
+        striker: '',
+        nonStriker: '',
+        bowler: '',
       };
 
       const match = await prisma.match.create({
@@ -48,25 +59,17 @@ const matchController = {
           createdBy: uid,
           creatorName: userProfile?.name || 'Player',
           joinCode,
-          place: parsed.place || 'Turf Arena',
-          sport: parsed.sport || 'Cricket',
-          matchDate: String(parsed.matchDate || new Date().toISOString().split('T')[0]),
-          matchTime: String(parsed.matchTime || '18:00'),
-          playWithStrangers: Boolean(parsed.playWithStrangers),
-          turfId: parsed.turfId || null,
-          bookingId: parsed.bookingId || null,
+          place: parsed.place || req.body.place || 'Turf Arena',
+          sport: parsed.sport || req.body.sport || 'Cricket',
+          matchDate: String(parsed.date || parsed.matchDate || req.body.date || new Date().toISOString().split('T')[0]),
+          matchTime: String(parsed.time || parsed.matchTime || req.body.time || '18:00'),
+          playWithStrangers: Boolean(parsed.playWithStrangers || req.body.playWithStrangers),
+          turfId: parsed.turfId || req.body.turfId || null,
+          bookingId: parsed.bookingId || req.body.bookingId || null,
           teams,
-          scorecard: {
-            innings: [
-              { team: 'Team A', runs: 0, wickets: 0, overs: '0.0', balls: [] },
-              { team: 'Team B', runs: 0, wickets: 0, overs: '0.0', balls: [] },
-            ],
-            currentInning: 0,
-            striker: '',
-            nonStriker: '',
-            bowler: '',
-          },
-          status: 'created',
+          scorecard,
+          toss: req.body.toss || null,
+          status: req.body.status || 'created',
           players: {
             create: [{ userId: uid }],
           },
@@ -237,19 +240,31 @@ const matchController = {
     const { id } = req.params;
 
     try {
-      const parsed = updateScorecardSchema.parse(req.body);
       const updatePayload = {
-        scorecard: parsed.scorecard,
         updatedAt: new Date(),
       };
-      if (parsed.status) {
-        updatePayload.status = parsed.status;
+
+      if (req.body.scorecard !== undefined) {
+        updatePayload.scorecard = req.body.scorecard;
+      } else if (req.body.innings || req.body.football || req.body.badminton || req.body.volleyball || req.body.basketball || req.body.tennis) {
+        updatePayload.scorecard = req.body;
+      }
+
+      if (req.body.teams !== undefined) {
+        updatePayload.teams = req.body.teams;
+      }
+      if (req.body.toss !== undefined) {
+        updatePayload.toss = req.body.toss;
+      }
+
+      if (req.body.status && ['created', 'live', 'completed'].includes(req.body.status)) {
+        updatePayload.status = req.body.status;
       }
 
       const updated = await prisma.match.update({
         where: { id },
         data: updatePayload,
-        include: { players: true },
+        include: { players: true, turf: true },
       });
 
       return sendSuccess(res, { match: formatMatch(updated) });
@@ -265,25 +280,30 @@ const matchController = {
    */
   async getMyMatches(req, res) {
     const { uid } = req.user;
-    const { limit = 20 } = req.query;
+    const { limit = 50, status } = req.query;
 
     try {
-      const playerRecords = await prisma.matchPlayer.findMany({
-        where: { userId: uid },
-        include: {
-          match: {
-            include: { players: true, turf: true },
-          },
-        },
-        orderBy: { joinedAt: 'desc' },
+      const whereClause = {
+        OR: [
+          { createdBy: uid },
+          { players: { some: { userId: uid } } },
+        ],
+      };
+
+      if (status && ['created', 'live', 'completed'].includes(status)) {
+        whereClause.status = status;
+      }
+
+      const rawMatches = await prisma.match.findMany({
+        where: whereClause,
+        include: { players: true, turf: true },
+        orderBy: { createdAt: 'desc' },
         take: Number(limit),
       });
 
-      const matches = playerRecords
-        .map((pr) => formatMatch(pr.match))
-        .filter(Boolean);
+      const matches = rawMatches.map((m) => formatMatch(m)).filter(Boolean);
 
-      return sendPaginated(res, matches, null, { count: matches.length });
+      return sendSuccess(res, { matches, count: matches.length });
     } catch (err) {
       console.error('getMyMatches error:', err);
       return sendError(res, 'Failed to fetch user matches', 500, 'FETCH_FAILED');

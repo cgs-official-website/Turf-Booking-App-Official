@@ -63,7 +63,7 @@ export default function SlotPickerScreen({ route, navigation }) {
   const [selectedSlot,  setSelectedSlot]  = useState(null);
   const [endSlot,       setEndSlot]       = useState(null);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [sport,         setSport]         = useState(turf.sports?.[0] || turf.sportTypes?.[0] || 'Football');
+  const [sport,         setSport]         = useState(route.params?.sport || turf.sports?.[0] || turf.sportTypes?.[0] || 'Football');
   const [loading,       setLoading]       = useState(true);
 
   const { C, dark } = useTheme();

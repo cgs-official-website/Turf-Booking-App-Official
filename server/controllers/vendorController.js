@@ -42,13 +42,18 @@ function formatVendor(v) {
  * - Subtract slots booked by customers
  * - Subtract slots blocked/frozen by vendor
  */
-async function calculateVendorTodayOpenSlots(vendorId) {
+async function calculateVendorTodayOpenSlots(vendorId, targetTurfId = null) {
   const { dateStr: todayStr, timeStr: currentTimeStr } = bookingService.getKolkataTimeInfo();
   const [curH, curM] = currentTimeStr.split(':').map(Number);
   const currentMin = (isNaN(curH) ? 0 : curH) * 60 + (isNaN(curM) ? 0 : curM);
 
+  const whereClause = { vendorId };
+  if (targetTurfId) {
+    whereClause.id = targetTurfId;
+  }
+
   const turfs = await prisma.turf.findMany({
-    where: { vendorId },
+    where: whereClause,
   });
 
   if (!turfs || turfs.length === 0) {
@@ -515,27 +520,25 @@ const vendorController = {
   async getDashboard(req, res) {
     try {
       const { uid } = req.user;
-      const cacheKey = `vendor:dashboard:${uid}`;
+      const { turfId } = req.query;
+      const cacheKey = turfId ? `vendor:dashboard:${uid}:${turfId}` : `vendor:dashboard:${uid}`;
 
       const cached = await cacheService.get(cacheKey);
       if (cached) {
-        const availableSlots = await calculateVendorTodayOpenSlots(uid);
-        const updatedPayload = {
-          ...cached,
-          stats: {
-            ...cached.stats,
-            availableSlots,
-            openSlots: availableSlots,
-          },
-        };
-        return sendSuccess(res, updatedPayload);
+        return sendSuccess(res, cached);
       }
 
       const { dateStr: todayStr } = bookingService.getKolkataTimeInfo();
-      const bookingsResult = await bookingService.listForVendor(uid, { limit: 100 });
+      const queryOpts = { limit: 100 };
+      if (turfId) queryOpts.turfId = turfId;
+
+      const bookingsResult = await bookingService.listForVendor(uid, queryOpts);
 
       const allBookings = bookingsResult.items || [];
       const todayBookings = allBookings.filter((b) => b.date === todayStr);
+
+      const todayConfirmedCount = todayBookings.filter((b) => ['confirmed', 'accepted', 'completed'].includes(b.status)).length;
+      const todayRejectedCount = todayBookings.filter((b) => b.status === 'rejected').length;
 
       const totalRevenue = allBookings
         .filter((b) => ['confirmed', 'completed'].includes(b.status))
@@ -546,12 +549,16 @@ const vendorController = {
         .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
 
       const pendingRequests = allBookings.filter((b) => b.status === 'pending');
-      const availableSlots = await calculateVendorTodayOpenSlots(uid);
+      const availableSlots = await calculateVendorTodayOpenSlots(uid, turfId);
 
       const payload = {
         stats: {
-          totalBookings: allBookings.length,
+          totalBookings: todayBookings.length,
           todayBookingsCount: todayBookings.length,
+          confirmedBookings: todayConfirmedCount,
+          todayConfirmedBookings: todayConfirmedCount,
+          rejectedBookings: todayRejectedCount,
+          todayRejectedBookings: todayRejectedCount,
           totalRevenue,
           todayRevenue,
           pendingRequestsCount: pendingRequests.length,
@@ -1035,14 +1042,35 @@ const vendorController = {
       if (data.description !== undefined) updateData.description = data.description;
       if (data.city) updateData.city = data.city;
       if (data.location) updateData.location = data.location;
-      if (data.sports || data.sportTypes) updateData.sports = data.sports || data.sportTypes;
+      
+      const rawSports = data.sports || data.selectedSports || data.sportTypes;
+      if (rawSports) {
+        let sportsArr = rawSports;
+        if (typeof sportsArr === 'string') {
+          try { sportsArr = JSON.parse(sportsArr); } catch { sportsArr = [sportsArr]; }
+        }
+        if (Array.isArray(sportsArr)) {
+          updateData.sports = sportsArr;
+        }
+      }
+
+      const rawAmenities = data.amenities || data.selectedAmenities;
+      if (rawAmenities) {
+        let amenitiesArr = rawAmenities;
+        if (typeof amenitiesArr === 'string') {
+          try { amenitiesArr = JSON.parse(amenitiesArr); } catch { amenitiesArr = [amenitiesArr]; }
+        }
+        if (Array.isArray(amenitiesArr)) {
+          updateData.amenities = amenitiesArr;
+        }
+      }
+
       if (data.pricePerHour !== undefined || data.price !== undefined) {
         updateData.pricePerHour = Number(data.pricePerHour ?? data.price);
       }
       if (data.courtCount !== undefined) updateData.courtCount = Number(data.courtCount);
       if (data.slotConfig) updateData.slotConfig = data.slotConfig;
       if (data.images) updateData.images = data.images;
-      if (data.amenities) updateData.amenities = data.amenities;
 
       const updated = await prisma.turf.update({
         where: { id: turfId },

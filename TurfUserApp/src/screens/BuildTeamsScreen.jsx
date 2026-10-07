@@ -25,25 +25,31 @@ export default function BuildTeamsScreen({ route, navigation }) {
       if (!m) return;
       setMatch(m);
 
-      // Ensure creator is present if no players selected
-      const effectivePlayers = (m.players && m.players.length > 0)
-        ? m.players
-        : [{ id: 'host_creator', name: 'You (Host)', isGuest: false }];
+      const playerList = Array.isArray(m.players) ? m.players : [];
+      const allPlayerIds = playerList.map((p) => (typeof p === 'object' ? (p.id || p.userId) : p));
 
-      // split players alternately if not already split
       if (m.teams?.A?.playerIds?.length || m.teams?.B?.playerIds?.length) {
+        const assigned = new Set([...(m.teams.A?.playerIds || []), ...(m.teams.B?.playerIds || [])]);
+        const unassigned = allPlayerIds.filter((id) => !assigned.has(id));
+
+        const teamAPlayerIds = [...(m.teams.A?.playerIds || []), ...unassigned.filter((_, i) => i % 2 === 0)];
+        const teamBPlayerIds = [...(m.teams.B?.playerIds || []), ...unassigned.filter((_, i) => i % 2 === 1)];
+
         setTeamA({
-          ...m.teams.A,
-          captainId: m.teams.A.captainId || m.teams.A.playerIds[0] || null,
+          name: m.teams.A?.name || 'Team A',
+          logo: m.teams.A?.logo || null,
+          playerIds: teamAPlayerIds,
+          captainId: m.teams.A?.captainId || teamAPlayerIds[0] || null,
         });
         setTeamB({
-          ...m.teams.B,
-          captainId: m.teams.B.captainId || m.teams.B.playerIds[0] || null,
+          name: m.teams.B?.name || 'Team B',
+          logo: m.teams.B?.logo || null,
+          playerIds: teamBPlayerIds,
+          captainId: m.teams.B?.captainId || teamBPlayerIds[0] || null,
         });
       } else {
-        const ids = effectivePlayers.map((p) => p.id);
-        const a = ids.filter((_, i) => i % 2 === 0);
-        const b = ids.filter((_, i) => i % 2 === 1);
+        const a = allPlayerIds.filter((_, i) => i % 2 === 0);
+        const b = allPlayerIds.filter((_, i) => i % 2 === 1);
         setTeamA({ name: 'Team A', logo: null, playerIds: a, captainId: a[0] || null });
         setTeamB({ name: 'Team B', logo: null, playerIds: b, captainId: b[0] || null });
       }
@@ -51,8 +57,21 @@ export default function BuildTeamsScreen({ route, navigation }) {
   }, [matchId]);
 
   const playerById = (id) => {
-    if (id === 'host_creator') return { id: 'host_creator', name: 'You (Host)' };
-    return match?.players?.find((p) => p.id === id);
+    if (!id) return null;
+    if (match?.playerNames && match.playerNames[id]) {
+      return { id, name: match.playerNames[id] };
+    }
+    if (id === 'host_creator') {
+      return { id: 'host_creator', name: match?.creatorName ? `${match.creatorName}` : 'You' };
+    }
+    const found = match?.players?.find((p) => (typeof p === 'object' ? (p.id === id || p.userId === id) : p === id));
+    if (found) {
+      if (typeof found === 'string') {
+        return { id: found, name: match?.playerNames?.[found] || (found === match?.createdBy ? (match?.creatorName || 'Host') : 'Player') };
+      }
+      return found;
+    }
+    return { id, name: id === match?.createdBy ? (match?.creatorName || 'Host') : 'Player' };
   };
 
   const setCaptain = (teamKey, playerId) => {

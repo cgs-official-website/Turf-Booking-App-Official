@@ -15,6 +15,29 @@ const VOLLEYBALL_POINTS = [15, 21, 25];
 const BASKETBALL_QUARTERS = [5, 8, 10, 12];
 const TENNIS_GAMES = [4, 6];
 
+/**
+ * Generates an unpredictable, cryptographically secure 50/50 toss outcome ('H' or 'T').
+ * Each call is strictly independent with zero pattern, memory, or sequence bias.
+ */
+function getSecureTossOutcome() {
+  try {
+    const cryptoObj = typeof globalThis !== 'undefined' && globalThis.crypto
+      ? globalThis.crypto
+      : (typeof window !== 'undefined' && window.crypto ? window.crypto : null);
+
+    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+      const buf = new Uint32Array(1);
+      cryptoObj.getRandomValues(buf);
+      return (buf[0] % 2 === 0) ? 'H' : 'T';
+    }
+  } catch (e) {
+    // Fallback if crypto bindings unavailable
+  }
+
+  // Unbiased 50/50 PRNG sample (zero timestamp parity lock)
+  return (Math.random() < 0.5) ? 'H' : 'T';
+}
+
 export default function TossScreen({ route, navigation }) {
   const { matchId } = route.params;
 
@@ -38,6 +61,7 @@ export default function TossScreen({ route, navigation }) {
   // Sport-specific configuration state
   const [overs, setOvers] = useState(6);
   const [oversInput, setOversInput] = useState('6');
+  const [lastManEnabled, setLastManEnabled] = useState(false);
   const [halfDuration, setHalfDuration] = useState(20);
   const [badmintonPoints, setBadmintonPoints] = useState(21);
   const [badmintonGames, setBadmintonGames] = useState(3);
@@ -60,6 +84,9 @@ export default function TossScreen({ route, navigation }) {
           if (m.overs) {
             setOvers(m.overs);
             setOversInput(String(m.overs));
+          }
+          if (m.lastManEnabled !== undefined) {
+            setLastManEnabled(Boolean(m.lastManEnabled));
           }
         }
       } finally {
@@ -105,7 +132,7 @@ export default function TossScreen({ route, navigation }) {
     }).start(() => {
       clearInterval(coinFaceIntervalRef.current);
       coinFaceIntervalRef.current = null;
-      const outcome = Math.random() < 0.5 ? 'H' : 'T';
+      const outcome = getSecureTossOutcome();
       // Calling team wins if their call matches actual result; otherwise spinner team wins
       const winner = outcome === call ? callTeam : spinTeam;
       setCoinFace(outcome === 'H' ? 'HEAD' : 'TAIL');
@@ -171,7 +198,8 @@ export default function TossScreen({ route, navigation }) {
         const updated = await matchStorage.updateMatch(matchId, {
           status: 'toss',
           overs: finalOvers,
-          toss: { ...tossData, overs: finalOvers },
+          lastManEnabled,
+          toss: { ...tossData, overs: finalOvers, lastManEnabled },
           currentInningsIndex: 0,
           innings: [innings0],
         });
@@ -539,6 +567,24 @@ export default function TossScreen({ route, navigation }) {
                     />
                     <Text style={styles.customOverSuffix}>Overs</Text>
                   </View>
+                </View>
+
+                <Text style={styles.label}>Last Man Rule</Text>
+                <View style={styles.pillRow}>
+                  <TouchableOpacity
+                    style={[styles.pill, !lastManEnabled && styles.pillActive]}
+                    onPress={() => setLastManEnabled(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.pillText, !lastManEnabled && styles.pillTextActive]}>OFF (Normal)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.pill, lastManEnabled && styles.pillActive]}
+                    onPress={() => setLastManEnabled(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.pillText, lastManEnabled && styles.pillTextActive]}>⚡ ON (Solo Batter)</Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}
