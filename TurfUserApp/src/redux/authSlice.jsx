@@ -10,6 +10,10 @@ export const loginUser = createAsyncThunk('auth/login', async ({ email, password
     if (payload?.token) {
       await AsyncStorage.setItem('token', payload.token);
     }
+    const userObj = payload?.user || payload?.profile;
+    if (userObj) {
+      await AsyncStorage.setItem('user', JSON.stringify(userObj));
+    }
     return payload;
   } catch (e) { return rejectWithValue(e.message); }
 });
@@ -29,6 +33,10 @@ export const verifyOtp = createAsyncThunk('auth/verifyOtp', async ({ phone, otp 
     if (payload?.token) {
       await AsyncStorage.setItem('token', payload.token);
     }
+    const userObj = payload?.user || payload?.profile;
+    if (userObj) {
+      await AsyncStorage.setItem('user', JSON.stringify(userObj));
+    }
     return payload;
   } catch (e) { return rejectWithValue(e.message); }
 });
@@ -42,6 +50,10 @@ export const googleLogin = createAsyncThunk('auth/googleLogin', async (profile, 
     if (payload?.token) {
       await AsyncStorage.setItem('token', payload.token);
     }
+    const userObj = payload?.user || payload?.profile;
+    if (userObj) {
+      await AsyncStorage.setItem('user', JSON.stringify(userObj));
+    }
     return payload;
   } catch (e) { return rejectWithValue(e.message); }
 });
@@ -53,6 +65,10 @@ export const registerUser = createAsyncThunk('auth/register', async (data, { rej
     const payload = res?.data || res;
     if (payload?.token) {
       await AsyncStorage.setItem('token', payload.token);
+    }
+    const userObj = payload?.user || payload?.profile;
+    if (userObj) {
+      await AsyncStorage.setItem('user', JSON.stringify(userObj));
     }
     return payload;
   } catch (e) { return rejectWithValue(e.message); }
@@ -194,6 +210,7 @@ const authSlice = createSlice({
         s.status = 'succeeded';
         s.token = a.payload?.token;
         s.user = a.payload?.user || a.payload?.profile;
+        s.locationSet = true;
       })
       .addCase(loginUser.rejected,     (s, a) => { s.status = 'failed'; s.error = a.payload; })
       // OTP
@@ -205,6 +222,7 @@ const authSlice = createSlice({
         s.status = 'succeeded';
         s.token = a.payload?.token;
         s.user = a.payload?.user || a.payload?.profile;
+        s.locationSet = true;
       })
       .addCase(verifyOtp.rejected,    (s, a) => { s.status = 'failed'; s.error = a.payload; })
       // Google
@@ -213,6 +231,7 @@ const authSlice = createSlice({
         s.status = 'succeeded';
         s.token = a.payload?.token;
         s.user = a.payload?.user || a.payload?.profile;
+        s.locationSet = true;
       })
       .addCase(googleLogin.rejected,   (s, a) => { s.status = 'failed'; s.error = a.payload; })
       // Register
@@ -222,6 +241,7 @@ const authSlice = createSlice({
         if (a.payload?.token) {
           s.token = a.payload.token;
           s.user  = a.payload.user || a.payload.profile;
+          s.locationSet = true;
         }
       })
       .addCase(registerUser.rejected,  (s, a) => { s.status = 'failed'; s.error = a.payload; })

@@ -79,7 +79,7 @@ android {
     // otherwise Google Sign-In throws DEVELOPER_ERROR (code 10) at runtime.
     namespace "com.turfuserapp"
     defaultConfig {
-        applicationId "com.turfuserapp"
+        applicationId "com.cgs.turfapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

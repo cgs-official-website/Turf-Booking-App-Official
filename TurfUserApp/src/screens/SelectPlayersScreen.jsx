@@ -25,14 +25,36 @@ export default function SelectPlayersScreen({ route, navigation }) {
       setMatch(m);
 
       const list = await playerStorage.getRecentPlayers();
-      setPlayers(list);
+
+      const mPlayers = (m?.players || []).map((p) => {
+        if (typeof p === 'object' && p) return p;
+        return { id: p, name: m?.playerNames?.[p] || 'Player' };
+      });
+
+      const playerMap = new Map();
+      list.forEach((p) => {
+        if (p && (p.id || p.userId)) playerMap.set(p.id || p.userId, p);
+      });
+      mPlayers.forEach((p) => {
+        const id = p.id || p.userId;
+        if (id) {
+          const existing = playerMap.get(id);
+          playerMap.set(id, {
+            id,
+            name: p.name || existing?.name || 'Player',
+            isGuest: p.isGuest ?? existing?.isGuest ?? false,
+          });
+        }
+      });
+
+      const combinedList = Array.from(playerMap.values());
+      setPlayers(combinedList);
 
       const initial = {};
-      if (m?.players && m.players.length > 0) {
-        m.players.forEach((p) => {
-          if (p && p.id) initial[p.id] = true;
-        });
-      }
+      mPlayers.forEach((p) => {
+        const id = p.id || p.userId;
+        if (id) initial[id] = true;
+      });
       setSelected(initial);
     })();
   }, [matchId]);
@@ -82,18 +104,26 @@ export default function SelectPlayersScreen({ route, navigation }) {
       const teamAPlayerIds = playerIds.filter((_, i) => i % 2 === 0);
       const teamBPlayerIds = playerIds.filter((_, i) => i % 2 === 1);
 
+      const teamAPlayers = chosen
+        .filter((p) => teamAPlayerIds.includes(p.id))
+        .map((p) => ({ id: p.id, name: p.name || playerNames[p.id] || 'Player', isGuest: !!p.isGuest }));
+
+      const teamBPlayers = chosen
+        .filter((p) => teamBPlayerIds.includes(p.id))
+        .map((p) => ({ id: p.id, name: p.name || playerNames[p.id] || 'Player', isGuest: !!p.isGuest }));
+
       const teamA = {
         name: match?.teams?.A?.name || 'Team A',
         logo: match?.teams?.A?.logo || null,
         playerIds: teamAPlayerIds,
-        players: chosen.filter((p) => teamAPlayerIds.includes(p.id)),
+        players: teamAPlayers,
         captainId: teamAPlayerIds[0] || null,
       };
       const teamB = {
         name: match?.teams?.B?.name || 'Team B',
         logo: match?.teams?.B?.logo || null,
         playerIds: teamBPlayerIds,
-        players: chosen.filter((p) => teamBPlayerIds.includes(p.id)),
+        players: teamBPlayers,
         captainId: teamBPlayerIds[0] || null,
       };
 
@@ -101,6 +131,7 @@ export default function SelectPlayersScreen({ route, navigation }) {
         players: chosen,
         playerNames,
         teams: { A: teamA, B: teamB },
+        scorecard: { ...(match?.scorecard || {}), playerNames },
         playWithStrangers: match?.playWithStrangers,
       });
 

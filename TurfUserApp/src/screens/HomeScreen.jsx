@@ -171,26 +171,24 @@ export default function HomeScreen({ navigation }) {
       const { latitude, longitude } = position.coords;
       setUserCoords({ lat: latitude, lng: longitude });
       setLocationOff(false);
-      // Turn off "Locating..." immediately as position is obtained
       setIsLocating(false);
 
-      // Asynchronously reverse geocode and fetch nearby turfs without blocking UI
-      fetchReverseGeocode(latitude, longitude).then((placeName) => {
-        setCustomLocationName(placeName);
-        dispatch(setLocationPermission(placeName));
-      }).catch(() => { });
+      // Fire nearby turfs query immediately without waiting for reverse geocoding
+      nearbyTurfsApi.getNearbyTurfs({ lat: latitude, lng: longitude, radius: 50 })
+        .then((res) => {
+          const list = res.data?.turfs || res.turfs || [];
+          setNearbyTurfs(list);
+        })
+        .catch(() => { })
+        .finally(() => setNearbyLoading(false));
 
-      try {
-        const res = await nearbyTurfsApi.getNearbyTurfs({
-          lat: latitude,
-          lng: longitude,
-          radius: 5,
-        });
-        const list = res.data?.turfs || res.turfs || [];
-        setNearbyTurfs(list);
-      } catch (apiErr) {
-        console.warn('Nearby turfs API error:', apiErr.message);
-      }
+      // Asynchronously reverse geocode without delaying UI
+      fetchReverseGeocode(latitude, longitude)
+        .then((placeName) => {
+          setCustomLocationName(placeName);
+          dispatch(setLocationPermission(placeName));
+        })
+        .catch(() => { });
     } catch (err) {
       console.warn('Location processing error:', err);
     } finally {
@@ -203,37 +201,13 @@ export default function HomeScreen({ navigation }) {
     setIsLocating(true);
     setNearbyLoading(true);
 
-    const onQuickSuccess = (position) => {
-      onLocationSuccess(position);
-    };
-
-    const onQuickFail = async () => {
-      setIsLocating(false);
-      setNearbyLoading(false);
-      waitingForLocationRef.current = true;
-      if (Platform.OS === 'android') {
-        try {
-          await Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
-          return;
-        } catch {
-          Linking.openSettings().catch(() => { });
-        }
-      } else {
-        Linking.openSettings().catch(() => { });
-      }
-    };
-
-    // Fast resolution: try fast location provider / cache first (5 min cache age)
     Geolocation.getCurrentPosition(
-      onQuickSuccess,
+      onLocationSuccess,
       () => {
-        Geolocation.getCurrentPosition(
-          onQuickSuccess,
-          onQuickFail,
-          { enableHighAccuracy: true, timeout: 3000, maximumAge: 300000 }
-        );
+        setIsLocating(false);
+        setNearbyLoading(false);
       },
-      { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }
+      { enableHighAccuracy: false, timeout: 3500, maximumAge: 600000 }
     );
   }, [onLocationSuccess]);
 
@@ -277,37 +251,19 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    const onLocationFailure = (geoErr) => {
+    const onLocationFailure = () => {
       setIsLocating(false);
       setNearbyLoading(false);
       setLocationOff(true);
-      Alert.alert(
-        'Location is Turned Off',
-        'Please turn on GPS / Location services to see turf grounds near you.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Turn On Location',
-            onPress: handleTurnOnLocation,
-          },
-        ]
-      );
     };
 
-    // Fast location attempt: use fast cached/fused location first
+    // Fast resolution location provider call
     Geolocation.getCurrentPosition(
       onLocationSuccess,
-      (geoErr) => {
-        // Fallback to high accuracy GPS if fast provider failed
-        Geolocation.getCurrentPosition(
-          onLocationSuccess,
-          onLocationFailure,
-          { enableHighAccuracy: true, timeout: 3000, maximumAge: 300000 }
-        );
-      },
-      { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }
+      onLocationFailure,
+      { enableHighAccuracy: false, timeout: 3500, maximumAge: 300000 }
     );
-  }, [onLocationSuccess, handleTurnOnLocation]);
+  }, [onLocationSuccess]);
 
   // When returning to app after turning on location in mobile settings, auto-detect & view location
   useEffect(() => {
@@ -405,9 +361,33 @@ export default function HomeScreen({ navigation }) {
     if (count === 0) return 0;
     return typeof t.rating === 'object' ? (t.rating.avg ?? t.ratingAvg ?? 0) : (Number(t.rating) || t.ratingAvg || 0);
   };
-  const sorted = [...turfs].sort((a, b) => getTurfRating(b) - getTurfRating(a));
+
+  const getTurfReviewCount = (t) => {
+    if (!t) return 0;
+    return typeof t.rating === 'object' ? (t.rating.count ?? t.reviewsCount ?? 0) : (t.reviewsCount ?? 0);
+  };
+
+  // Featured Stadiums: Rating DESCENDING (primary), Review Count DESCENDING (secondary tie-breaker)
+  const sorted = [...turfs].sort((a, b) => {
+    const rA = getTurfRating(a);
+    const rB = getTurfRating(b);
+    if (rB !== rA) return rB - rA;
+    const cA = getTurfReviewCount(a);
+    const cB = getTurfReviewCount(b);
+    return cB - cA;
+  });
   const featured = sorted.slice(0, 4);
-  const nearby = sorted.length > 1 ? sorted.slice(1) : sorted;
+
+  // Nearby Grounds: Rating DESCENDING (primary), Distance ASCENDING (secondary tie-breaker)
+  const sortedNearby = [...nearbyTurfs].sort((a, b) => {
+    const rA = getTurfRating(a);
+    const rB = getTurfRating(b);
+    if (rB !== rA) return rB - rA;
+    const distA = typeof a.distance === 'number' ? a.distance : Infinity;
+    const distB = typeof b.distance === 'number' ? b.distance : Infinity;
+    return distA - distB;
+  });
+  const nearby = sortedNearby.length > 0 ? sortedNearby : (sorted.length > 1 ? sorted.slice(1) : sorted);
 
   const getTimeGreeting = () => {
     const hour = new Date().getHours();
@@ -571,7 +551,10 @@ export default function HomeScreen({ navigation }) {
                   name={s.name}
                   icon={s.icon}
                   selected={sport === s.name}
-                  onPress={() => setSport(sport === s.name ? null : s.name)}
+                  onPress={() => {
+                    setSport(sport === s.name ? null : s.name);
+                    navigation.navigate('Explore', { sport: s.name });
+                  }}
                 />
               ))}
             </ScrollView>

@@ -49,8 +49,13 @@ export default function LoginScreen({ navigation }) {
       const profile = await signInWithGoogle();
       await dispatch(googleLogin(profile)).unwrap();
     } catch (e) {
-      if (e?.code !== '12501') {
-        Alert.alert('Google Sign-In Failed', e.message || 'Please try again');
+      if (e?.code !== '12501' && e?.code !== 'SIGN_IN_CANCELLED') {
+        const isDevErr = String(e?.message || e).includes('DEVELOPER_ERROR');
+        const errorMsg = typeof e === 'string' ? e : (e?.message || JSON.stringify(e));
+        const msg = isDevErr
+          ? 'Google Sign-In requires adding the Android SHA-1 fingerprint to Firebase Console.\n\nPlease use "Continue with Mobile" (OTP: 1234) or "Sign in with Email" to log in instantly.'
+          : (errorMsg || 'Could not complete Google Sign-In. Please try again or use Mobile OTP (1234).');
+        Alert.alert('Google Sign-In', msg);
       }
     } finally {
       setGoogleLoading(false);

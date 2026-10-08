@@ -12,54 +12,50 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { turfsApi } from '../api/turfs';
 import { placesApi } from '../api/places';
 
-const DEFAULT_HUBS = [
-  { id: 'loc_chennai', name: 'Chennai', city: 'Chennai', address: 'Chennai, Tamil Nadu', count: 12 },
-  { id: 'loc_anna_nagar', name: 'Anna Nagar', city: 'Chennai', address: 'Anna Nagar, Chennai', count: 5 },
-  { id: 'loc_tnagar', name: 'T. Nagar', city: 'Chennai', address: 'T. Nagar, Chennai', count: 4 },
-  { id: 'loc_velachery', name: 'Velachery', city: 'Chennai', address: 'Velachery, Chennai', count: 6 },
-  { id: 'loc_adyar', name: 'Adyar', city: 'Chennai', address: 'Adyar, Chennai', count: 4 },
-  { id: 'loc_omr', name: 'OMR', city: 'Chennai', address: 'Old Mahabalipuram Rd, Chennai', count: 8 },
-  { id: 'loc_guindy', name: 'Guindy', city: 'Chennai', address: 'Guindy, Chennai', count: 3 },
-  { id: 'loc_tambaram', name: 'Tambaram', city: 'Chennai', address: 'Tambaram, Chennai', count: 4 },
-  { id: 'loc_porur', name: 'Porur', city: 'Chennai', address: 'Porur, Chennai', count: 3 },
-  { id: 'loc_coimbatore', name: 'Coimbatore', city: 'Coimbatore', address: 'Coimbatore, Tamil Nadu', count: 7 },
-  { id: 'loc_madurai', name: 'Madurai', city: 'Madurai', address: 'Madurai, Tamil Nadu', count: 5 },
-  { id: 'loc_trichy', name: 'Tiruchirappalli', city: 'Tiruchirappalli', address: 'Trichy, Tamil Nadu', count: 4 },
-  { id: 'loc_salem', name: 'Salem', city: 'Salem', address: 'Salem, Tamil Nadu', count: 3 },
-  { id: 'loc_tirunelveli', name: 'Tirunelveli', city: 'Tirunelveli', address: 'Tirunelveli, Tamil Nadu', count: 3 },
-  { id: 'loc_bengaluru', name: 'Bengaluru', city: 'Bengaluru', address: 'Bengaluru, Karnataka', count: 9 },
-];
-
 export default function LocationScreen({ navigation }) {
   const dispatch = useDispatch();
   const { C, dark } = useTheme();
 
   const [search, setSearch] = useState('');
-  const [activeLocations, setActiveLocations] = useState(DEFAULT_HUBS);
+  const [activeLocations, setActiveLocations] = useState([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [predictions, setPredictions] = useState([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef(null);
 
-  // Load live dynamic active turf locations from backend in background
+  // Load live dynamic active turf locations from actual registered turfs
   const loadActiveLocations = useCallback(async () => {
     try {
       setLoadingLocations(true);
       const res = await turfsApi.getLocations();
       const locs = res.locations || res.data?.locations || [];
       if (Array.isArray(locs) && locs.length > 0) {
-        // Merge with DEFAULT_HUBS ensuring unique IDs
-        const existingIds = new Set(locs.map((l) => l.id || l.name));
-        const merged = [...locs];
-        DEFAULT_HUBS.forEach((dh) => {
-          if (!existingIds.has(dh.id) && !existingIds.has(dh.name)) {
-            merged.push(dh);
+        setActiveLocations(locs);
+      } else {
+        // Fallback: Group dynamically directly from active turfs API
+        const turfsRes = await turfsApi.getTurfs();
+        const items = turfsRes.turfs || turfsRes.items || [];
+        const locMap = new Map();
+        items.forEach((t) => {
+          const c = t.city || (typeof t.location === 'object' ? t.location?.city : '') || 'Local Area';
+          const key = c.toLowerCase().trim();
+          if (key) {
+            if (!locMap.has(key)) {
+              locMap.set(key, {
+                id: `loc_${key.replace(/[^a-z0-9]/g, '_')}`,
+                name: c,
+                city: c,
+                address: t.address || `${c}, Tamil Nadu`,
+                count: 0,
+              });
+            }
+            locMap.get(key).count += 1;
           }
         });
-        setActiveLocations(merged);
+        setActiveLocations(Array.from(locMap.values()).filter((l) => l.count > 0));
       }
     } catch (err) {
-      // Use fallback hubs seamlessly
+      setActiveLocations([]);
     } finally {
       setLoadingLocations(false);
     }

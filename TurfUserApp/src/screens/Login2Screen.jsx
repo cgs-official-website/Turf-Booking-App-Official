@@ -32,7 +32,8 @@ export default function Login2Screen({ navigation }) {
     setLoading(false);
 
     if (loginUser.rejected.match(res)) {
-      Alert.alert('Login Failed', res.payload || 'Invalid email or password');
+      const errText = typeof res.payload === 'string' ? res.payload : (res.payload?.message || res.payload?.error || 'Invalid email or password');
+      Alert.alert('Login Failed', errText);
     }
   };
 

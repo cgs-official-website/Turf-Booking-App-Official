@@ -35,32 +35,47 @@ const SORT_OPTIONS = [
   { label: 'Price: High', value: 'priceHighToLow' },
 ];
 
-export default function ExploreScreen({ navigation }) {
+export default function ExploreScreen({ navigation, route }) {
   const dispatch = useDispatch();
   const { C, dark } = useTheme();
 
   const wishlist = useSelector((s) => s.wishlist.wishlist);
-  const location = useSelector((s) => s.auth.location);
+
+  const initialSport = route?.params?.sport || 'All';
+  const initialQuery = route?.params?.query || route?.params?.search || '';
 
   const [turfs,         setTurfs]         = useState([]);
-  const [query,         setQuery]         = useState('');
-  const [sport,         setSport]         = useState('All');
+  const [query,         setQuery]         = useState(initialQuery);
+  const [sport,         setSport]         = useState(initialSport);
   const [sort,          setSort]          = useState('');
   const [loading,       setLoading]       = useState(true);
   const [filterVisible, setFilterVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState({ sort: null, time: null });
 
+  useEffect(() => {
+    if (route?.params?.sport) {
+      setSport(route.params.sport);
+    }
+    if (route?.params?.query || route?.params?.search) {
+      setQuery(route.params.query || route.params.search);
+    }
+  }, [route?.params]);
+
   const load = () => {
     setLoading(true);
     const params = {};
-    if (sport !== 'All') params.sport  = sport;
+    if (sport && sport !== 'All') params.sport  = sport;
     if (sort)            params.sort   = sort;
     if (activeFilters.sort) params.sort = activeFilters.sort;
     if (activeFilters.time) params.time = activeFilters.time;
     if (query.trim()) params.search = query.trim();
+    if (route?.params?.location) params.location = route.params.location;
 
     turfsApi.getTurfs(params)
-      .then((r) => setTurfs(r.turfs || r.items || []))
+      .then((r) => {
+        const list = r.turfs || r.items || r || [];
+        setTurfs(Array.isArray(list) ? list : []);
+      })
       .catch(() => setTurfs([]))
       .finally(() => setLoading(false));
   };
@@ -68,7 +83,7 @@ export default function ExploreScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [sport, sort, activeFilters, location, query])
+    }, [sport, sort, activeFilters, query, route?.params])
   );
 
   useEffect(() => {
@@ -76,6 +91,12 @@ export default function ExploreScreen({ navigation }) {
   }, [dispatch]);
 
   const filtered = turfs.filter((t) => {
+    if (sport && sport !== 'All') {
+      const target = sport.toLowerCase().trim();
+      const sList = Array.isArray(t.sportTypes) ? t.sportTypes : (Array.isArray(t.sports) ? t.sports : []);
+      const matchesSport = sList.some((s) => String(s).toLowerCase().trim().includes(target) || target.includes(String(s).toLowerCase().trim()));
+      if (!matchesSport) return false;
+    }
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     const nameMatch = (t.name || '').toLowerCase().includes(q);
@@ -84,8 +105,8 @@ export default function ExploreScreen({ navigation }) {
       (t.address || '').toLowerCase().includes(q) ||
       (t.location?.city || '').toLowerCase().includes(q) ||
       (t.location?.address || '').toLowerCase().includes(q);
-    const sportMatch = (t.sportTypes || t.sports || []).some((s) => s.toLowerCase().includes(q));
-    const amenMatch = (t.amenities || []).some((a) => a.toLowerCase().includes(q));
+    const sportMatch = (t.sportTypes || t.sports || []).some((s) => String(s).toLowerCase().includes(q));
+    const amenMatch = (t.amenities || []).some((a) => String(a).toLowerCase().includes(q));
     return nameMatch || cityMatch || sportMatch || amenMatch;
   });
 

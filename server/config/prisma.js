@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const { PrismaClient } = require('@prisma/client');
 
 /**
@@ -25,6 +27,7 @@ function getDatabaseUrlWithPoolCap() {
   } catch (e) {
     const separator = originalUrl.includes('?') ? '&' : '?';
     return `${originalUrl}${separator}connection_limit=20&connect_timeout=30&pool_timeout=30&sslmode=no-verify`;
+  }
   }
 }
 

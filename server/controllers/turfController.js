@@ -91,9 +91,9 @@ const turfController = {
       const searchTerm = (search || q || '').trim();
       const locationTerm = (location || city || '').trim();
 
-      // Base query: Return active and pending turfs (exclude suspended, inactive, deleted)
+      // Base query: Return active eligible turfs only (exclude pending, suspended, inactive)
       const where = {
-        status: { in: ['active', 'pending'] },
+        status: 'active',
       };
 
       // City / Location filter
@@ -126,11 +126,22 @@ const turfController = {
         }
       }
 
-      // Sport filter (PostgreSQL String[] column)
+      // Sport filter (Case-insensitive matching across sport arrays)
       if (sport && String(sport).toLowerCase() !== 'all') {
-        where.sports = {
-          has: String(sport),
-        };
+        const sClean = String(sport).trim();
+        const sLower = sClean.toLowerCase();
+        const sCap = sClean.charAt(0).toUpperCase() + sClean.slice(1).toLowerCase();
+        const sUpper = sClean.toUpperCase();
+
+        const sportConditions = [
+          { sports: { hasSome: [sClean, sLower, sCap, sUpper] } }
+        ];
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: sportConditions }];
+          delete where.OR;
+        } else {
+          where.OR = sportConditions;
+        }
       }
 
       // Price range filter
@@ -170,7 +181,15 @@ const turfController = {
         nextCursor = nextItem.id;
       }
 
-      const formatted = turfs.map(formatTurf);
+      let formatted = turfs.map(formatTurf);
+
+      if (sport && String(sport).toLowerCase() !== 'all') {
+        const target = String(sport).trim().toLowerCase();
+        formatted = formatted.filter((t) => {
+          const sList = Array.isArray(t.sports) ? t.sports : (Array.isArray(t.sportTypes) ? t.sportTypes : []);
+          return sList.some((s) => String(s).trim().toLowerCase().includes(target) || target.includes(String(s).trim().toLowerCase()));
+        });
+      }
 
       return sendPaginated(res, formatted, nextCursor, {
         count: formatted.length,

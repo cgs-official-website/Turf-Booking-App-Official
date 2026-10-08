@@ -32,27 +32,66 @@ const eco = (runs, balls) => (balls > 0 ? ((runs || 0) / (balls / 6)).toFixed(1)
 
 function formatCleanName(id, match) {
   if (!id) return '';
-  if (id === 'host_creator' || id === match?.createdBy) {
+  if (typeof id === 'object') {
+    if (id.name && !String(id.name).startsWith('guest_')) return id.name;
+    if (id.id) id = id.id;
+  }
+  const str = String(id);
+  if (str === 'host_creator' || str === match?.createdBy) {
     return match?.creatorName || 'Host';
   }
 
-  const str = String(id);
+  if (match?.playerNames && match.playerNames[str]) {
+    return match.playerNames[str];
+  }
+  if (match?.scorecard?.playerNames && match.scorecard.playerNames[str]) {
+    return match.scorecard.playerNames[str];
+  }
+
+  const teamPlayers = [
+    ...(match?.teams?.A?.players || match?.teams?.teamA?.players || []),
+    ...(match?.teams?.B?.players || match?.teams?.teamB?.players || []),
+  ];
+  const foundInTeam = teamPlayers.find((p) => typeof p === 'object' && (p.id === str || p.userId === str));
+  if (foundInTeam && foundInTeam.name && !String(foundInTeam.name).startsWith('guest_')) {
+    return foundInTeam.name;
+  }
+
   if (str.startsWith('user_') || str.includes('_gmail_com')) {
     const clean = str
       .replace(/^user_/, '')
       .replace(/_gmail_com$/, '')
       .replace(/_/g, ' ')
       .trim();
-    if (clean) {
+    if (clean && isNaN(clean)) {
       return clean.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
   }
 
   if (str.startsWith('guest_')) {
+    const parts = str.split('_');
+    const maybeName = parts.slice(2).join(' ');
+    if (maybeName && isNaN(maybeName) && maybeName.toLowerCase() !== 'player') {
+      return maybeName.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+    return 'Player';
+  }
+
+  if (!isNaN(str) && str.length > 2) {
     return 'Player';
   }
 
   return str;
+}
+
+function getLiveScorecardRoute(sport = '') {
+  const s = String(sport).toLowerCase();
+  if (s.includes('football')) return 'FootballScorecard';
+  if (s.includes('badminton')) return 'BadmintonScorecard';
+  if (s.includes('volleyball')) return 'VolleyballScorecard';
+  if (s.includes('basketball')) return 'BasketballScorecard';
+  if (s.includes('tennis')) return 'TennisScorecard';
+  return 'Scorecard';
 }
 
 export default function PastMatchDetailsScreen({ route, navigation }) {
@@ -69,7 +108,7 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
         const m = await matchStorage.getMatch(matchId);
         if (m) setMatch(m);
       } catch (err) {
-        console.warn('Failed to load past match details:', err);
+        console.warn('Failed to load match details:', err);
       } finally {
         setLoading(false);
       }
@@ -81,7 +120,7 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
       <SafeAreaView style={[styles.root, { backgroundColor: C.bg }]}>
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={[styles.loadingTxt, { color: C.subtext }]}>Loading historical scorecard...</Text>
+          <Text style={[styles.loadingTxt, { color: C.subtext }]}>Loading match details...</Text>
         </View>
       </SafeAreaView>
     );
@@ -103,7 +142,7 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
         <View style={styles.emptyWrap}>
           <Text style={[styles.emptyTitle, { color: C.text }]}>Match Not Found</Text>
           <Text style={[styles.emptySub, { color: C.subtext }]}>
-            Unable to retrieve the requested past match details.
+            Unable to retrieve the requested match details.
           </Text>
         </View>
       </SafeAreaView>
@@ -118,6 +157,11 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
   const isBasketball = sport.includes('basketball');
   const isTennis = sport.includes('tennis');
 
+  const statusLower = (match.status || 'completed').toLowerCase();
+  const isLive = statusLower === 'live' || statusLower === 'toss';
+  const isCompleted = statusLower === 'completed';
+  const isCreated = statusLower === 'created' || statusLower === 'upcoming';
+
   const teamAName = match.teams?.A?.name || match.teams?.teamA?.name || 'Team A';
   const teamBName = match.teams?.B?.name || match.teams?.teamB?.name || 'Team B';
 
@@ -125,7 +169,7 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
     match.lastManEnabled || match.toss?.lastManEnabled || match.scorecard?.lastManEnabled
   );
 
-  const resultMessage = match.resultText || match.result || '';
+  const resultMessage = match.resultText || match.result || match.scorecard?.resultText || match.scorecard?.result || '';
 
   const playerById = (id) => {
     if (!id) return null;
@@ -139,22 +183,41 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
     }
 
     const found = match.players?.find((p) => (typeof p === 'object' ? (p.id === id || p.userId === id) : p === id));
-    if (found && typeof found === 'object' && found.name) return found;
+    if (found && typeof found === 'object' && found.name && !String(found.name).startsWith('guest_')) return found;
 
     const teamPlayers = [...(match.teams?.A?.players || []), ...(match.teams?.B?.players || [])];
     const foundInTeam = teamPlayers.find((p) => typeof p === 'object' && (p.id === id || p.userId === id));
-    if (foundInTeam && foundInTeam.name) return foundInTeam;
+    if (foundInTeam && foundInTeam.name && !String(foundInTeam.name).startsWith('guest_')) return foundInTeam;
 
     return { id, name: formatCleanName(id, match) };
   };
 
-  const teamAPlayers = (match.teams?.A?.playerIds || match.teams?.teamA?.players || [])
-    .map((p) => (typeof p === 'object' ? p : playerById(p)))
-    .filter(Boolean);
+  const getPlayersList = (teamObj) => {
+    if (!teamObj) return [];
+    const raw = teamObj.players || teamObj.playerIds || teamObj.members || [];
+    return raw.map((p) => {
+      if (typeof p === 'object' && p !== null) {
+        const rawName = p.name || p.playerName;
+        const pName = (rawName && !rawName.startsWith('guest_') && isNaN(rawName)) 
+          ? rawName 
+          : (match.playerNames?.[p.id || p.userId] || match.scorecard?.playerNames?.[p.id || p.userId] || formatCleanName(p.name || p.id || p.userId, match));
+        return { ...p, name: pName || 'Guest Player' };
+      }
+      return playerById(p);
+    }).filter(Boolean);
+  };
 
-  const teamBPlayers = (match.teams?.B?.playerIds || match.teams?.teamB?.players || [])
-    .map((p) => (typeof p === 'object' ? p : playerById(p)))
-    .filter(Boolean);
+  const teamAPlayers = getPlayersList(match.teams?.A || match.teams?.teamA);
+  const teamBPlayers = getPlayersList(match.teams?.B || match.teams?.teamB);
+
+  const handleResumeMatch = () => {
+    if (isLive) {
+      const routeName = getLiveScorecardRoute(match.sport);
+      navigation.navigate(routeName, { matchId: match.id });
+    } else if (isCreated) {
+      navigation.navigate('Match', { matchId: match.id });
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: C.bg }]}>
@@ -179,8 +242,34 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
               <Text style={styles.sportEmoji}>{getSportEmoji(match.sport)}</Text>
               <Text style={[styles.sportChipTxt, { color: C.primary }]}>{match.sport || 'Sport'}</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: 'rgba(12, 176, 83, 0.12)' }]}>
-              <Text style={[styles.statusTxt, { color: '#0CB053' }]}>COMPLETED</Text>
+
+            {/* Dynamic Status Badge based on actual match status */}
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: isCompleted
+                    ? 'rgba(12, 176, 83, 0.12)'
+                    : isLive
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : 'rgba(59, 130, 246, 0.12)',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusTxt,
+                  {
+                    color: isCompleted
+                      ? '#0CB053'
+                      : isLive
+                      ? '#EF4444'
+                      : '#3B82F6',
+                  },
+                ]}
+              >
+                {statusLower.toUpperCase()}
+              </Text>
             </View>
           </View>
 
@@ -218,12 +307,12 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
                 {match.date || match.matchDate || 'Today'}
               </Text>
             </View>
-            {!!match.matchTime && (
+            {!!(match.time || match.matchTime) && (
               <>
                 <View style={styles.metaDivider} />
                 <View style={styles.metaCell}>
                   <Feather name="clock" size={13} color={C.subtext} style={{ marginRight: 4 }} />
-                  <Text style={[styles.metaCellTxt, { color: C.text }]}>{match.matchTime}</Text>
+                  <Text style={[styles.metaCellTxt, { color: C.text }]}>{match.time || match.matchTime}</Text>
                 </View>
               </>
             )}
@@ -246,7 +335,57 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
               </View>
             )}
           </View>
+
+          {/* LIVE RESUME BUTTON (ONLY FOR LIVE MATCHES) */}
+          {isLive && (
+            <TouchableOpacity
+              style={[styles.resumeActionBtn, { backgroundColor: '#EF4444' }]}
+              onPress={handleResumeMatch}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="flash-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.resumeActionTxt}>Resume Live Scoring</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* START SETUP BUTTON (ONLY FOR CREATED MATCHES) */}
+          {isCreated && (
+            <TouchableOpacity
+              style={[styles.resumeActionBtn, { backgroundColor: C.primary }]}
+              onPress={handleResumeMatch}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="play-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.resumeActionTxt}>Start Toss & Setup</Text>
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* ──────────────── COMMON TOSS DETAILS ──────────────── */}
+        {!!match.toss && (
+          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border, marginBottom: 16 }, SHADOW.card]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <Ionicons name="disc-outline" size={18} color={C.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionTitle, { color: C.text, fontSize: 15 }]}>Toss Details</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontSize: 11, color: C.subtext, fontWeight: '700', textTransform: 'uppercase' }}>Toss Winner</Text>
+                <Text style={{ fontSize: 15, color: C.text, fontWeight: '800', marginTop: 2 }}>
+                  {match.toss.wonByName || (match.toss.wonBy === 'A' ? teamAName : match.toss.wonBy === 'B' ? teamBName : match.toss.winner) || 'Team'}
+                </Text>
+              </View>
+              {!!match.toss.decision && (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 11, color: C.subtext, fontWeight: '700', textTransform: 'uppercase' }}>Decision</Text>
+                  <Text style={{ fontSize: 15, color: C.primary, fontWeight: '800', marginTop: 2 }}>
+                    {String(match.toss.decision).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* ──────────────── CRICKET DETAILED SCORECARD ──────────────── */}
         {isCricket && Array.isArray(match.innings) && match.innings.length > 0 && (
@@ -314,11 +453,13 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
                   {battersList.length > 0 ? (
                     battersList.map((b, bIdx) => {
                       const p = playerById(b.id);
+                      const isNotOut = b.out === false;
+                      const batterDisplayName = (p?.name || `Batter ${bIdx + 1}`) + (isNotOut ? '*' : '');
                       return (
                         <View key={bIdx} style={[styles.tableRow, { borderBottomColor: C.border }]}>
                           <View style={styles.tdNameWrap}>
                             <Text style={[styles.tdName, { color: C.text }]} numberOfLines={1}>
-                              {p?.name || `Batter ${bIdx + 1}`}
+                              {batterDisplayName}
                             </Text>
                             <Text style={[styles.tdStatus, { color: b.out ? '#EF4444' : '#0CB053' }]}>
                               {b.out ? 'out' : 'not out'}
@@ -335,6 +476,12 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
                   ) : (
                     <Text style={[styles.noDataTxt, { color: C.subtext }]}>No batting records for this innings.</Text>
                   )}
+
+                  {/* Extras & Totals Strip */}
+                  <View style={[styles.extrasRow, { borderTopColor: C.border, borderBottomColor: C.border }]}>
+                    <Text style={[styles.extrasLabel, { color: C.subtext }]}>Extras</Text>
+                    <Text style={[styles.extrasVal, { color: C.text }]}>{inn.extras || 0}</Text>
+                  </View>
 
                   {/* Bowling Table */}
                   <Text style={[styles.subSectionTitle, { color: C.text, marginTop: 16 }]}>Bowling</Text>
@@ -370,39 +517,125 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* ──────────────── OTHER SPORTS SCORECARD ──────────────── */}
+        {/* ──────────────── FOOTBALL SCORECARD ──────────────── */}
         {isFootball && match.football && (
-          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
-            <Text style={[styles.sectionTitle, { color: C.text }]}>Football Match Summary</Text>
-            <View style={styles.scoreDisplayBox}>
+          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border, marginBottom: 16 }, SHADOW.card]}>
+            <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 12 }]}>Football Match Summary</Text>
+            
+            <View style={[styles.scoreDisplayBox, { backgroundColor: C.bgSoft || '#F8FAFC' }]}>
               <Text style={[styles.scoreBigTxt, { color: C.primary }]}>
                 {match.football.scores?.A ?? match.football.scoreA ?? 0} - {match.football.scores?.B ?? match.football.scoreB ?? 0}
               </Text>
-              <Text style={[styles.subScoreTxt, { color: C.subtext }]}>Final Full Time Score</Text>
+              <Text style={[styles.subScoreTxt, { color: C.subtext }]}>
+                Stage: {match.football.stage || 'Full Time'}
+              </Text>
             </View>
+
+            {Array.isArray(match.football.events) && match.football.events.length > 0 && (
+              <View style={{ marginTop: 14 }}>
+                <Text style={[styles.subSectionTitle, { color: C.text, marginBottom: 8 }]}>Events Timeline</Text>
+                {match.football.events.map((ev, i) => (
+                  <View key={i} style={[styles.eventRow, { borderBottomColor: C.border }]}>
+                    <Text style={{ fontSize: 13, marginRight: 6 }}>
+                      {ev.type === 'goal' ? '⚽' : ev.type === 'card' ? (ev.cardType === 'red' ? '🟥' : '🟨') : ev.type === 'sub' ? '🔄' : '📌'}
+                    </Text>
+                    <Text style={[styles.eventTxt, { color: C.text }]}>
+                      {ev.minute ? `${ev.minute}' ` : ''}{ev.text || ev.description || `${ev.type} by ${ev.playerName || 'Player'}`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
+        {/* ──────────────── BASKETBALL SCORECARD ──────────────── */}
+        {isBasketball && match.basketball && (
+          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border, marginBottom: 16 }, SHADOW.card]}>
+            <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 12 }]}>Basketball Match Summary</Text>
+            
+            <View style={[styles.scoreDisplayBox, { backgroundColor: C.bgSoft || '#F8FAFC' }]}>
+              <Text style={[styles.scoreBigTxt, { color: C.primary }]}>
+                {match.basketball.scores?.A ?? match.basketball.scoreA ?? 0} - {match.basketball.scores?.B ?? match.basketball.scoreB ?? 0}
+              </Text>
+              <Text style={[styles.subScoreTxt, { color: C.subtext }]}>
+                Status: {match.basketball.quarter || 'Final'}
+              </Text>
+            </View>
+
+            {match.basketball.quarterScores && (
+              <View style={{ marginTop: 14 }}>
+                <Text style={[styles.subSectionTitle, { color: C.text, marginBottom: 8 }]}>Quarter Breakdown</Text>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.thName, { color: C.subtext }]}>Team</Text>
+                  <Text style={[styles.thNum, { color: C.subtext }]}>Q1</Text>
+                  <Text style={[styles.thNum, { color: C.subtext }]}>Q2</Text>
+                  <Text style={[styles.thNum, { color: C.subtext }]}>Q3</Text>
+                  <Text style={[styles.thNum, { color: C.subtext }]}>Q4</Text>
+                </View>
+                <View style={[styles.tableRow, { borderBottomColor: C.border }]}>
+                  <Text style={[styles.tdName, { color: C.text }]} numberOfLines={1}>{teamAName}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q1?.A ?? 0}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q2?.A ?? 0}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q3?.A ?? 0}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q4?.A ?? 0}</Text>
+                </View>
+                <View style={[styles.tableRow, { borderBottomColor: C.border }]}>
+                  <Text style={[styles.tdName, { color: C.text }]} numberOfLines={1}>{teamBName}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q1?.B ?? 0}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q2?.B ?? 0}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q3?.B ?? 0}</Text>
+                  <Text style={[styles.tdNum, { color: C.text }]}>{match.basketball.quarterScores.Q4?.B ?? 0}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ──────────────── BADMINTON / VOLLEYBALL / TENNIS SCORECARD ──────────────── */}
         {(isBadminton || isVolleyball || isTennis) && (
-          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
-            <Text style={[styles.sectionTitle, { color: C.text }]}>{match.sport} Match Summary</Text>
-            <View style={styles.scoreDisplayBox}>
+          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border, marginBottom: 16 }, SHADOW.card]}>
+            <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 12 }]}>{match.sport} Match Summary</Text>
+            <View style={[styles.scoreDisplayBox, { backgroundColor: C.bgSoft || '#F8FAFC' }]}>
               <Text style={[styles.scoreBigTxt, { color: C.primary }]}>
                 {match.badminton
-                  ? `${match.badminton.gamesA ?? 0} - ${match.badminton.gamesB ?? 0}`
+                  ? `${match.badminton.gamesWon?.A ?? match.badminton.gamesA ?? 0} - ${match.badminton.gamesWon?.B ?? match.badminton.gamesB ?? 0}`
                   : match.volleyball
-                  ? `${match.volleyball.setsA ?? 0} - ${match.volleyball.setsB ?? 0}`
+                  ? `${match.volleyball.setsWon?.A ?? match.volleyball.setsA ?? 0} - ${match.volleyball.setsWon?.B ?? match.volleyball.setsB ?? 0}`
                   : match.tennis
-                  ? `${match.tennis.setsA ?? 0} - ${match.tennis.setsB ?? 0}`
+                  ? `${match.tennis.setsWon?.A ?? match.tennis.setsA ?? 0} - ${match.tennis.setsWon?.B ?? match.tennis.setsB ?? 0}`
                   : 'Completed'}
               </Text>
               <Text style={[styles.subScoreTxt, { color: C.subtext }]}>Sets / Games Won</Text>
             </View>
+
+            {/* History Table */}
+            {(() => {
+              const history = match.badminton?.gameHistory || match.volleyball?.setHistory || match.tennis?.setHistory || [];
+              if (history.length === 0) return null;
+              return (
+                <View style={{ marginTop: 14 }}>
+                  <Text style={[styles.subSectionTitle, { color: C.text, marginBottom: 8 }]}>Set Breakdown</Text>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.thName, { color: C.subtext }]}>Set / Game</Text>
+                    <Text style={[styles.thNum, { color: C.subtext }]}>{teamAName}</Text>
+                    <Text style={[styles.thNum, { color: C.subtext }]}>{teamBName}</Text>
+                  </View>
+                  {history.map((h, i) => (
+                    <View key={i} style={[styles.tableRow, { borderBottomColor: C.border }]}>
+                      <Text style={[styles.tdName, { color: C.text }]}>Set {h.game || h.set || (i + 1)}</Text>
+                      <Text style={[styles.tdNum, { color: h.winner === 'A' ? C.primary : C.text, fontWeight: h.winner === 'A' ? '800' : '400' }]}>{h.A ?? 0}</Text>
+                      <Text style={[styles.tdNum, { color: h.winner === 'B' ? C.primary : C.text, fontWeight: h.winner === 'B' ? '800' : '400' }]}>{h.B ?? 0}</Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })()}
           </View>
         )}
 
         {/* ──────────────── SQUADS & PLAYER ROSTER ──────────────── */}
-        <Text style={[styles.sectionTitle, { color: C.text, marginTop: 14 }]}>Participating Squads</Text>
+        <Text style={[styles.sectionTitle, { color: C.text, marginTop: 4, marginBottom: 10 }]}>Participating Squads</Text>
         <View style={styles.squadsRow}>
           {/* Team A Roster */}
           <View style={[styles.squadBox, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -438,17 +671,6 @@ export default function PastMatchDetailsScreen({ route, navigation }) {
             )}
           </View>
         </View>
-
-        {/* Toss Details */}
-        {!!match.toss && (
-          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
-            <Text style={[styles.subSectionTitle, { color: C.text }]}>Toss Details</Text>
-            <Text style={[styles.tossInfoTxt, { color: C.subtext }]}>
-              Winner: <Text style={{ color: C.text, fontWeight: '700' }}>{match.toss.wonByName || match.toss.winner || 'Team'}</Text>
-              {match.toss.decision ? ` · Elected to ${match.toss.decision.toUpperCase()}` : ''}
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -550,15 +772,15 @@ const styles = StyleSheet.create({
   metaStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 12,
   },
   metaCell: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
   },
   metaCellTxt: {
     fontSize: 12,
@@ -566,39 +788,65 @@ const styles = StyleSheet.create({
   },
   metaDivider: {
     width: 1,
-    height: 16,
-    backgroundColor: '#E2E8F0',
+    height: 12,
+    backgroundColor: '#CBD5E1',
+    marginHorizontal: 8,
   },
 
   codeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   codePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  codeLabel: { fontSize: 12, fontWeight: '500' },
-  codeVal: { fontSize: 13, fontWeight: '800' },
+  codeLabel: { fontSize: 11, fontWeight: '600' },
+  codeVal: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
 
   lastManPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   lastManTxt: { fontSize: 11, fontWeight: '700' },
 
+  resumeActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 14,
+  },
+  resumeActionTxt: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    marginBottom: 10,
+    letterSpacing: -0.2,
   },
   subSectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 6,
   },
 
   scorecardSection: {
@@ -606,24 +854,22 @@ const styles = StyleSheet.create({
   },
   inningsTabRow: {
     flexDirection: 'row',
-    gap: 8,
+    marginTop: 8,
     marginBottom: 12,
+    gap: 8,
   },
   innTabBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    alignItems: 'center',
   },
   innTabTxt: {
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
   },
-
   innCard: {
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 14,
   },
@@ -631,69 +877,84 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 10,
   },
-  innTitle: { fontSize: 14, fontWeight: '800' },
-  innScoreBig: { fontSize: 18, fontWeight: '900' },
-  innOversTxt: { fontSize: 13, fontWeight: '600' },
+  innTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  innScoreBig: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  innOversTxt: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   tableHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 6,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    marginBottom: 4,
   },
-  thName: { flex: 3, fontSize: 11, fontWeight: '700' },
-  thNum: { flex: 1, fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  thName: { flex: 2.5, fontSize: 11, fontWeight: '800' },
+  thNum: { flex: 1, fontSize: 11, fontWeight: '800', textAlign: 'center' },
 
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
-    borderBottomWidth: 0.5,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
   },
-  tdNameWrap: { flex: 3 },
-  tdName: { fontSize: 12, fontWeight: '700' },
-  tdStatus: { fontSize: 10, fontWeight: '600' },
+  tdNameWrap: { flex: 2.5, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tdName: { fontSize: 12, fontWeight: '600', flex: 1 },
+  tdStatus: { fontSize: 10, fontWeight: '700' },
   tdNum: { flex: 1, fontSize: 12, textAlign: 'center' },
+  noDataTxt: { fontSize: 12, fontStyle: 'italic', paddingVertical: 10 },
 
-  noDataTxt: {
-    fontSize: 12,
-    fontStyle: 'italic',
+  extrasRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    marginTop: 8,
   },
+  extrasLabel: { fontSize: 12, fontWeight: '700' },
+  extrasVal: { fontSize: 12, fontWeight: '800' },
 
-  card: {
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 14,
-  },
   scoreDisplayBox: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
+    borderRadius: 12,
   },
-  scoreBigTxt: {
-    fontSize: 32,
-    fontWeight: '900',
-    marginBottom: 4,
+  scoreBigTxt: { fontSize: 28, fontWeight: '900', letterSpacing: 1 },
+  subScoreTxt: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
   },
-  subScoreTxt: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  eventTxt: { fontSize: 12, fontWeight: '600', flex: 1 },
 
   squadsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 14,
   },
   squadBox: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 12,
   },
@@ -715,27 +976,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: 'italic',
   },
-  tossInfoTxt: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
 
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingTxt: {
-    marginTop: 12,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 20,
-  },
-  emptyTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8 },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingTxt: { marginTop: 10, fontSize: 13, fontWeight: '600' },
+  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', marginBottom: 6 },
   emptySub: { fontSize: 13, textAlign: 'center' },
 });

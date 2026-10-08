@@ -23,38 +23,52 @@ async function writeJSON(key, value) {
   await AsyncStorage.setItem(key, JSON.stringify(value));
 }
 
+function mergeTeams(localTeams, serverTeams) {
+  const localA = localTeams?.A?.playerIds || localTeams?.teamA?.playerIds || [];
+  const localB = localTeams?.B?.playerIds || localTeams?.teamB?.playerIds || [];
+  const serverA = serverTeams?.A?.playerIds || serverTeams?.teamA?.playerIds || [];
+  const serverB = serverTeams?.B?.playerIds || serverTeams?.teamB?.playerIds || [];
+
+  if (localA.length + localB.length > 0 && serverA.length + serverB.length === 0) {
+    return localTeams;
+  }
+  if (serverA.length + serverB.length > 0) {
+    return serverTeams;
+  }
+  return localTeams || serverTeams || { A: { name: 'Team A', playerIds: [] }, B: { name: 'Team B', playerIds: [] } };
+}
+
 export const matchStorage = {
   genId,
 
   async getAllMatches() {
     const all = await readJSON(MATCHES_KEY, {});
-    return Object.values(all).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return Object.values(all).sort((a, b) => new Date(b.createdAt || b.matchDate || 0) - new Date(a.createdAt || a.matchDate || 0));
   },
 
   async getMyMatches(statusFilter) {
-    // 1. Read local copy first
     const all = await readJSON(MATCHES_KEY, {});
     let localMatches = Object.values(all);
 
-    // 2. Try fetching latest user matches from backend
     try {
       const url = `/matches/mine${statusFilter ? `?status=${statusFilter}` : ''}`;
       const serverRes = await client.get(url);
       const serverList = serverRes?.matches || serverRes?.data || (Array.isArray(serverRes) ? serverRes : null);
 
       if (Array.isArray(serverList)) {
+        const syncedAll = {};
         serverList.forEach((m) => {
           if (m && m.id) {
-            all[m.id] = { ...all[m.id], ...m };
+            syncedAll[m.id] = { ...(all[m.id] || {}), ...m };
           }
         });
-        await writeJSON(MATCHES_KEY, all);
+        await writeJSON(MATCHES_KEY, syncedAll);
 
-        let result = serverList;
+        let result = Object.values(syncedAll);
         if (statusFilter) {
           result = result.filter((m) => (m.status || '').toLowerCase() === statusFilter.toLowerCase());
         }
-        return result;
+        return result.sort((a, b) => new Date(b.createdAt || b.matchDate || 0) - new Date(a.createdAt || a.matchDate || 0));
       }
     } catch (e) {
       // Offline fallback
@@ -63,34 +77,49 @@ export const matchStorage = {
     if (statusFilter) {
       localMatches = localMatches.filter((m) => (m.status || '').toLowerCase() === statusFilter.toLowerCase());
     }
-    return localMatches.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return localMatches.sort((a, b) => new Date(b.createdAt || b.matchDate || 0) - new Date(a.createdAt || a.matchDate || 0));
   },
 
   async getMatch(id) {
     if (!id) return null;
-    // 1. Read local copy first (instant)
     const all = await readJSON(MATCHES_KEY, {});
     const local = all[id] || null;
 
-    // 2. Fetch latest live match state from backend if online
     try {
       const serverRes = await client.get(`/matches/${id}`);
       const serverMatch = serverRes?.match || serverRes?.data;
       if (serverMatch) {
-        // If local has rich player objects, preserve them so guest names/roles aren't overwritten by simple user IDs
-        const localHasRichPlayers = Array.isArray(local?.players) && local.players.some((p) => typeof p === 'object');
-        const mergedPlayers = localHasRichPlayers ? local.players : (serverMatch.players || local?.players || []);
+        const localPlayers = Array.isArray(local?.players) && local.players.length > 0 ? local.players : null;
+        const serverPlayers = Array.isArray(serverMatch.players) && serverMatch.players.length > 0 ? serverMatch.players : null;
+        const mergedPlayers = localPlayers || serverPlayers || [];
 
-        const localHasTeams = Boolean(local?.teams?.A?.playerIds?.length || local?.teams?.B?.playerIds?.length);
-        const mergedTeams = localHasTeams ? local.teams : (serverMatch.teams || local?.teams);
+        const mergedTeams = mergeTeams(local?.teams, serverMatch.teams);
 
-        const merged = { ...serverMatch, ...local, players: mergedPlayers, teams: mergedTeams, id };
+        const mergedPlayerNames = {
+          ...(local?.playerNames || {}),
+          ...(serverMatch.playerNames || {}),
+        };
+
+        const merged = {
+          ...(local || {}),
+          ...serverMatch,
+          players: mergedPlayers,
+          teams: mergedTeams,
+          playerNames: mergedPlayerNames,
+          id,
+        };
+
         all[id] = merged;
         await writeJSON(MATCHES_KEY, all);
         return merged;
       }
-    } catch {
-      // Offline fallback: return local copy
+    } catch (err) {
+      const isNotFound = err?.message && (err.message.includes('404') || err.message.toLowerCase().includes('not found'));
+      if (isNotFound) {
+        delete all[id];
+        await writeJSON(MATCHES_KEY, all);
+        return null;
+      }
     }
 
     return local;
@@ -99,24 +128,45 @@ export const matchStorage = {
   async saveMatch(match) {
     if (!match || !match.id) return match;
 
-    // 1. Save locally immediately for offline-first zero-latency scoring
     const all = await readJSON(MATCHES_KEY, {});
     all[match.id] = match;
     await writeJSON(MATCHES_KEY, all);
 
-    // 2. Sync to cloud backend in background for real-time live viewers & database persistence
-    (async () => {
-      try {
-        await client.patch(`/matches/${match.id}/scorecard`, {
-          scorecard: match.scorecard || match.innings || match.football || match.badminton || match.volleyball || match.basketball || match.tennis || {},
-          status: match.status || 'live',
-          teams: match.teams,
-          toss: match.toss,
-        });
-      } catch (err) {
-        // Offline / sync queued
+    try {
+      const payload = {
+        scorecard: match.scorecard || match.innings || match.football || match.badminton || match.volleyball || match.basketball || match.tennis || {},
+        status: match.status || 'live',
+        teams: match.teams,
+        toss: match.toss,
+      };
+      if (match.resultText || match.result) {
+        payload.resultText = match.resultText || match.result;
       }
-    })();
+      const res = await client.patch(`/matches/${match.id}/scorecard`, payload);
+      const serverMatch = res?.match || res?.data;
+      if (serverMatch && serverMatch.id) {
+        const localPlayers = Array.isArray(match.players) && match.players.length > 0 ? match.players : null;
+        const serverPlayers = Array.isArray(serverMatch.players) && serverMatch.players.length > 0 ? serverMatch.players : null;
+        const mergedPlayers = localPlayers || serverPlayers || [];
+        const mergedTeams = mergeTeams(match.teams, serverMatch.teams);
+        const mergedPlayerNames = {
+          ...(match.playerNames || {}),
+          ...(serverMatch.playerNames || {}),
+        };
+
+        all[match.id] = {
+          ...match,
+          ...serverMatch,
+          players: mergedPlayers,
+          teams: mergedTeams,
+          playerNames: mergedPlayerNames,
+        };
+        await writeJSON(MATCHES_KEY, all);
+        return all[match.id];
+      }
+    } catch (err) {
+      console.warn('saveMatch backend sync notice:', err?.message || err);
+    }
 
     return match;
   },
@@ -128,16 +178,41 @@ export const matchStorage = {
     all[id] = updated;
     await writeJSON(MATCHES_KEY, all);
 
-    (async () => {
-      try {
-        await client.patch(`/matches/${id}/scorecard`, {
-          scorecard: updated.scorecard || updated.innings || updated.football || updated.badminton || updated.volleyball || updated.basketball || updated.tennis || {},
-          status: updated.status || 'live',
-          teams: updated.teams,
-          toss: updated.toss,
-        });
-      } catch {}
-    })();
+    try {
+      const payload = {
+        scorecard: updated.scorecard || updated.innings || updated.football || updated.badminton || updated.volleyball || updated.basketball || updated.tennis || {},
+        status: updated.status || 'live',
+        teams: updated.teams,
+        toss: updated.toss,
+      };
+      if (updated.resultText || updated.result) {
+        payload.resultText = updated.resultText || updated.result;
+      }
+      const res = await client.patch(`/matches/${id}/scorecard`, payload);
+      const serverMatch = res?.match || res?.data;
+      if (serverMatch && serverMatch.id) {
+        const localPlayers = Array.isArray(updated.players) && updated.players.length > 0 ? updated.players : null;
+        const serverPlayers = Array.isArray(serverMatch.players) && serverMatch.players.length > 0 ? serverMatch.players : null;
+        const mergedPlayers = localPlayers || serverPlayers || [];
+        const mergedTeams = mergeTeams(updated.teams, serverMatch.teams);
+        const mergedPlayerNames = {
+          ...(updated.playerNames || {}),
+          ...(serverMatch.playerNames || {}),
+        };
+
+        all[id] = {
+          ...updated,
+          ...serverMatch,
+          players: mergedPlayers,
+          teams: mergedTeams,
+          playerNames: mergedPlayerNames,
+        };
+        await writeJSON(MATCHES_KEY, all);
+        return all[id];
+      }
+    } catch (err) {
+      console.warn('updateMatch backend sync notice:', err?.message || err);
+    }
 
     return updated;
   },

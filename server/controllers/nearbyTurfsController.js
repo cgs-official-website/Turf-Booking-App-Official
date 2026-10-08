@@ -135,8 +135,15 @@ const nearbyTurfsController = {
         }
       }
 
-      // Sort nearest first (ascending distance)
-      nearbyList.sort((a, b) => a.distance - b.distance);
+      // Sort by Rating DESCENDING (primary), Distance ASCENDING (secondary tie-breaker)
+      nearbyList.sort((a, b) => {
+        const rA = Number(a.ratingAvg || 0);
+        const rB = Number(b.ratingAvg || 0);
+        if (rB !== rA) {
+          return rB - rA;
+        }
+        return a.distance - b.distance;
+      });
 
       return sendSuccess(res, {
         turfs: nearbyList,

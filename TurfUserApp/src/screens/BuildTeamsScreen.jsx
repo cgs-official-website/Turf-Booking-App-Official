@@ -26,26 +26,34 @@ export default function BuildTeamsScreen({ route, navigation }) {
       setMatch(m);
 
       const playerList = Array.isArray(m.players) ? m.players : [];
-      const allPlayerIds = playerList.map((p) => (typeof p === 'object' ? (p.id || p.userId) : p));
+      let allPlayerIds = playerList.map((p) => (typeof p === 'object' ? (p.id || p.userId) : p)).filter(Boolean);
 
-      if (m.teams?.A?.playerIds?.length || m.teams?.B?.playerIds?.length) {
-        const assigned = new Set([...(m.teams.A?.playerIds || []), ...(m.teams.B?.playerIds || [])]);
+      const rawA = m.teams?.A?.playerIds || m.teams?.teamA?.playerIds || [];
+      const rawB = m.teams?.B?.playerIds || m.teams?.teamB?.playerIds || [];
+
+      if (allPlayerIds.length === 0) {
+        const nameKeys = Object.keys(m.playerNames || {});
+        allPlayerIds = Array.from(new Set([...rawA, ...rawB, ...nameKeys])).filter(Boolean);
+      }
+
+      if (rawA.length > 0 || rawB.length > 0) {
+        const assigned = new Set([...rawA, ...rawB]);
         const unassigned = allPlayerIds.filter((id) => !assigned.has(id));
 
-        const teamAPlayerIds = [...(m.teams.A?.playerIds || []), ...unassigned.filter((_, i) => i % 2 === 0)];
-        const teamBPlayerIds = [...(m.teams.B?.playerIds || []), ...unassigned.filter((_, i) => i % 2 === 1)];
+        const teamAPlayerIds = [...rawA, ...unassigned.filter((_, i) => i % 2 === 0)];
+        const teamBPlayerIds = [...rawB, ...unassigned.filter((_, i) => i % 2 === 1)];
 
         setTeamA({
-          name: m.teams.A?.name || 'Team A',
-          logo: m.teams.A?.logo || null,
+          name: m.teams?.A?.name || m.teams?.teamA?.name || 'Team A',
+          logo: m.teams?.A?.logo || m.teams?.teamA?.logo || null,
           playerIds: teamAPlayerIds,
-          captainId: m.teams.A?.captainId || teamAPlayerIds[0] || null,
+          captainId: m.teams?.A?.captainId || teamAPlayerIds[0] || null,
         });
         setTeamB({
-          name: m.teams.B?.name || 'Team B',
-          logo: m.teams.B?.logo || null,
+          name: m.teams?.B?.name || m.teams?.teamB?.name || 'Team B',
+          logo: m.teams?.B?.logo || m.teams?.teamB?.logo || null,
           playerIds: teamBPlayerIds,
-          captainId: m.teams.B?.captainId || teamBPlayerIds[0] || null,
+          captainId: m.teams?.B?.captainId || teamBPlayerIds[0] || null,
         });
       } else {
         const a = allPlayerIds.filter((_, i) => i % 2 === 0);
@@ -133,8 +141,29 @@ export default function BuildTeamsScreen({ route, navigation }) {
 
     setSaving(true);
     try {
+      const playerNames = { ...(match?.playerNames || {}) };
+
+      const teamAPlayers = teamA.playerIds.map((id) => {
+        const p = playerById(id);
+        const pName = p?.name || playerNames[id] || 'Player';
+        playerNames[id] = pName;
+        return { id, name: pName };
+      });
+
+      const teamBPlayers = teamB.playerIds.map((id) => {
+        const p = playerById(id);
+        const pName = p?.name || playerNames[id] || 'Player';
+        playerNames[id] = pName;
+        return { id, name: pName };
+      });
+
+      const finalTeamA = { ...teamA, players: teamAPlayers };
+      const finalTeamB = { ...teamB, players: teamBPlayers };
+
       const updated = await matchStorage.updateMatch(matchId, {
-        teams: { A: teamA, B: teamB },
+        teams: { A: finalTeamA, B: finalTeamB },
+        playerNames,
+        scorecard: { ...(match?.scorecard || {}), playerNames },
         status: 'upcoming',
       });
       await matchStorage.addTimeline(matchId, 'Match Room Created');

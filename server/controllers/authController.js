@@ -184,6 +184,7 @@ const authController = {
           OR: [
             { email: { equals: cleanEmail, mode: 'insensitive' } },
             { id: vendorUid },
+            { phone: cleanEmail },
           ],
         },
       });
@@ -210,6 +211,14 @@ const authController = {
         await prisma.vendor.update({
           where: { id: vendor.id },
           data: { passwordHash: newHash },
+        });
+      }
+
+      // In development, auto-approve pending vendors so developers/testers can test immediately
+      if (vendor.kycStatus === 'pending' && process.env.NODE_ENV !== 'production') {
+        vendor = await prisma.vendor.update({
+          where: { id: vendor.id },
+          data: { kycStatus: 'approved' },
         });
       }
 

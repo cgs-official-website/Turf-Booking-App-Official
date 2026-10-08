@@ -131,12 +131,54 @@ export default function ScorecardScreen({ route, navigation }) {
 
   const playerById = (id) => {
     if (!id) return null;
-    const found = match?.players?.find((p) => p.id === id);
-    if (found) return found;
-    if (id === 'host_creator') return { id: 'host_creator', name: 'You (Host)' };
-    if (id.endsWith('_p1')) return { id, name: 'Player 1' };
-    if (id.endsWith('_p2')) return { id, name: 'Player 2' };
-    return { id, name: 'Player' };
+    if (typeof id === 'object' && id !== null) {
+      if (id.name && !String(id.name).startsWith('guest_') && isNaN(id.name)) return id;
+      if (id.id || id.userId) id = id.id || id.userId;
+    }
+    const strId = String(id);
+
+    if (match?.playerNames && match.playerNames[strId]) {
+      return { id: strId, name: match.playerNames[strId] };
+    }
+    if (match?.scorecard?.playerNames && match.scorecard.playerNames[strId]) {
+      return { id: strId, name: match.scorecard.playerNames[strId] };
+    }
+
+    const found = match?.players?.find((p) =>
+      typeof p === 'object' && p !== null ? p.id === strId || p.userId === strId : p === strId
+    );
+    if (found && typeof found === 'object' && found.name && !String(found.name).startsWith('guest_')) {
+      return { id: strId, name: found.name };
+    }
+
+    const teamPlayers = [
+      ...(match?.teams?.A?.players || match?.teams?.teamA?.players || []),
+      ...(match?.teams?.B?.players || match?.teams?.teamB?.players || []),
+    ];
+    const foundInTeam = teamPlayers.find(
+      (p) => typeof p === 'object' && p !== null && (p.id === strId || p.userId === strId)
+    );
+    if (foundInTeam && foundInTeam.name && !String(foundInTeam.name).startsWith('guest_')) {
+      return { id: strId, name: foundInTeam.name };
+    }
+
+    if (strId.startsWith('guest_')) {
+      const parts = strId.split('_');
+      const maybeName = parts.slice(2).join(' ');
+      if (maybeName && isNaN(maybeName) && maybeName.toLowerCase() !== 'player') {
+        const cleanName = maybeName
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+        return { id: strId, name: cleanName };
+      }
+    }
+
+    if (strId === 'host_creator' || strId === match?.createdBy) return { id: strId, name: match?.creatorName || 'You (Host)' };
+    if (strId.endsWith('_p1')) return { id: strId, name: 'Player 1' };
+    if (strId.endsWith('_p2')) return { id: strId, name: 'Player 2' };
+
+    return { id: strId, name: strId.length > 15 ? 'Player' : strId };
   };
 
   const eligibleBatters = (teamKey, excludeIds = []) => {

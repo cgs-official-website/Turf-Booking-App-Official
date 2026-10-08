@@ -86,7 +86,7 @@ function getScoreSummary(match) {
 
 export default function MatchHistoryScreen({ navigation }) {
   const { C, dark } = useTheme();
-  const [filter, setFilter] = useState('completed'); // 'completed' | 'all' | 'live'
+  const [filter, setFilter] = useState('all'); // 'all' | 'live' | 'completed'
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -121,6 +121,32 @@ export default function MatchHistoryScreen({ navigation }) {
     loadMatches(newFilter);
   };
 
+  const handleCardPress = (item) => {
+    if (!item || !item.id) return;
+    const statusLower = (item.status || '').toLowerCase();
+    const isCompleted = statusLower === 'completed';
+
+    if (isCompleted) {
+      // Completed match: READ-ONLY Past Match Details (NO resume, NO scoring controls)
+      navigation.navigate('PastMatchDetails', { matchId: item.id, matchData: item });
+    } else if (statusLower === 'live' || statusLower === 'toss') {
+      // Live / Active match: RESUME the SAME match via existing matchId on live scoring screen
+      const sport = (item.sport || '').toLowerCase();
+
+      let routeName = 'Scorecard';
+      if (sport.includes('football')) routeName = 'FootballScorecard';
+      else if (sport.includes('badminton')) routeName = 'BadmintonScorecard';
+      else if (sport.includes('volleyball')) routeName = 'VolleyballScorecard';
+      else if (sport.includes('basketball')) routeName = 'BasketballScorecard';
+      else if (sport.includes('tennis')) routeName = 'TennisScorecard';
+
+      navigation.navigate(routeName, { matchId: item.id });
+    } else {
+      // Created / Upcoming match: Go to Match room screen to start Toss & Setup
+      navigation.navigate('Match', { matchId: item.id });
+    }
+  };
+
   const renderMatchCard = ({ item }) => {
     const teamAName = item.teams?.A?.name || item.teams?.teamA?.name || 'Team A';
     const teamBName = item.teams?.B?.name || item.teams?.teamB?.name || 'Team B';
@@ -137,7 +163,7 @@ export default function MatchHistoryScreen({ navigation }) {
           { backgroundColor: C.card, borderColor: C.border },
           SHADOW.card,
         ]}
-        onPress={() => navigation.navigate('PastMatchDetails', { matchId: item.id, matchData: item })}
+        onPress={() => handleCardPress(item)}
         activeOpacity={0.88}
       >
         {/* Card Header: Sport & Status */}
@@ -231,8 +257,10 @@ export default function MatchHistoryScreen({ navigation }) {
 
         {/* Footer Chevron */}
         <View style={styles.cardFooter}>
-          <Text style={[styles.viewDetailsTxt, { color: C.primary }]}>View Match Details</Text>
-          <Feather name="chevron-right" size={16} color={C.primary} />
+          <Text style={[styles.viewDetailsTxt, { color: isCompleted ? C.primary : '#EF4444' }]}>
+            {isCompleted ? 'View Match Details' : '⚡ Resume Live Match'}
+          </Text>
+          <Feather name="chevron-right" size={16} color={isCompleted ? C.primary : '#EF4444'} />
         </View>
       </TouchableOpacity>
     );
@@ -262,9 +290,9 @@ export default function MatchHistoryScreen({ navigation }) {
       {/* Filter Tabs */}
       <View style={styles.filterRow}>
         {[
-          { key: 'completed', label: 'Past Matches' },
-          { key: 'live', label: 'Live / Active' },
           { key: 'all', label: 'All Matches' },
+          { key: 'live', label: 'Live / Active' },
+          { key: 'completed', label: 'Past Matches' },
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}

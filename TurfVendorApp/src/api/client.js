@@ -1,30 +1,46 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const PRODUCTION_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
-export const TUNNEL_URL     = 'https://twenty-falcons-read.loca.lt/api/v1';
+export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
+export const LOCAL_URL        = 'http://127.0.0.1:5000/api/v1';
+export const LAN_URL_CURRENT  = 'http://10.48.78.39:5000/api/v1';
+export const EMULATOR_URL     = 'http://10.0.2.2:5000/api/v1';
 
 const CANDIDATE_URLS = [
-  'http://127.0.0.1:5000/api/v1',
-  TUNNEL_URL,
-  'http://10.48.78.5:5000/api/v1',
+  LAN_URL_CURRENT,
+  LOCAL_URL,
+  EMULATOR_URL,
   'http://localhost:5000/api/v1',
-  PRODUCTION_URL,
-  'http://192.168.0.35:5000/api/v1',
-  'http://192.168.0.23:5000/api/v1',
-  'http://10.0.2.2:5000/api/v1',
+  RAILWAY_PROD_URL,
 ];
 
 export const BASE_URL = CANDIDATE_URLS[0];
 export const FALLBACK_URL = CANDIDATE_URLS[0];
-export const SERVER_ORIGIN = 'http://10.48.78.5:5000';
+export const SERVER_ORIGIN = 'http://10.48.78.39:5000';
+
+let activeBaseUrl = CANDIDATE_URLS[0];
+
+// Hydrate saved active URL asynchronously
+AsyncStorage.getItem('activeVendorBaseUrl')
+  .then((saved) => {
+    if (saved) activeBaseUrl = saved;
+  })
+  .catch(() => {});
+
+export const getServerOrigin = () => {
+  if (activeBaseUrl) {
+    return activeBaseUrl.replace(/\/api\/v1\/?$/, '');
+  }
+  return 'https://turf-booking-app-official-production.up.railway.app';
+};
+
+export const SERVER_ORIGIN = getServerOrigin();
+>>>>>>> 56d48ba (Fix TurfUserApp login failure, user session storage, location navigation, and match history workflow)
 
 export const getImageUrl = (path) => {
   if (!path) return null;
   if (/^(https?:|file:|content:|data:)/i.test(path)) return path;
-  return `${SERVER_ORIGIN}/${String(path).replace(/^\/+/, '')}`;
+  return `${getServerOrigin()}/${String(path).replace(/^\/+/, '')}`;
 };
-
-let activeBaseUrl = CANDIDATE_URLS[0];
 
 export const apiRequest = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('vendorToken');
@@ -50,7 +66,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
-    const timeoutMs = isFormData ? 45000 : 10000;
+    const isPrimary = host === activeBaseUrl;
+    const timeoutMs = isFormData ? 45000 : (isPrimary ? 10000 : 2500);
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       response = await fetch(`${host}${endpoint}`, {
@@ -59,7 +76,10 @@ export const apiRequest = async (endpoint, options = {}) => {
       });
       clearTimeout(timeoutId);
       if (response && (response.ok || response.status < 500)) {
-        activeBaseUrl = host;
+        if (activeBaseUrl !== host) {
+          activeBaseUrl = host;
+          AsyncStorage.setItem('activeVendorBaseUrl', host).catch(() => {});
+        }
         break;
       }
     } catch (err) {
@@ -69,15 +89,10 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 
   if (!response) {
-    throw new Error('Cannot reach backend server. Please verify "npm run dev" is running in server terminal.');
+    throw new Error('Cannot reach backend server. Please check your internet connection or verify Railway production server status.');
   }
 
   try {
-    // The server can return non-JSON (HTML error/404 pages, plain text, empty
-    // bodies) when a route is missing, the server crashed, or a proxy/dev
-    // server intercepted the request. Calling response.json() directly on
-    // those throws an opaque "Unexpected character: <" that hides what
-    // actually went wrong, so read as text first and parse defensively.
     const raw = await response.text();
     let data;
     try {

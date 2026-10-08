@@ -5,6 +5,9 @@ import {
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout, toggleTheme, toggleNotifications, setNotificationsOn } from '../redux/authSlice';
+import { signOutGoogle } from '../utils/googleSignIn';
+
+// ... rest of imports ...
 import { fcmHelper } from '../utils/fcmHelper';
 import { notificationsApi } from '../api/notifications';
 import { SPACING, RADIUS, FONT } from '../utils/theme';
@@ -144,6 +147,7 @@ export default function ProfileScreen({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           await fcmHelper.unregisterDeviceToken();
+          await signOutGoogle();
           dispatch(logout());
         },
       },

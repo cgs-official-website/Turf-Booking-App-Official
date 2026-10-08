@@ -68,3 +68,6 @@ vendor_screen.png
 graphify-out/cache/**
 graphify-out/**/cache/**
 */graphify-out/cache/**
+
+# Scratch files
+scratch/

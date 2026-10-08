@@ -80,14 +80,10 @@ export default function RootNavigator() {
             <Stack.Screen name="Register"   component={RegisterScreen} />
           </>
 
-        ) : !locationSet ? (
-          // ── First screen right after OTP/Google verify succeeds ──────────
-          // (returning users who already picked a location skip straight to Main)
-          <Stack.Screen name="Location" component={LocationScreen} />
-
         ) : (
           // ── App screens ──────────────────────────────────────────────────
           <>
+            {!locationSet && <Stack.Screen name="InitialLocation" component={LocationScreen} />}
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="Location"       component={LocationScreen} />
             <Stack.Screen name="Explore"        component={ExploreScreen}        options={{ presentation: 'card' }} />

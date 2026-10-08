@@ -13,6 +13,8 @@ import PrimaryButton from '../components/PrimaryButton';
 
 const ALL_SPORTS = ['Cricket', 'Football', 'Badminton', 'Volleyball', 'Basketball', 'Tennis'];
 
+const DEFAULT_STADIUMS = [];
+
 export default function CreateMatchScreen({ route, navigation }) {
   const params = route.params || {};
   const { C, dark } = useTheme();
@@ -29,6 +31,11 @@ export default function CreateMatchScreen({ route, navigation }) {
   const [sportModal, setSportModal] = useState(false);
   const [date, setDate] = useState(params.date ? String(params.date) : 'Today');
   const [time, setTime] = useState(params.time || '07:00 PM');
+  const [dateModal, setDateModal] = useState(false);
+  const [timeModal, setTimeModal] = useState(false);
+
+  const DATE_OPTIONS = ['Today', 'Tomorrow', 'This Weekend', 'Next Week'];
+  const TIME_OPTIONS = ['06:00 AM', '07:00 AM', '08:00 AM', '04:00 PM', '05:00 PM', '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM'];
   const [strangers, setStrangers] = useState(null); // 'yes' | 'no'
   const [saving, setSaving] = useState(false);
 
@@ -36,11 +43,12 @@ export default function CreateMatchScreen({ route, navigation }) {
     setLoadingTurfs(true);
     turfsApi.getTurfs({ limit: 50 })
       .then((res) => {
-        const list = res?.turfs || res?.data || (Array.isArray(res) ? res : []);
-        setTurfsList(list);
+        const list = res?.items || res?.turfs || res?.data || (Array.isArray(res) ? res : []);
+        setTurfsList(Array.isArray(list) ? list : []);
       })
       .catch((err) => {
         console.warn('Failed to load turfs for match:', err);
+        setTurfsList([]);
       })
       .finally(() => setLoadingTurfs(false));
   }, []);
@@ -58,14 +66,17 @@ export default function CreateMatchScreen({ route, navigation }) {
   // Only show sports available at the selected turf; fall back to full list if no turf or no sport data
   const availableSports = useMemo(() => {
     if (!selectedTurf) return ALL_SPORTS;
-    const turfSports = selectedTurf.sports;
+    const turfSports = selectedTurf.sports || selectedTurf.sportTypes;
     if (!Array.isArray(turfSports) || turfSports.length === 0) return ALL_SPORTS;
+
     // Normalise casing: match against canonical list
     const normalised = turfSports.map((s) => {
-      const lower = s.toLowerCase();
+      const lower = String(s).trim().toLowerCase();
       return ALL_SPORTS.find((a) => a.toLowerCase() === lower) || s;
-    });
-    return normalised.filter(Boolean);
+    }).filter(Boolean);
+
+    const uniqueList = Array.from(new Set(normalised));
+    return uniqueList.length > 0 ? uniqueList : ALL_SPORTS;
   }, [selectedTurf]);
 
   const canProceed = place.trim().length > 0 && sport && strangers !== null;
@@ -147,28 +158,26 @@ export default function CreateMatchScreen({ route, navigation }) {
         <View style={styles.row2}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: C.text }]}>Game Date</Text>
-            <View style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}>
-              <TextInput
-                style={[styles.inputText, { color: C.text }]}
-                value={date}
-                onChangeText={setDate}
-                placeholder="Today"
-                placeholderTextColor={C.caption}
-              />
-            </View>
+            <TouchableOpacity
+              style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}
+              onPress={() => setDateModal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.inputText, { color: C.text }]} numberOfLines={1}>{date}</Text>
+              <Feather name="calendar" size={16} color={C.primary} />
+            </TouchableOpacity>
           </View>
           <View style={{ width: SPACING.md }} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: C.text }]}>Match Time</Text>
-            <View style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}>
-              <TextInput
-                style={[styles.inputText, { color: C.text }]}
-                value={time}
-                onChangeText={setTime}
-                placeholder="07:00 PM"
-                placeholderTextColor={C.caption}
-              />
-            </View>
+            <TouchableOpacity
+              style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}
+              onPress={() => setTimeModal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.inputText, { color: C.text }]} numberOfLines={1}>{time}</Text>
+              <Feather name="clock" size={16} color={C.primary} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -287,13 +296,15 @@ export default function CreateMatchScreen({ route, navigation }) {
                       onPress={() => {
                         setPlace(item.name);
                         setSelectedTurf(item);
-                        if (item.sports?.length) {
-                          // Normalise turf's first sport against canonical list
-                          const firstSport = item.sports[0];
-                          const matched = ALL_SPORTS.find(
-                            (a) => a.toLowerCase() === firstSport.toLowerCase()
-                          ) || firstSport;
-                          setSport(matched);
+                        const tSports = item.sports || item.sportTypes || [];
+                        if (Array.isArray(tSports) && tSports.length > 0) {
+                          const matchedList = tSports.map((s) => {
+                            const lower = String(s).trim().toLowerCase();
+                            return ALL_SPORTS.find((a) => a.toLowerCase() === lower) || s;
+                          }).filter(Boolean);
+                          if (matchedList.length > 0 && !matchedList.includes(sport)) {
+                            setSport(matchedList[0]);
+                          }
                         }
                         setTurfModal(false);
                       }}
@@ -301,12 +312,19 @@ export default function CreateMatchScreen({ route, navigation }) {
                     >
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <Text style={[styles.turfRowName, { color: C.text }]}>{item.name}</Text>
-                        {!!loc && (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
-                            <Feather name="map-pin" size={12} color={C.subtext} style={{ marginRight: 4 }} />
-                            <Text style={[styles.turfRowLoc, { color: C.subtext }]} numberOfLines={1}>{loc}</Text>
-                          </View>
-                        )}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, flexWrap: 'wrap', gap: 6 }}>
+                          {!!loc && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Feather name="map-pin" size={12} color={C.subtext} style={{ marginRight: 4 }} />
+                              <Text style={[styles.turfRowLoc, { color: C.subtext }]} numberOfLines={1}>{loc}</Text>
+                            </View>
+                          )}
+                          {Array.isArray(item.sports || item.sportTypes) && (item.sports || item.sportTypes).length > 0 && (
+                            <Text style={{ fontSize: 11, color: C.primary, fontWeight: '700' }}>
+                              • {(item.sports || item.sportTypes).join(', ')}
+                            </Text>
+                          )}
+                        </View>
                       </View>
                       {isSelected ? (
                         <Feather name="check-circle" size={20} color={C.primary} />
@@ -377,6 +395,50 @@ export default function CreateMatchScreen({ route, navigation }) {
                     <Text style={[styles.sportRowText, { color: C.text }]}>{item}</Text>
                   </View>
                   {sport === item && <Feather name="check" size={18} color={C.primary} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Date selection modal */}
+      <Modal visible={dateModal} transparent animationType="fade" onRequestClose={() => setDateModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDateModal(false)}>
+          <View style={[styles.modalBox, { backgroundColor: C.card, borderColor: C.border }, SHADOW.floating]}>
+            <Text style={[styles.modalTitle, { color: C.text }]}>Select Game Date</Text>
+            {DATE_OPTIONS.map((item) => (
+              <TouchableOpacity
+                key={item}
+                style={[styles.sportRow, { borderBottomColor: C.border }]}
+                onPress={() => { setDate(item); setDateModal(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.sportRowText, { color: C.text }]}>{item}</Text>
+                {date === item && <Feather name="check" size={18} color={C.primary} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Time selection modal */}
+      <Modal visible={timeModal} transparent animationType="fade" onRequestClose={() => setTimeModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTimeModal(false)}>
+          <View style={[styles.modalBox, { backgroundColor: C.card, borderColor: C.border }, SHADOW.floating]}>
+            <Text style={[styles.modalTitle, { color: C.text }]}>Select Match Time</Text>
+            <FlatList
+              data={TIME_OPTIONS}
+              keyExtractor={(i) => i}
+              style={{ maxHeight: 260 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.sportRow, { borderBottomColor: C.border }]}
+                  onPress={() => { setTime(item); setTimeModal(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.sportRowText, { color: C.text }]}>{item}</Text>
+                  {time === item && <Feather name="check" size={18} color={C.primary} />}
                 </TouchableOpacity>
               )}
             />

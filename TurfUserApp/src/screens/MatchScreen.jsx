@@ -50,7 +50,13 @@ export default function MatchScreen({ route, navigation }) {
   };
 
   const goToss = () => navigation.navigate('Toss', { matchId });
-  const goScorecard = () => navigation.navigate(getScorecardRoute(match.sport), { matchId });
+  const goScorecard = () => {
+    if (match?.status === 'completed') {
+      navigation.navigate('PastMatchDetails', { matchId });
+    } else {
+      navigation.navigate(getScorecardRoute(match?.sport), { matchId });
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -93,19 +99,24 @@ export default function MatchScreen({ route, navigation }) {
           <Text style={styles.metaText}>{match.date} · {match.time}</Text>
         </View>
 
-        {match.status === 'upcoming' && (
-          <TouchableOpacity style={styles.actionBtn} onPress={goToss}>
-            <Text style={styles.actionBtnText}>Start Toss</Text>
+        {(!match.status || match.status === 'created' || match.status === 'upcoming') && (
+          <TouchableOpacity style={styles.actionBtn} onPress={goToss} activeOpacity={0.85}>
+            <Text style={styles.actionBtnText}>🪙 Start Toss & Match Setup</Text>
           </TouchableOpacity>
         )}
         {match.status === 'toss' && (
-          <TouchableOpacity style={styles.actionBtn} onPress={goScorecard}>
-            <Text style={styles.actionBtnText}>Start Scoring</Text>
+          <TouchableOpacity style={styles.actionBtn} onPress={goScorecard} activeOpacity={0.85}>
+            <Text style={styles.actionBtnText}>🏏 Start Scoring Match</Text>
           </TouchableOpacity>
         )}
-        {(match.status === 'live' || match.status === 'completed') && (
-          <TouchableOpacity style={styles.actionBtn} onPress={goScorecard}>
-            <Text style={styles.actionBtnText}>{match.status === 'live' ? 'View Live Scorecard' : 'View Result'}</Text>
+        {match.status === 'live' && (
+          <TouchableOpacity style={styles.actionBtn} onPress={goScorecard} activeOpacity={0.85}>
+            <Text style={styles.actionBtnText}>⚡ View Live Scorecard</Text>
+          </TouchableOpacity>
+        )}
+        {match.status === 'completed' && (
+          <TouchableOpacity style={styles.actionBtn} onPress={goScorecard} activeOpacity={0.85}>
+            <Text style={styles.actionBtnText}>🏆 View Final Scorecard & Result</Text>
           </TouchableOpacity>
         )}
 
@@ -133,14 +144,24 @@ export default function MatchScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.timelineTitle}>Timeline</Text>
-        {(match.timeline || []).slice().reverse().map((t, i) => (
-          <View key={i} style={styles.timelineRow}>
-            <Text style={styles.timelineTime}>
-              {new Date(t.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-            <Text style={styles.timelineText}>{t.text}</Text>
-          </View>
-        ))}
+        {(match.timeline || []).slice().reverse().map((t, i) => {
+          let timeTxt = '';
+          if (t.time) {
+            if (typeof t.time === 'number') {
+              timeTxt = new Date(t.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } else if (!isNaN(Number(t.time))) {
+              timeTxt = new Date(Number(t.time)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } else {
+              timeTxt = String(t.time);
+            }
+          }
+          return (
+            <View key={i} style={styles.timelineRow}>
+              {!!timeTxt && <Text style={styles.timelineTime}>{timeTxt}</Text>}
+              <Text style={[styles.timelineText, !timeTxt && { flex: 1 }]}>{t.text || String(t)}</Text>
+            </View>
+          );
+        })}
       </ScrollView>
     </View>
   );
