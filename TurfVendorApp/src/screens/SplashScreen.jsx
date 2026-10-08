@@ -344,20 +344,7 @@ const SplashScreen = ({ onFinish }) => {
         </Animated.Text>
       </View>
 
-      {/* Layer 5: Shimmering Micro-Progress Bar */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBarTrack}>
-          <Animated.View style={[styles.progressBarFill, { width: progressWidth }]}>
-            <Animated.View
-              style={[
-                styles.shimmerSweep,
-                { transform: [{ translateX: shimmerTranslate }] },
-              ]}
-            />
-          </Animated.View>
-        </View>
-        <Text style={styles.versionText}>POWERING SPORTS ARENAS</Text>
-      </View>
+
     </Animated.View>
   );
 };

@@ -22,6 +22,7 @@ import { Provider } from 'react-redux';
 import { store } from './src/redux/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import { StatusBar } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { initCustomAlert } from './src/utils/customAlert';
 import { CustomAlertModal } from './src/components/CustomAlertModal';
@@ -49,9 +50,11 @@ const ThemedApp = () => {
 const App = () => {
   return (
     <Provider store={store}>
-      <ThemeProvider>
-        <ThemedApp />
-      </ThemeProvider>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <ThemedApp />
+        </ThemeProvider>
+      </SafeAreaProvider>
     </Provider>
   );
 };

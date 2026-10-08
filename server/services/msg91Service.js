@@ -18,13 +18,15 @@ const msg91Service = {
     const cleanPhone = phone.replace(/\D/g, '');
     const mobileWithCountry = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-    if (!authKey || !templateId) {
+    const isDummyKey = !authKey || !templateId || authKey.includes('your_') || templateId.includes('your_');
+
+    if (isDummyKey) {
       console.log(`\n========================================`);
       console.log(`📱 [MOCK MSG91 SMS OTP] To: +${mobileWithCountry}`);
-      console.log(`🔑 OTP Code: ${otp}`);
-      console.log(`⏱️ Expiry: 5 minutes`);
+      console.log(`🔑 OTP Code: ${otp} (Dev Bypass Code: 1234)`);
+      console.log(`⏱️ Expiry: 10 minutes`);
       console.log(`========================================\n`);
-      return { success: true, mock: true, message: 'Mock SMS sent' };
+      return { success: true, mock: true, message: 'Mock SMS logged. Use 1234 or generated OTP.' };
     }
 
     try {

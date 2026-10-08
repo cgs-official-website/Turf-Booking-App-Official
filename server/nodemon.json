@@ -1,0 +1,4 @@
+{
+  "ignore": ["public/apks/*", "public/uploads/*", "uploads/*", "node_modules/*", ".git/*"],
+  "ext": "js,json"
+}

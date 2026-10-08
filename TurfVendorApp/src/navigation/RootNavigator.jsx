@@ -6,6 +6,7 @@ import { fetchTurfStatus, bootstrapAuth } from '../redux/authSlice';
 import { fetchMySubscription } from '../redux/vendorSlice';
 
 import SplashScreen from '../screens/SplashScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
@@ -123,6 +124,7 @@ const RootNavigator = () => {
         {!isAuthenticated ? (
           // Auth Stack
           <>
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Vendor Registration' }} />

@@ -40,7 +40,11 @@ const TurfAvatar = ({ turf, size = 46 }) => {
         justifyContent: 'center',
       }}
     >
-      <Ionicons name="football" size={size * 0.5} color={colors.primary} />
+      <Image
+        source={require('../assets/logo.png')}
+        style={{ width: size * 0.7, height: size * 0.7 }}
+        resizeMode="contain"
+      />
     </View>
   );
 };

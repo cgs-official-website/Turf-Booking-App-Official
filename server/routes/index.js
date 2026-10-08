@@ -22,7 +22,10 @@ router.get('/health', async (req, res) => {
   let dbOk = false;
   let userCount = 0;
   try {
-    userCount = await prisma.user.count();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('DB Timeout')), 3000)
+    );
+    userCount = await Promise.race([prisma.user.count(), timeoutPromise]);
     dbOk = true;
   } catch (e) {
     dbOk = false;

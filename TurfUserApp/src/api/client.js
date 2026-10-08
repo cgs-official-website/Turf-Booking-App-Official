@@ -8,16 +8,22 @@ import { Platform } from 'react-native';
 export const LOCAL_URL      = 'http://127.0.0.1:5000/api/v1';
 export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 export const EMULATOR_URL   = 'http://10.0.2.2:5000/api/v1';
-export const LAN_URL_CURRENT= 'http://192.168.0.23:5000/api/v1';
+export const LAN_URL_CURRENT= 'http://10.48.78.5:5000/api/v1';
+export const TUNNEL_URL     = 'https://twenty-falcons-read.loca.lt/api/v1';
+export const PRODUCTION_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 
 export const BASE_URL = LOCAL_URL;
-export const SERVER_ORIGIN = 'http://127.0.0.1:5000';
+export const SERVER_ORIGIN = 'http://10.48.78.5:5000';
 
 const CANDIDATE_URLS = [
   LOCAL_URL,
+  TUNNEL_URL,
   LOCAL_HOST_URL,
-  Platform.OS === 'android' ? EMULATOR_URL : null,
   LAN_URL_CURRENT,
+  PRODUCTION_URL,
+  'http://192.168.0.35:5000/api/v1',
+  'http://192.168.0.23:5000/api/v1',
+  Platform.OS === 'android' ? EMULATOR_URL : null,
 ].filter(Boolean);
 
 export const getImageUrl = (path) => {

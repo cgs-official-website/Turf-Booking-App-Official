@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useIsFocused } from '@react-navigation/native';
@@ -29,9 +29,11 @@ const LoginScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (error && isFocused) {
-      const isNotFound = error.toLowerCase().includes('not found') || error.toLowerCase().includes('create new account');
-      const isPending = error.toLowerCase().includes('pending') || error.toLowerCase().includes('approval');
-      const isRejected = error.toLowerCase().includes('not approved') || error.toLowerCase().includes('rejected');
+      const errStr = typeof error === 'string' ? error : (error?.message || String(error));
+      const lower = errStr.toLowerCase();
+      const isNotFound = lower.includes('not found') || lower.includes('create new account');
+      const isPending = lower.includes('pending') || lower.includes('approval');
+      const isRejected = lower.includes('not approved') || lower.includes('rejected');
       const title = isNotFound
         ? 'Account Not Found'
         : isPending
@@ -39,7 +41,7 @@ const LoginScreen = ({ navigation }) => {
         : isRejected
         ? 'Account Not Approved'
         : 'Login Failed';
-      Alert.alert(title, error);
+      Alert.alert(title, errStr);
       dispatch(clearError());
     }
   }, [error, isFocused]);
@@ -67,7 +69,7 @@ const LoginScreen = ({ navigation }) => {
         <View style={styles.header}>
           <View style={[styles.logoBadge, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
             <View style={[styles.logoInner, { backgroundColor: colors.primaryLight }]}>
-              <Ionicons name="football" size={28} color={colors.primary} />
+              <Image source={require('../assets/logo.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />
             </View>
           </View>
           <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>

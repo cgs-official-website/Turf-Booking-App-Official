@@ -47,15 +47,8 @@ export const loginVendor = createAsyncThunk(
     try {
       const data = await loginVendorApi(credentials);
       const vendor = data.vendor || data.profile;
-      const kycStatus = vendor?.kycStatus || 'pending';
 
-      if (kycStatus === 'pending') {
-        return rejectWithValue(
-          'Your account is pending Superadmin approval. You will be able to log in once your account has been approved.'
-        );
-      }
-
-      if (kycStatus === 'rejected') {
+      if (vendor?.kycStatus === 'rejected') {
         const reason = vendor?.rejectionReason ? `\nReason: ${vendor.rejectionReason}` : '';
         return rejectWithValue(
           `Your account registration was not approved.${reason}\nPlease contact support.`
@@ -291,22 +284,17 @@ const authSlice = createSlice({
       .addCase(loginVendor.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(loginVendor.fulfilled, (state, action) => {
         state.loading = false;
-        state.vendor = action.payload.vendor;
-        state.token = action.payload.token;
+        const payload = action.payload || {};
+        state.vendor = payload.vendor || payload.profile || payload.user || payload;
+        state.token = payload.token || state.token;
         state.isAuthenticated = true;
-        // Reset any stale review status from a previous vendor's session so
-        // RootNavigator re-fetches fresh data for whoever just logged in.
         state.turfStatus = null;
         state.turfInfo = null;
-        // Hydrated from AsyncStorage (per-vendor key) in the loginVendor
-        // thunk above, instead of always forcing false — a returning
-        // vendor who already acknowledged approval on this device shouldn't
-        // see the Approved screen again just by logging back in.
-        state.turfApprovalAcknowledged = !!action.payload.turfApprovalAcknowledged;
+        state.turfApprovalAcknowledged = !!payload.turfApprovalAcknowledged;
       })
       .addCase(loginVendor.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        state.error = action.payload || action.error?.message || 'Login failed';
       });
 
     // Register
