@@ -6,12 +6,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
-export const LOCAL_URL        = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT  = 'http://192.168.0.36:5000/api/v1';
-export const EMULATOR_URL     = 'http://10.0.2.2:5000/api/v1';
-export const LOCAL_HOST_URL   = 'http://localhost:5000/api/v1';
+export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
+export const LAN_URL_CURRENT = 'http://192.168.0.36:5000/api/v1';
+export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
+export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
-export const BASE_URL = LOCAL_URL;
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
+export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
 
 const CANDIDATE_URLS = [
   LOCAL_URL,
@@ -89,7 +90,7 @@ class ApiClient {
         }
         if (this.activeBaseUrl !== baseUrl) {
           this.activeBaseUrl = baseUrl;
-          AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => {});
+          AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
         }
         return res;
       } catch (err) {
@@ -138,11 +139,11 @@ class ApiClient {
     return data;
   }
 
-  get(path)          { return this.request('GET', path); }
-  post(path, body)   { return this.request('POST', path, body); }
-  put(path, body)    { return this.request('PUT', path, body); }
-  patch(path, body)  { return this.request('PATCH', path, body); }
-  delete(path)       { return this.request('DELETE', path); }
+  get(path) { return this.request('GET', path); }
+  post(path, body) { return this.request('POST', path, body); }
+  put(path, body) { return this.request('PUT', path, body); }
+  patch(path, body) { return this.request('PATCH', path, body); }
+  delete(path) { return this.request('DELETE', path); }
 }
 
 export const client = new ApiClient();
