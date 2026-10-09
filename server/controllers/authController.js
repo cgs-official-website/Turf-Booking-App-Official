@@ -4,6 +4,7 @@ const prisma = require('../config/prisma');
 const msg91Service = require('../services/msg91Service');
 const nodemailerService = require('../services/nodemailerService');
 const cacheService = require('../services/cacheService');
+const storageService = require('../services/storageService');
 const { generateOtp } = require('../utils/otp');
 const { sendSuccess, sendError } = require('../utils/response');
 const {
@@ -17,6 +18,33 @@ const {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default_jwt_secret_change_in_production';
 const JWT_EXPIRES_IN = '30d';
+
+/**
+ * Uploads base64 avatar images to storage and returns permanent file URL
+ */
+async function processAvatarUpload(avatarStr, folder = 'users') {
+  if (!avatarStr || typeof avatarStr !== 'string') return avatarStr;
+  if (avatarStr.startsWith('data:image/')) {
+    try {
+      const parts = avatarStr.split(';base64,');
+      const mimeMatch = avatarStr.match(/^data:(image\/[a-zA-Z0-9\+\-\.]+);base64,/);
+      const mimetype = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const ext = mimetype.split('/')[1] || 'jpg';
+      const base64Data = parts[1] || parts[0];
+      const buffer = Buffer.from(base64Data, 'base64');
+      const uploaded = await storageService.uploadFile({
+        buffer,
+        originalname: `avatar_${Date.now()}.${ext}`,
+        mimetype,
+      }, folder);
+      return uploaded?.url || avatarStr;
+    } catch (e) {
+      console.warn('⚠️ Avatar upload processing failed, keeping original:', e.message);
+      return avatarStr;
+    }
+  }
+  return avatarStr;
+}
 
 /**
  * Mint a unified backend session JWT
@@ -790,46 +818,59 @@ const authController = {
    * PATCH /api/v1/auth/me or PUT /api/v1/auth/me (Update profile)
    */
   async updateMe(req, res) {
-    const { uid, role } = req.user;
-    const parsed = updateProfileSchema.parse(req.body);
+    try {
+      const { uid, role } = req.user;
+      const parsed = updateProfileSchema.parse(req.body);
 
-    if (role === 'vendor') {
+      if (role === 'vendor') {
+        const data = {};
+        if (parsed.name !== undefined) data.name = parsed.name;
+        if (parsed.email !== undefined && parsed.email !== '') data.email = parsed.email;
+        if (parsed.phone !== undefined) data.phone = parsed.phone;
+        if (parsed.contact !== undefined) data.phone = parsed.contact;
+        if (parsed.avatar !== undefined || parsed.photoURL !== undefined) {
+          const rawAvatar = parsed.avatar || parsed.photoURL;
+          data.avatar = await processAvatarUpload(rawAvatar, 'vendors');
+        }
+        if (parsed.turfOnboardingComplete !== undefined) data.turfOnboardingComplete = parsed.turfOnboardingComplete;
+        if (parsed.turfApprovalAcknowledged !== undefined) data.turfApprovalAcknowledged = parsed.turfApprovalAcknowledged;
+
+        const vendor = await prisma.vendor.update({
+          where: { id: uid },
+          data,
+        });
+        const formatted = formatVendor(vendor);
+        return sendSuccess(res, { profile: formatted, vendor: formatted });
+      }
+
       const data = {};
       if (parsed.name !== undefined) data.name = parsed.name;
       if (parsed.email !== undefined && parsed.email !== '') data.email = parsed.email;
-      if (parsed.phone !== undefined) data.phone = parsed.phone;
-      if (parsed.contact !== undefined) data.phone = parsed.contact;
+      if (parsed.phone !== undefined && parsed.phone !== '') data.phone = parsed.phone;
       if (parsed.avatar !== undefined || parsed.photoURL !== undefined) {
-        data.avatar = parsed.avatar || parsed.photoURL;
+        const rawAvatar = parsed.avatar || parsed.photoURL;
+        data.avatar = await processAvatarUpload(rawAvatar, 'users');
       }
-      if (parsed.turfOnboardingComplete !== undefined) data.turfOnboardingComplete = parsed.turfOnboardingComplete;
-      if (parsed.turfApprovalAcknowledged !== undefined) data.turfApprovalAcknowledged = parsed.turfApprovalAcknowledged;
+      if (parsed.location !== undefined) {
+        data.location = typeof parsed.location === 'object' ? JSON.stringify(parsed.location) : parsed.location;
+      }
 
-      const vendor = await prisma.vendor.update({
+      const user = await prisma.user.update({
         where: { id: uid },
         data,
       });
-      const formatted = formatVendor(vendor);
-      return sendSuccess(res, { profile: formatted, vendor: formatted });
+      const formatted = formatUser(user);
+      return sendSuccess(res, { profile: formatted, user: formatted });
+    } catch (err) {
+      if (err.code === 'P2002') {
+        return sendError(res, 'Email or phone number is already registered to another account', 400, 'DUPLICATE_FIELD');
+      }
+      if (err.name === 'ZodError') {
+        const msg = err.errors?.[0]?.message || 'Invalid user input';
+        return sendError(res, msg, 400, 'VALIDATION_ERROR');
+      }
+      return sendError(res, err?.message || 'Failed to update user profile', 500, 'UPDATE_ERROR');
     }
-
-    const data = {};
-    if (parsed.name !== undefined) data.name = parsed.name;
-    if (parsed.email !== undefined) data.email = parsed.email;
-    if (parsed.phone !== undefined) data.phone = parsed.phone;
-    if (parsed.avatar !== undefined || parsed.photoURL !== undefined) {
-      data.avatar = parsed.avatar || parsed.photoURL;
-    }
-    if (parsed.location !== undefined) {
-      data.location = typeof parsed.location === 'object' ? JSON.stringify(parsed.location) : parsed.location;
-    }
-
-    const user = await prisma.user.update({
-      where: { id: uid },
-      data,
-    });
-    const formatted = formatUser(user);
-    return sendSuccess(res, { profile: formatted, user: formatted });
   },
 
   /**
@@ -842,16 +883,16 @@ const authController = {
     if (role === 'vendor') {
       const data = {};
       if (body.name !== undefined) data.name = body.name;
-      if (body.email !== undefined) data.email = body.email;
-      if (body.phone !== undefined) data.phone = body.phone;
+      if (body.email !== undefined && body.email !== '') data.email = body.email;
+      if (body.phone !== undefined && body.phone !== '') data.phone = body.phone;
       const vendor = await prisma.vendor.update({ where: { id: uid }, data });
       return sendSuccess(res, { profile: formatVendor(vendor) });
     }
 
     const data = {};
     if (body.name !== undefined) data.name = body.name;
-    if (body.email !== undefined) data.email = body.email;
-    if (body.phone !== undefined) data.phone = body.phone;
+    if (body.email !== undefined && body.email !== '') data.email = body.email;
+    if (body.phone !== undefined && body.phone !== '') data.phone = body.phone;
     if (body.avatar !== undefined || body.photoURL !== undefined) data.avatar = body.avatar || body.photoURL;
     if (body.location !== undefined) data.location = typeof body.location === 'object' ? JSON.stringify(body.location) : body.location;
     const user = await prisma.user.update({ where: { id: uid }, data });

@@ -25,6 +25,11 @@ async function getMatchesKey() {
   return uid ? `@turf_matches_${uid}` : '@turf_matches_guest';
 }
 
+async function getRecentPlayersKey() {
+  const uid = await getCurrentUserId();
+  return uid ? `@turf_recent_players_${uid}` : '@turf_recent_players_guest';
+}
+
 function isUserMatch(m, uid) {
   if (!m) return false;
   if (!uid) return true;
@@ -357,6 +362,15 @@ export const matchStorage = {
   async createMatch(data = {}) {
     const localId = genId('match');
     const currentUid = await getCurrentUserId();
+    let currentUserName = 'Player';
+    try {
+      const userStr = await AsyncStorage.getItem('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u?.name) currentUserName = u.name;
+      }
+    } catch (_) {}
+
     const match = {
       id: localId,
       createdBy: currentUid || null,
@@ -371,7 +385,7 @@ export const matchStorage = {
       turfId: data.turfId || null,
       overs: data.overs || 6,
       lastManEnabled: data.lastManEnabled ?? false,
-      players: currentUid ? [{ userId: currentUid }] : [], // [{ id, name, role }]
+      players: currentUid ? [{ id: currentUid, userId: currentUid, name: currentUserName }] : [], // [{ id, name, role }]
       teams: {
         A: { name: 'Team A', captainId: null, playerIds: [] },
         B: { name: 'Team B', captainId: null, playerIds: [] },
@@ -418,14 +432,26 @@ export const matchStorage = {
 
 export const playerStorage = {
   async getRecentPlayers() {
-    const list = await readJSON(RECENT_PLAYERS_KEY, []);
+    const key = await getRecentPlayersKey();
+    let list = await readJSON(key, null);
+
+    if (list === null) {
+      const legacy = await readJSON(RECENT_PLAYERS_KEY, null);
+      if (Array.isArray(legacy) && legacy.length > 0) {
+        list = legacy;
+        await writeJSON(key, list);
+      } else {
+        list = [];
+      }
+    }
+
     const dummyIds = new Set(['p_1', 'p_2', 'p_3', 'p_4']);
     const dummyNames = new Set(['madhan raj', 'karthik', 'suresh', 'venkatesh']);
     const filtered = (list || []).filter(
       (p) => p && !dummyIds.has(p.id) && !dummyNames.has(String(p.name || '').toLowerCase().trim())
     );
     if (filtered.length !== (list || []).length) {
-      await writeJSON(RECENT_PLAYERS_KEY, filtered);
+      await writeJSON(key, filtered);
     }
     return filtered;
   },
@@ -437,18 +463,24 @@ export const playerStorage = {
       phone: phone ? phone.trim() : '',
       isGuest: true,
     };
+    const key = await getRecentPlayersKey();
     const list = await this.getRecentPlayers();
-    const updated = [guest, ...list.filter((p) => p.name.toLowerCase().trim() !== guest.name.toLowerCase().trim())];
-    await writeJSON(RECENT_PLAYERS_KEY, updated);
+    const updated = [guest, ...list.filter((p) => String(p?.name || '').toLowerCase().trim() !== guest.name.toLowerCase().trim())];
+    await writeJSON(key, updated);
     return guest;
   },
 
   async addRecentPlayers(players = []) {
-    const existing = await readJSON(RECENT_PLAYERS_KEY, []);
+    const key = await getRecentPlayersKey();
+    const existing = await this.getRecentPlayers();
     const map = new Map();
-    existing.forEach((p) => map.set(p.name.toLowerCase().trim(), p));
-    players.forEach((p) => map.set(p.name.toLowerCase().trim(), p));
+    existing.forEach((p) => {
+      if (p && p.name) map.set(String(p.name).toLowerCase().trim(), p);
+    });
+    players.forEach((p) => {
+      if (p && p.name) map.set(String(p.name).toLowerCase().trim(), p);
+    });
     const merged = Array.from(map.values()).slice(0, 30);
-    await writeJSON(RECENT_PLAYERS_KEY, merged);
+    await writeJSON(key, merged);
   },
 };

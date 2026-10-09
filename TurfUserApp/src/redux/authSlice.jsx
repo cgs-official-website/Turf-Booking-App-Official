@@ -107,29 +107,21 @@ export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { getS
     const { auth } = getState();
     const currentUser = auth.user || savedUser;
 
-    if (token && currentUser) {
-      authApi.getMe().then(res => {
+    if (token) {
+      try {
+        const res = await Promise.race([
+          authApi.getMe(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))
+        ]);
         const payload = res?.data || res;
         const freshUser = payload?.user || payload?.profile || (payload?.id ? payload : null);
         if (freshUser) {
-          AsyncStorage.setItem('user', JSON.stringify(freshUser));
+          await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+          return { token, user: freshUser, location: savedLocation, notificationsOn };
         }
-      }).catch(() => {});
-      return { token, user: currentUser, location: savedLocation, notificationsOn };
-    }
-
-    try {
-      const res = await Promise.race([
-        authApi.getMe(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
-      ]);
-      const payload = res?.data || res;
-      const fetchedUser = payload?.user || payload?.profile || (payload?.id ? payload : null);
-      if (fetchedUser) {
-        await AsyncStorage.setItem('user', JSON.stringify(fetchedUser));
+      } catch (apiErr) {
+        // Fallback to cached user if offline or timeout
       }
-      return { token, user: fetchedUser || currentUser, location: savedLocation, notificationsOn };
-    } catch (apiErr) {
       return { token, user: currentUser, location: savedLocation, notificationsOn };
     }
   } catch (e) {

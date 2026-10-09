@@ -8,24 +8,22 @@ import { Platform } from 'react-native';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT = 'http://192.168.0.36:5000/api/v1';
+export const LAN_URL_CURRENT = 'http://10.48.78.39:5000/api/v1';
 export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
 export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Release build = production only. Dev build = local first.
-export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
+// Primary base URL is cloud Railway production. LAN candidate is secondary fallback.
+export const BASE_URL = RAILWAY_PROD_URL;
 
-const CANDIDATE_URLS = IS_DEV
-  ? [
-    LOCAL_URL,
-    LAN_URL_CURRENT,
-    LOCAL_HOST_URL,
-    Platform.OS === 'android' ? EMULATOR_URL : null,
-    RAILWAY_PROD_URL,
-  ].filter(Boolean)
-  : [RAILWAY_PROD_URL];
+const CANDIDATE_URLS = [
+  RAILWAY_PROD_URL,
+  LAN_URL_CURRENT,
+  LOCAL_URL,
+  LOCAL_HOST_URL,
+  Platform.OS === 'android' ? EMULATOR_URL : null,
+].filter(Boolean);
 
 export const getOrigin = () => {
   if (client && client.activeBaseUrl) {
@@ -44,18 +42,13 @@ export const getImageUrl = (path) => {
 class ApiClient {
   constructor() {
     this.activeBaseUrl = BASE_URL;
-    if (IS_DEV) {
-      this.initSavedBaseUrl();
-    } else {
-      // Release build: clear any old local URL saved by previous test builds
-      AsyncStorage.removeItem('activeBaseUrl').catch(() => { });
-    }
+    this.initSavedBaseUrl();
   }
 
   async initSavedBaseUrl() {
     try {
       const saved = await AsyncStorage.getItem('activeBaseUrl');
-      if (saved && !saved.includes('10.48.78.39') && CANDIDATE_URLS.includes(saved)) {
+      if (saved && CANDIDATE_URLS.includes(saved)) {
         this.activeBaseUrl = saved;
       }
     } catch {
@@ -88,9 +81,10 @@ class ApiClient {
           baseUrl.includes('127.0.0.1') ||
           baseUrl.includes('localhost') ||
           baseUrl.includes('10.0.2.2') ||
+          baseUrl.includes('10.') ||
           baseUrl.includes('192.168.') ||
           baseUrl.includes('172.');
-        const timeoutMs = isLocal ? 3500 : 15000;
+        const timeoutMs = isLocal ? 2000 : 25000;
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
         const res = await fetch(`${baseUrl}${path}`, {
@@ -99,15 +93,11 @@ class ApiClient {
         });
         clearTimeout(timeoutId);
 
-        // Server responded! Lock in this working base URL (dev only persists)
-        if (IS_DEV) {
-          console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
-        }
+        // Server responded! Lock in this working base URL
+        console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
         if (this.activeBaseUrl !== baseUrl) {
           this.activeBaseUrl = baseUrl;
-          if (IS_DEV) {
-            AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
-          }
+          AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
         }
         return res;
       } catch (err) {

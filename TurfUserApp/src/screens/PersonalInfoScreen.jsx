@@ -202,8 +202,11 @@ export default function PersonalInfoScreen({ navigation }) {
   const openPicker = (sourceType = 'library') => {
     const options = {
       mediaType: 'photo',
-      quality: 0.85,
+      maxWidth: 400,
+      maxHeight: 400,
+      quality: 0.5,
       selectionLimit: 1,
+      includeBase64: true,
     };
 
     const handler = sourceType === 'camera' ? launchCamera : launchImageLibrary;
@@ -211,7 +214,12 @@ export default function PersonalInfoScreen({ navigation }) {
     handler(options, (response) => {
       if (response.didCancel || response.errorCode) return;
       if (response.assets?.length) {
-        const uri = response.assets[0].uri;
+        const asset = response.assets[0];
+        let uri = asset.uri;
+        if (asset.base64) {
+          const type = asset.type || 'image/jpeg';
+          uri = `data:${type};base64,${asset.base64}`;
+        }
         setTempImageUri(uri);
         setCropModalVisible(true);
       }
@@ -252,19 +260,36 @@ export default function PersonalInfoScreen({ navigation }) {
         email: email.trim(),
         phone: phone.trim(),
       };
+
       if (avatarUri) {
-        payload.avatar = avatarUri;
-        payload.photoURL = avatarUri;
+        let finalAvatar = avatarUri;
+        if (avatarUri.startsWith('file://') || avatarUri.startsWith('content://')) {
+          try {
+            const response = await fetch(avatarUri);
+            const blob = await response.blob();
+            finalAvatar = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (blobErr) {
+            console.warn('Image to data URI conversion fallback:', blobErr);
+          }
+        }
+        payload.avatar = finalAvatar;
+        payload.photoURL = finalAvatar;
       }
 
       const res = await authApi.updateMe(payload);
-      const updatedUser = res.user || res.profile || { ...user, ...payload };
+      const updatedUser = res.user || res.profile || (res.id ? res : { ...user, ...payload });
+
       dispatch(updateUser(updatedUser));
 
       Alert.alert('Saved!', 'Your profile details and photo have been updated successfully.');
       navigation.goBack();
     } catch (e) {
-      Alert.alert('Save Failed', e?.message || 'Please try again.');
+      Alert.alert('Save Failed', e?.message || 'Failed to save profile changes. Please try again.');
     } finally {
       setSaving(false);
     }

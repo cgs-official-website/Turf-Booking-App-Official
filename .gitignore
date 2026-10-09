@@ -71,3 +71,5 @@ graphify-out/**/cache/**
 
 # Scratch files
 scratch/
+
+*.zip

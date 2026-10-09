@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, Modal, Alert,
 } from 'react-native';
+import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { COLORS, SPACING, RADIUS, FONT } from '../utils/theme';
 import { matchStorage, playerStorage } from '../utils/matchStorage';
@@ -10,6 +11,7 @@ import { client } from '../api/client';
 
 export default function SelectPlayersScreen({ route, navigation }) {
   const { matchId } = route.params;
+  const user = useSelector((s) => s.auth?.user || s.auth?.profile);
 
   const [match, setMatch] = useState(null);
   const [players, setPlayers] = useState([]);
@@ -26,9 +28,16 @@ export default function SelectPlayersScreen({ route, navigation }) {
 
       const list = await playerStorage.getRecentPlayers();
 
+      const currentUserId = user?.id || user?.uid;
+      const currentUserName = user?.name || 'Player';
+
       const mPlayers = (m?.players || []).map((p) => {
-        if (typeof p === 'object' && p) return p;
-        return { id: p, name: m?.playerNames?.[p] || 'Player' };
+        if (typeof p === 'object' && p) {
+          const id = p.id || p.userId;
+          const name = p.name || m?.playerNames?.[id] || (id === currentUserId ? currentUserName : 'Player');
+          return { ...p, id, name };
+        }
+        return { id: p, name: m?.playerNames?.[p] || (p === currentUserId ? currentUserName : 'Player') };
       });
 
       const playerMap = new Map();
@@ -39,9 +48,10 @@ export default function SelectPlayersScreen({ route, navigation }) {
         const id = p.id || p.userId;
         if (id) {
           const existing = playerMap.get(id);
+          const resolvedName = p.name || existing?.name || (id === currentUserId ? currentUserName : 'Player');
           playerMap.set(id, {
             id,
-            name: p.name || existing?.name || 'Player',
+            name: resolvedName,
             isGuest: p.isGuest ?? existing?.isGuest ?? false,
           });
         }
@@ -57,7 +67,7 @@ export default function SelectPlayersScreen({ route, navigation }) {
       });
       setSelected(initial);
     })();
-  }, [matchId]);
+  }, [matchId, user]);
 
   const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
 

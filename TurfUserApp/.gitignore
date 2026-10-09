@@ -77,3 +77,4 @@ yarn-error.log
 node_modules/
 .env
 *.log
+android/app/src/main/assets/index.android.bundle
