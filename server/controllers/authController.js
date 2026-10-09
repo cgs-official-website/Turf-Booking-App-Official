@@ -59,6 +59,8 @@ function formatVendor(vendor) {
     name: vendor.name,
     email: vendor.email,
     phone: vendor.phone || '',
+    avatar: vendor.avatar || '',
+    photoURL: vendor.avatar || '',
     role: 'vendor',
     kycStatus: vendor.kycStatus,
     turfOnboardingComplete: vendor.turfOnboardingComplete,

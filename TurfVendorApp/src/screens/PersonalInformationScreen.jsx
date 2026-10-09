@@ -3,7 +3,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Image, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
-  Modal, Animated, Dimensions, PanResponder,
+  Modal, Animated, Dimensions, PanResponder, PermissionsAndroid,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
@@ -238,16 +238,43 @@ const PersonalInformationScreen = ({ navigation }) => {
   }, [navigation]);
 
   const openPicker = async (sourceType = 'library') => {
+    if (sourceType === 'camera' && Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission Required',
+            message: 'Turf Vendor App needs access to your camera to take a profile photo.',
+            buttonPositive: 'OK',
+            buttonNegative: 'Cancel',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+          return;
+        }
+      } catch (err) {
+        console.warn('Camera permission request error:', err);
+        return;
+      }
+    }
+
     const options = {
       mediaType: 'photo',
       quality: 0.9,
       selectionLimit: 1,
+      saveToPhotos: false,
     };
 
     const handler = sourceType === 'camera' ? launchCamera : launchImageLibrary;
 
     handler(options, (response) => {
-      if (response.didCancel || response.errorCode) return;
+      if (response.didCancel) return;
+      if (response.errorCode) {
+        console.warn('ImagePicker Error:', response.errorCode, response.errorMessage);
+        Alert.alert('Photo Error', response.errorMessage || response.errorCode || 'Failed to capture photo.');
+        return;
+      }
       if (response.assets?.length) {
         const uri = response.assets[0].uri;
         setTempImageUri(uri);

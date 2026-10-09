@@ -203,6 +203,7 @@ model Vendor {
   passwordHash             String               @map("password_hash") @db.VarChar(255)
   kycStatus                KycStatus            @default(pending) @map("kyc_status")
   subscription             Json?                @map("subscription")
+  avatar                   String?              @map("avatar") @db.Text
   turfOnboardingComplete   Boolean              @default(false) @map("turf_onboarding_complete")
   turfApprovalAcknowledged Boolean              @default(false) @map("turf_approval_acknowledged")
   rejectionReason          String?              @map("rejection_reason")
