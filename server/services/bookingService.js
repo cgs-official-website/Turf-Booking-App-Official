@@ -65,11 +65,15 @@ function getKolkataTimeInfo(inputDate = new Date()) {
  * Validate booking inputs (date format, calendar validity, 24h time, and range)
  */
 function validateBookingInput({ date, startTime, endTime }) {
-  if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  let cleanDate = date;
+  if (cleanDate && typeof cleanDate === 'string' && cleanDate.length > 10) {
+    cleanDate = cleanDate.slice(0, 10);
+  }
+  if (!cleanDate || typeof cleanDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
     throw new BookingError('Invalid booking date. Must be in YYYY-MM-DD format.', 400, 'INVALID_DATE');
   }
 
-  const [y, m, d] = date.split('-').map(Number);
+  const [y, m, d] = cleanDate.split('-').map(Number);
   const testDate = new Date(Date.UTC(y, m - 1, d));
   if (
     testDate.getUTCFullYear() !== y ||
@@ -263,9 +267,7 @@ const bookingService = {
       throw new BookingError('Turf not found', 404, 'TURF_NOT_FOUND');
     }
 
-    if (!turf.vendorId) {
-      throw new BookingError('Turf has no assigned vendor', 409, 'TURF_HAS_NO_VENDOR');
-    }
+    const vendorId = turf.vendorId || 'admin';
 
     const { dateObj } = validateBookingInput(payload);
     const courtNumber = resolveCourtNumber(turf, payload.courtNumber);
@@ -315,16 +317,11 @@ const bookingService = {
       : ((Array.isArray(turf.sportTypes) && turf.sportTypes.length > 0) ? turf.sportTypes : []);
 
     let bookingSport = payload.sport ? String(payload.sport).trim() : null;
-    if (bookingSport) {
-      if (supportedSports.length > 0) {
-        const match = supportedSports.find((s) => s.toLowerCase() === bookingSport.toLowerCase());
-        if (!match) {
-          throw new BookingError(`Sport '${bookingSport}' is not offered at ${turf.name}.`, 400, 'INVALID_SPORT');
-        }
-        bookingSport = match;
-      }
+    if (bookingSport && supportedSports.length > 0) {
+      const match = supportedSports.find((s) => s.toLowerCase() === bookingSport.toLowerCase());
+      bookingSport = match || supportedSports[0];
     } else {
-      bookingSport = supportedSports[0] || 'General';
+      bookingSport = supportedSports[0] || bookingSport || 'General';
     }
 
     try {
@@ -335,6 +332,7 @@ const bookingService = {
           where: {
             turfId: turf.id,
             courtNumber,
+            bookingDate: dateObj,
             startTime: { lt: payload.endTime },
             endTime: { gt: payload.startTime },
             bookingStatus: 'reserved',

@@ -97,14 +97,22 @@ const turfController = {
       };
 
       // City / Location filter
-      if (locationTerm && locationTerm.toLowerCase() !== 'current location') {
-        const cleanLoc = locationTerm.split(',')[0].trim();
-        if (cleanLoc) {
-          where.OR = [
-            { city: { contains: cleanLoc, mode: 'insensitive' } },
-            { name: { contains: cleanLoc, mode: 'insensitive' } },
-            { address: { contains: cleanLoc, mode: 'insensitive' } },
-          ];
+      if (locationTerm) {
+        const locLower = locationTerm.toLowerCase().trim();
+        const ignores = ['current location', 'select location', 'locating...', 'locating', 'all', 'all locations', 'undefined', 'null'];
+        if (!ignores.includes(locLower)) {
+          const parts = locationTerm.split(',').map((p) => p.trim()).filter(Boolean);
+          const conditions = [];
+          for (const part of parts) {
+            if (part && !ignores.includes(part.toLowerCase())) {
+              conditions.push({ city: { contains: part, mode: 'insensitive' } });
+              conditions.push({ name: { contains: part, mode: 'insensitive' } });
+              conditions.push({ address: { contains: part, mode: 'insensitive' } });
+            }
+          }
+          if (conditions.length > 0) {
+            where.OR = conditions;
+          }
         }
       }
 

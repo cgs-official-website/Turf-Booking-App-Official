@@ -36,6 +36,18 @@ export default function BookingConfirmScreen({ route, navigation }) {
   const imageUri  = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
 
   const handleBookNow = async () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'Please login to confirm your turf slot booking.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Login', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+
     setPaying(true);
     try {
       // 1. Reserve slot in backend with atomic hold

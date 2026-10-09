@@ -69,7 +69,13 @@ export default function ExploreScreen({ navigation, route }) {
     if (activeFilters.sort) params.sort = activeFilters.sort;
     if (activeFilters.time) params.time = activeFilters.time;
     if (query.trim()) params.search = query.trim();
-    if (route?.params?.location) params.location = route.params.location;
+    if (route?.params?.location) {
+      const locStr = String(route.params.location).toLowerCase().trim();
+      const ignores = ['current location', 'select location', 'locating...', 'locating', 'all', 'all locations', 'undefined', 'null'];
+      if (!ignores.includes(locStr)) {
+        params.location = route.params.location;
+      }
+    }
 
     turfsApi.getTurfs(params)
       .then((r) => {
