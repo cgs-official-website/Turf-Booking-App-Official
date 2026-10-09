@@ -28,7 +28,6 @@ function getDatabaseUrlWithPoolCap() {
     const separator = originalUrl.includes('?') ? '&' : '?';
     return `${originalUrl}${separator}connection_limit=20&connect_timeout=30&pool_timeout=30&sslmode=no-verify`;
   }
-  }
 }
 
 // Global singleton pattern to prevent multiple instances across hot reloads or imports

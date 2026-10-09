@@ -7,7 +7,7 @@ import {
 import { useDispatch } from 'react-redux';
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { sendOtp, googleLogin } from '../redux/authSlice';
+import { sendOtp, googleLogin, mobileLoginUser } from '../redux/authSlice';
 import { signInWithGoogle } from '../utils/googleSignIn';
 import useTheme from '../hooks/useTheme';
 import PrimaryButton from '../components/PrimaryButton';
@@ -21,9 +21,11 @@ export default function LoginScreen({ navigation }) {
   const dispatch = useDispatch();
   const { C, dark } = useTheme();
 
-  const [mode, setMode]   = useState('select'); // 'select' | 'phone'
-  const [phone, setPhone] = useState('');
+  const [mode, setMode]                   = useState('select'); // 'select' | 'phone'
+  const [mobileOption, setMobileOption]   = useState('otp');    // 'otp' | 'direct'
+  const [phone, setPhone]                 = useState('');
   const [otpLoading, setOtpLoading]       = useState(false);
+  const [passLoading, setPassLoading]     = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleSendOtp = async () => {
@@ -43,6 +45,24 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const handleMobileLogin = async () => {
+    const cleanPhone = phone.trim();
+
+    if (cleanPhone.length !== 10) {
+      Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    setPassLoading(true);
+    try {
+      await dispatch(mobileLoginUser({ phone: cleanPhone })).unwrap();
+    } catch (e) {
+      Alert.alert('Authentication Failed', e.message || 'Could not log in with mobile number. Please try again.');
+    } finally {
+      setPassLoading(false);
+    }
+  };
+
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
@@ -53,8 +73,8 @@ export default function LoginScreen({ navigation }) {
         const isDevErr = String(e?.message || e).includes('DEVELOPER_ERROR');
         const errorMsg = typeof e === 'string' ? e : (e?.message || JSON.stringify(e));
         const msg = isDevErr
-          ? 'Google Sign-In requires adding the Android SHA-1 fingerprint to Firebase Console.\n\nPlease use "Continue with Mobile" (OTP: 1234) or "Sign in with Email" to log in instantly.'
-          : (errorMsg || 'Could not complete Google Sign-In. Please try again or use Mobile OTP (1234).');
+          ? 'Google Sign-In requires adding the Android SHA-1 fingerprint to Firebase Console.\n\nPlease use "Continue with Mobile" or "Sign in with Email" to log in.'
+          : (errorMsg || 'Could not complete Google Sign-In. Please try again or use Mobile OTP.');
         Alert.alert('Google Sign-In', msg);
       }
     } finally {
@@ -126,11 +146,44 @@ export default function LoginScreen({ navigation }) {
               </>
             ) : (
               <>
-                <Text style={[styles.subtitle, { color: C.subtext }]}>
-                  Enter your 10-digit mobile number for instant verification
+                {/* Segmented Options for Mobile Sign-in */}
+                <View style={[styles.tabContainer, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                  <TouchableOpacity
+                    style={[
+                      styles.tabButton,
+                      mobileOption === 'otp' && [styles.tabActive, { backgroundColor: C.primary }]
+                    ]}
+                    onPress={() => setMobileOption('otp')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="message-square" size={13} color={mobileOption === 'otp' ? '#FFFFFF' : C.subtext} style={{ marginRight: 5 }} />
+                    <Text style={[styles.tabText, { color: mobileOption === 'otp' ? '#FFFFFF' : C.subtext }]}>
+                      Send OTP
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.tabButton,
+                      mobileOption === 'direct' && [styles.tabActive, { backgroundColor: C.primary }]
+                    ]}
+                    onPress={() => setMobileOption('direct')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="smartphone" size={13} color={mobileOption === 'direct' ? '#FFFFFF' : C.subtext} style={{ marginRight: 5 }} />
+                    <Text style={[styles.tabText, { color: mobileOption === 'direct' ? '#FFFFFF' : C.subtext }]}>
+                      Login using Mobile
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.subtitle, { color: C.subtext, marginBottom: SPACING.md }]}>
+                  {mobileOption === 'otp'
+                    ? 'Enter your 10-digit mobile number for SMS OTP verification'
+                    : 'Enter your 10-digit mobile number to log in directly'}
                 </Text>
 
-                <View style={[styles.phoneRow, { borderColor: C.borderFocus || C.primary, backgroundColor: C.bgSoft }]}>
+                <View style={[styles.phoneRow, { borderColor: C.borderFocus || C.primary, backgroundColor: C.bgSoft, marginBottom: SPACING.lg }]}>
                   <View style={styles.flagWrap}>
                     <Feather name="globe" size={15} color={C.primary} />
                     <Text style={[styles.countryCode, { color: C.text }]}>+91</Text>
@@ -148,12 +201,21 @@ export default function LoginScreen({ navigation }) {
                   />
                 </View>
 
-                <PrimaryButton
-                  title="Send Verification OTP →"
-                  onPress={handleSendOtp}
-                  loading={otpLoading}
-                  style={{ marginBottom: 12 }}
-                />
+                {mobileOption === 'otp' ? (
+                  <PrimaryButton
+                    title="Send Verification OTP →"
+                    onPress={handleSendOtp}
+                    loading={otpLoading}
+                    style={{ marginBottom: 12 }}
+                  />
+                ) : (
+                  <PrimaryButton
+                    title="Login Using Mobile Number →"
+                    onPress={handleMobileLogin}
+                    loading={passLoading}
+                    style={{ marginBottom: 12 }}
+                  />
+                )}
 
                 <TouchableOpacity
                   onPress={() => setMode('select')}
@@ -194,11 +256,19 @@ const styles = StyleSheet.create({
   title:        { ...FONT.h1, fontSize: 22 },
   emoji:        { fontSize: 20, marginLeft: 6 },
   subtitle:     { ...FONT.body, fontSize: 13, textAlign: 'center', marginBottom: SPACING.xl },
-  phoneRow:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, marginBottom: SPACING.lg },
+  tabContainer: { flexDirection: 'row', borderRadius: RADIUS.md, borderWidth: 1, padding: 3, marginBottom: 14 },
+  tabButton:    { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: RADIUS.sm },
+  tabActive:    { elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  tabText:      { fontSize: 12, fontWeight: '700' },
+  phoneRow:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, marginBottom: SPACING.md },
   flagWrap:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
   countryCode:  { fontSize: 15, fontWeight: '700' },
   verticalDivider: { width: 1, height: 24, marginHorizontal: 10 },
   phoneInput:   { flex: 1, paddingVertical: 14, fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, marginBottom: SPACING.lg },
+  inputIcon:    { marginRight: 10 },
+  input:        { flex: 1, paddingVertical: 14, fontSize: 15, fontWeight: '600' },
+  eyeWrap:      { padding: 6 },
   registerRow:  { alignItems: 'center', marginTop: 4, marginBottom: 8 },
   registerText: { fontSize: 13 },
   footNoteRow:  { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 14 },

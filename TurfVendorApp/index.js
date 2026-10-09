@@ -20,4 +20,3 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
 
 AppRegistry.registerComponent(appName, () => App);
 AppRegistry.registerComponent('TurfVendorApp', () => App);
-AppRegistry.registerComponent('TurfUserApp', () => App);

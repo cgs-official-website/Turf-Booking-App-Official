@@ -23,6 +23,9 @@ export const authApi = {
   sendOtp:        (phone)           => client.post('/auth/send-otp', { phone }),
   verifyOtp:      (phone, otp)      => client.post('/auth/verify-otp', { phone, otp }),
 
+  // Mobile Number Login
+  mobileLogin:    (phone)           => client.post('/auth/mobile-login', { phone }),
+
   // Google Sign-In — profile = { idToken, googleId, email, name, photo }
   googleAuth:     (profile)         => client.post('/auth/google', profile),
 

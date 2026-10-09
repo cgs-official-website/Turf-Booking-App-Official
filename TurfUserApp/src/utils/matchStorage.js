@@ -4,11 +4,37 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { client } from '../api/client';
 
-const MATCHES_KEY = '@turf_matches';
 const RECENT_PLAYERS_KEY = '@turf_recent_players';
 
 const genId = (prefix = 'm') =>
   `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+
+async function getCurrentUserId() {
+  try {
+    const userStr = await AsyncStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      return user.id || user.uid || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function getMatchesKey() {
+  const uid = await getCurrentUserId();
+  return uid ? `@turf_matches_${uid}` : '@turf_matches_guest';
+}
+
+function isUserMatch(m, uid) {
+  if (!m) return false;
+  if (!uid) return true;
+  if (m.createdBy && m.createdBy === uid) return true;
+  const playerIds = Array.isArray(m.players)
+    ? m.players.map((p) => (typeof p === 'string' ? p : (p?.id || p?.userId)))
+    : [];
+  if (playerIds.includes(uid)) return true;
+  return false;
+}
 
 async function readJSON(key, fallback) {
   try {
@@ -38,17 +64,128 @@ function mergeTeams(localTeams, serverTeams) {
   return localTeams || serverTeams || { A: { name: 'Team A', playerIds: [] }, B: { name: 'Team B', playerIds: [] } };
 }
 
+export function normalizeMatch(m) {
+  if (!m) return null;
+  const rawScorecard = m.scorecard && typeof m.scorecard === 'object' ? m.scorecard : {};
+  const toss = m.toss && typeof m.toss === 'object' ? m.toss : (rawScorecard.toss && typeof rawScorecard.toss === 'object' ? rawScorecard.toss : null);
+
+  const innings = Array.isArray(m.innings) && m.innings.length > 0
+    ? m.innings
+    : (Array.isArray(rawScorecard.innings) ? rawScorecard.innings : []);
+
+  let currentInningsIndex = 0;
+  if (m.currentInningsIndex !== undefined && m.currentInningsIndex !== null) {
+    currentInningsIndex = Number(m.currentInningsIndex);
+  } else if (rawScorecard.currentInning !== undefined && rawScorecard.currentInning !== null) {
+    currentInningsIndex = Number(rawScorecard.currentInning);
+  } else if (rawScorecard.currentInningsIndex !== undefined && rawScorecard.currentInningsIndex !== null) {
+    currentInningsIndex = Number(rawScorecard.currentInningsIndex);
+  } else if (innings.length > 1) {
+    currentInningsIndex = 1;
+  }
+
+  const resultText = m.resultText || m.result || rawScorecard.resultText || rawScorecard.result || '';
+  const overs = m.overs || rawScorecard.overs || 6;
+  let status = String(m.status || rawScorecard.status || 'created').toLowerCase();
+
+  const isSecondInningsDone = innings.length > 1 && (
+    Boolean(innings[1]?.completed) ||
+    Boolean(innings[1]?.target && innings[1]?.totalRuns >= innings[1]?.target)
+  );
+
+  const football = m.football || rawScorecard.football || null;
+  const badminton = m.badminton || rawScorecard.badminton || null;
+  const volleyball = m.volleyball || rawScorecard.volleyball || null;
+  const basketball = m.basketball || rawScorecard.basketball || null;
+  const tennis = m.tennis || rawScorecard.tennis || null;
+
+  if (isSecondInningsDone || Boolean(resultText) || football?.half === 4 || badminton?.matchWinner || volleyball?.matchWinner || tennis?.matchWinner || basketball?.quarter === 'Final') {
+    status = 'completed';
+  }
+
+  const teams = m.teams || rawScorecard.teams || {
+    A: { name: 'Team A', playerIds: [], players: [] },
+    B: { name: 'Team B', playerIds: [], players: [] },
+  };
+  if (!teams.A && teams.teamA) teams.A = teams.teamA;
+  if (!teams.B && teams.teamB) teams.B = teams.teamB;
+
+  const timeline = Array.isArray(m.timeline)
+    ? m.timeline
+    : (Array.isArray(rawScorecard.timeline) ? rawScorecard.timeline : []);
+
+  const scorecard = {
+    ...rawScorecard,
+    innings,
+    currentInningsIndex,
+    currentInning: currentInningsIndex,
+    resultText,
+    result: resultText,
+    overs,
+    toss,
+    teams,
+    timeline,
+    ...(football ? { football } : {}),
+    ...(badminton ? { badminton } : {}),
+    ...(volleyball ? { volleyball } : {}),
+    ...(basketball ? { basketball } : {}),
+    ...(tennis ? { tennis } : {}),
+  };
+
+  return {
+    ...m,
+    status,
+    teams,
+    toss,
+    innings,
+    currentInningsIndex,
+    resultText,
+    result: resultText,
+    overs,
+    timeline,
+    football,
+    badminton,
+    volleyball,
+    basketball,
+    tennis,
+    scorecard,
+  };
+}
+
 export const matchStorage = {
   genId,
 
+  async clearCache() {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const matchKeys = keys.filter((k) => k.startsWith('@turf_matches'));
+      if (matchKeys.length > 0) {
+        await AsyncStorage.multiRemove(matchKeys);
+      }
+    } catch (_) {}
+  },
+
   async getAllMatches() {
-    const all = await readJSON(MATCHES_KEY, {});
-    return Object.values(all).sort((a, b) => new Date(b.createdAt || b.matchDate || 0) - new Date(a.createdAt || a.matchDate || 0));
+    const key = await getMatchesKey();
+    const currentUid = await getCurrentUserId();
+    const all = await readJSON(key, {});
+    return Object.values(all)
+      .map(normalizeMatch)
+      .filter((m) => isUserMatch(m, currentUid))
+      .sort((a, b) => new Date(b.createdAt || b.matchDate || 0) - new Date(a.createdAt || a.matchDate || 0));
   },
 
   async getMyMatches(statusFilter) {
-    const all = await readJSON(MATCHES_KEY, {});
-    let localMatches = Object.values(all);
+    const key = await getMatchesKey();
+    const currentUid = await getCurrentUserId();
+
+    // Clean up legacy non-scoped storage key if it exists
+    AsyncStorage.removeItem('@turf_matches').catch(() => {});
+
+    const all = await readJSON(key, {});
+    let localMatches = Object.values(all)
+      .map(normalizeMatch)
+      .filter((m) => isUserMatch(m, currentUid));
 
     try {
       const url = `/matches/mine${statusFilter ? `?status=${statusFilter}` : ''}`;
@@ -57,14 +194,34 @@ export const matchStorage = {
 
       if (Array.isArray(serverList)) {
         const syncedAll = {};
-        serverList.forEach((m) => {
-          if (m && m.id) {
-            syncedAll[m.id] = { ...(all[m.id] || {}), ...m };
+        // Keep unsynced local matches created by current user
+        Object.values(all).forEach((m) => {
+          if (m && m.id && isUserMatch(m, currentUid)) {
+            syncedAll[m.id] = normalizeMatch(m);
           }
         });
-        await writeJSON(MATCHES_KEY, syncedAll);
 
-        let result = Object.values(syncedAll);
+        // Merge server matches
+        serverList.forEach((m) => {
+          if (m && m.id) {
+            const local = all[m.id] || {};
+            const localStatus = String(local.status || '').toLowerCase();
+            const serverStatus = String(m.status || '').toLowerCase();
+            const mergedStatus = localStatus === 'completed' ? 'completed' : (serverStatus || localStatus);
+            syncedAll[m.id] = normalizeMatch({
+              ...local,
+              ...m,
+              status: mergedStatus,
+            });
+          }
+        });
+
+        await writeJSON(key, syncedAll);
+
+        let result = Object.values(syncedAll)
+          .map(normalizeMatch)
+          .filter((m) => isUserMatch(m, currentUid));
+
         if (statusFilter) {
           result = result.filter((m) => (m.status || '').toLowerCase() === statusFilter.toLowerCase());
         }
@@ -82,8 +239,10 @@ export const matchStorage = {
 
   async getMatch(id) {
     if (!id) return null;
-    const all = await readJSON(MATCHES_KEY, {});
-    const local = all[id] || null;
+    const key = await getMatchesKey();
+    const currentUid = await getCurrentUserId();
+    const all = await readJSON(key, {});
+    const local = all[id] ? normalizeMatch(all[id]) : null;
 
     try {
       const serverRes = await client.get(`/matches/${id}`);
@@ -100,24 +259,26 @@ export const matchStorage = {
           ...(serverMatch.playerNames || {}),
         };
 
-        const merged = {
+        const merged = normalizeMatch({
           ...(local || {}),
           ...serverMatch,
           players: mergedPlayers,
           teams: mergedTeams,
           playerNames: mergedPlayerNames,
           id,
-        };
+        });
 
-        all[id] = merged;
-        await writeJSON(MATCHES_KEY, all);
+        if (isUserMatch(merged, currentUid)) {
+          all[id] = merged;
+          await writeJSON(key, all);
+        }
         return merged;
       }
     } catch (err) {
-      const isNotFound = err?.message && (err.message.includes('404') || err.message.toLowerCase().includes('not found'));
+      const isNotFound = err?.message && (err.message.includes('404') || err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('denied'));
       if (isNotFound) {
         delete all[id];
-        await writeJSON(MATCHES_KEY, all);
+        await writeJSON(key, all);
         return null;
       }
     }
@@ -127,117 +288,78 @@ export const matchStorage = {
 
   async saveMatch(match) {
     if (!match || !match.id) return match;
-
-    const all = await readJSON(MATCHES_KEY, {});
-    all[match.id] = match;
-    await writeJSON(MATCHES_KEY, all);
-
-    try {
-      const payload = {
-        scorecard: match.scorecard || match.innings || match.football || match.badminton || match.volleyball || match.basketball || match.tennis || {},
-        status: match.status || 'live',
-        teams: match.teams,
-        toss: match.toss,
-      };
-      if (match.resultText || match.result) {
-        payload.resultText = match.resultText || match.result;
-      }
-      const res = await client.patch(`/matches/${match.id}/scorecard`, payload);
-      const serverMatch = res?.match || res?.data;
-      if (serverMatch && serverMatch.id) {
-        const localPlayers = Array.isArray(match.players) && match.players.length > 0 ? match.players : null;
-        const serverPlayers = Array.isArray(serverMatch.players) && serverMatch.players.length > 0 ? serverMatch.players : null;
-        const mergedPlayers = localPlayers || serverPlayers || [];
-        const mergedTeams = mergeTeams(match.teams, serverMatch.teams);
-        const mergedPlayerNames = {
-          ...(match.playerNames || {}),
-          ...(serverMatch.playerNames || {}),
-        };
-
-        all[match.id] = {
-          ...match,
-          ...serverMatch,
-          players: mergedPlayers,
-          teams: mergedTeams,
-          playerNames: mergedPlayerNames,
-        };
-        await writeJSON(MATCHES_KEY, all);
-        return all[match.id];
-      }
-    } catch (err) {
-      console.warn('saveMatch backend sync notice:', err?.message || err);
+    const key = await getMatchesKey();
+    const currentUid = await getCurrentUserId();
+    const normalized = normalizeMatch(match);
+    if (currentUid && !normalized.createdBy) {
+      normalized.createdBy = currentUid;
     }
 
-    return match;
+    const all = await readJSON(key, {});
+    all[normalized.id] = normalized;
+    await writeJSON(key, all);
+
+    // Asynchronous background sync to backend without blocking UI thread
+    client.patch(`/matches/${normalized.id}/scorecard`, {
+      scorecard: normalized.scorecard,
+      status: normalized.status,
+      teams: normalized.teams,
+      toss: normalized.toss,
+      ...(normalized.resultText ? { resultText: normalized.resultText } : {}),
+    }).catch((err) => console.log('saveMatch background sync notice:', err?.message || err));
+
+    return normalized;
   },
 
   async updateMatch(id, patch = {}) {
-    const all = await readJSON(MATCHES_KEY, {});
-    const existing = all[id] || { id, createdAt: Date.now() };
-    const updated = { ...existing, ...patch, id };
-    all[id] = updated;
-    await writeJSON(MATCHES_KEY, all);
-
-    try {
-      const payload = {
-        scorecard: updated.scorecard || updated.innings || updated.football || updated.badminton || updated.volleyball || updated.basketball || updated.tennis || {},
-        status: updated.status || 'live',
-        teams: updated.teams,
-        toss: updated.toss,
-      };
-      if (updated.resultText || updated.result) {
-        payload.resultText = updated.resultText || updated.result;
-      }
-      const res = await client.patch(`/matches/${id}/scorecard`, payload);
-      const serverMatch = res?.match || res?.data;
-      if (serverMatch && serverMatch.id) {
-        const localPlayers = Array.isArray(updated.players) && updated.players.length > 0 ? updated.players : null;
-        const serverPlayers = Array.isArray(serverMatch.players) && serverMatch.players.length > 0 ? serverMatch.players : null;
-        const mergedPlayers = localPlayers || serverPlayers || [];
-        const mergedTeams = mergeTeams(updated.teams, serverMatch.teams);
-        const mergedPlayerNames = {
-          ...(updated.playerNames || {}),
-          ...(serverMatch.playerNames || {}),
-        };
-
-        all[id] = {
-          ...updated,
-          ...serverMatch,
-          players: mergedPlayers,
-          teams: mergedTeams,
-          playerNames: mergedPlayerNames,
-        };
-        await writeJSON(MATCHES_KEY, all);
-        return all[id];
-      }
-    } catch (err) {
-      console.warn('updateMatch backend sync notice:', err?.message || err);
+    const key = await getMatchesKey();
+    const currentUid = await getCurrentUserId();
+    const all = await readJSON(key, {});
+    const existing = all[id] || { id, createdAt: Date.now(), createdBy: currentUid };
+    const updated = normalizeMatch({ ...existing, ...patch, id });
+    if (currentUid && !updated.createdBy) {
+      updated.createdBy = currentUid;
     }
+    all[id] = updated;
+    await writeJSON(key, all);
+
+    // Asynchronous background sync to backend without blocking UI thread
+    client.patch(`/matches/${id}/scorecard`, {
+      scorecard: updated.scorecard,
+      status: updated.status,
+      teams: updated.teams,
+      toss: updated.toss,
+      ...(updated.resultText ? { resultText: updated.resultText } : {}),
+    }).catch((err) => console.log('updateMatch background sync notice:', err?.message || err));
 
     return updated;
   },
 
   async addTimeline(id, text) {
-    const all = await readJSON(MATCHES_KEY, {});
+    const key = await getMatchesKey();
+    const all = await readJSON(key, {});
     const m = all[id];
     if (!m) return;
     m.timeline = m.timeline || [];
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     m.timeline.unshift({ time: timeStr, text });
     all[id] = m;
-    await writeJSON(MATCHES_KEY, all);
+    await writeJSON(key, all);
   },
 
   async deleteMatch(id) {
-    const all = await readJSON(MATCHES_KEY, {});
+    const key = await getMatchesKey();
+    const all = await readJSON(key, {});
     delete all[id];
-    await writeJSON(MATCHES_KEY, all);
+    await writeJSON(key, all);
   },
 
   async createMatch(data = {}) {
     const localId = genId('match');
+    const currentUid = await getCurrentUserId();
     const match = {
       id: localId,
+      createdBy: currentUid || null,
       status: 'created', // created -> live -> completed
       createdAt: Date.now(),
       place: data.place || 'Turf Arena',
@@ -249,7 +371,7 @@ export const matchStorage = {
       turfId: data.turfId || null,
       overs: data.overs || 6,
       lastManEnabled: data.lastManEnabled ?? false,
-      players: [], // [{ id, name, role }]
+      players: currentUid ? [{ userId: currentUid }] : [], // [{ id, name, role }]
       teams: {
         A: { name: 'Team A', captainId: null, playerIds: [] },
         B: { name: 'Team B', captainId: null, playerIds: [] },
@@ -279,14 +401,16 @@ export const matchStorage = {
       if (serverMatch?.id) {
         match.id = serverMatch.id;
         match.joinCode = serverMatch.joinCode;
+        if (serverMatch.createdBy) match.createdBy = serverMatch.createdBy;
       }
     } catch (err) {
       console.warn('Backend match creation sync failed (will store locally):', err);
     }
 
-    const all = await readJSON(MATCHES_KEY, {});
+    const key = await getMatchesKey();
+    const all = await readJSON(key, {});
     all[match.id] = match;
-    await writeJSON(MATCHES_KEY, all);
+    await writeJSON(key, all);
 
     return match;
   },

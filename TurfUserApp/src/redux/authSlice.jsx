@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi } from '../api/auth';
+import { matchStorage } from '../utils/matchStorage';
 
 // ── Email + Password flow (Login2Screen) ────────────────────────────────────
 export const loginUser = createAsyncThunk('auth/login', async ({ email, password }, { rejectWithValue }) => {
@@ -29,6 +30,22 @@ export const sendOtp = createAsyncThunk('auth/sendOtp', async ({ phone }, { reje
 export const verifyOtp = createAsyncThunk('auth/verifyOtp', async ({ phone, otp }, { rejectWithValue }) => {
   try {
     const res = await authApi.verifyOtp(phone, otp);
+    const payload = res?.data || res;
+    if (payload?.token) {
+      await AsyncStorage.setItem('token', payload.token);
+    }
+    const userObj = payload?.user || payload?.profile;
+    if (userObj) {
+      await AsyncStorage.setItem('user', JSON.stringify(userObj));
+    }
+    return payload;
+  } catch (e) { return rejectWithValue(e.message); }
+});
+
+// ── Mobile Number Login flow ─────────────────────────────────────
+export const mobileLoginUser = createAsyncThunk('auth/mobileLogin', async ({ phone }, { rejectWithValue }) => {
+  try {
+    const res = await authApi.mobileLogin(phone);
     const payload = res?.data || res;
     if (payload?.token) {
       await AsyncStorage.setItem('token', payload.token);
@@ -200,6 +217,7 @@ const authSlice = createSlice({
       state.locationPermissionGranted = false;
       AsyncStorage.removeItem('token');
       AsyncStorage.removeItem('user');
+      matchStorage.clearCache();
     },
   },
   extraReducers: (builder) => {
@@ -225,6 +243,15 @@ const authSlice = createSlice({
         s.locationSet = true;
       })
       .addCase(verifyOtp.rejected,    (s, a) => { s.status = 'failed'; s.error = a.payload; })
+      // Mobile Password Login
+      .addCase(mobileLoginUser.pending,    (s)    => { s.status = 'loading'; s.error = null; })
+      .addCase(mobileLoginUser.fulfilled,  (s, a) => {
+        s.status = 'succeeded';
+        s.token = a.payload?.token;
+        s.user = a.payload?.user || a.payload?.profile;
+        s.locationSet = true;
+      })
+      .addCase(mobileLoginUser.rejected,   (s, a) => { s.status = 'failed'; s.error = a.payload; })
       // Google
       .addCase(googleLogin.pending,    (s)    => { s.status = 'loading'; s.error = null; })
       .addCase(googleLogin.fulfilled,  (s, a) => {

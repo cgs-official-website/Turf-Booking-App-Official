@@ -10,7 +10,7 @@ export const ThemeProvider = ({ children }) => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('turf_theme');
       if (saved) return saved === 'dark';
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return false; // Default to Light mode
     }
     return false;
   });
@@ -19,9 +19,11 @@ export const ThemeProvider = ({ children }) => {
     if (typeof document !== 'undefined') {
       if (isDark) {
         document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
         localStorage.setItem('turf_theme', 'dark');
       } else {
         document.documentElement.classList.remove('dark');
+        document.documentElement.setAttribute('data-theme', 'light');
         localStorage.setItem('turf_theme', 'light');
       }
     }

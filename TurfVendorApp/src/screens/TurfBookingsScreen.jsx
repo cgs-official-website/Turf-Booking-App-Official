@@ -75,21 +75,23 @@ const TurfBookingsScreen = ({ navigation }) => {
     });
   }, [safeBookings, activeTurfId]);
 
+  const getStatus = (b) => String(b?.bookingStatus || b?.status || 'pending').toLowerCase();
+
   const counts = useMemo(() => {
     return {
       all: activeBookings.length,
-      pending: activeBookings.filter((b) => b && b.status === 'pending').length,
-      confirmed: activeBookings.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status)).length,
-      rejected: activeBookings.filter((b) => b && b.status === 'rejected').length,
+      pending: activeBookings.filter((b) => b && getStatus(b) === 'pending').length,
+      confirmed: activeBookings.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(getStatus(b))).length,
+      rejected: activeBookings.filter((b) => b && getStatus(b) === 'rejected').length,
     };
   }, [activeBookings]);
 
   const filtered = useMemo(() => {
     let result = activeBookings;
     if (filter === 'confirmed') {
-      result = result.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(b.status));
+      result = result.filter((b) => b && ['confirmed', 'accepted', 'completed'].includes(getStatus(b)));
     } else if (filter !== 'all') {
-      result = result.filter((b) => b && b.status === filter);
+      result = result.filter((b) => b && getStatus(b) === filter);
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();

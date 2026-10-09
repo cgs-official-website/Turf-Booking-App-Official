@@ -17,6 +17,7 @@ const generateJoinCode = () => {
 function formatMatch(m, userMap = {}) {
   if (!m) return null;
   const playerIds = (m.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+  const scorecard = m.scorecard && typeof m.scorecard === 'object' ? m.scorecard : {};
 
   const playerNames = {};
 
@@ -28,7 +29,7 @@ function formatMatch(m, userMap = {}) {
   });
 
   // 2. Fill from teams.A.players and teams.B.players
-  const teamsObj = m.teams || {};
+  const teamsObj = m.teams || scorecard.teams || {};
   ['A', 'B', 'teamA', 'teamB'].forEach((key) => {
     const t = teamsObj[key];
     if (t && Array.isArray(t.players)) {
@@ -41,8 +42,8 @@ function formatMatch(m, userMap = {}) {
   });
 
   // 3. Fill from scorecard.playerNames if present
-  if (m.scorecard && typeof m.scorecard === 'object' && m.scorecard.playerNames) {
-    Object.assign(playerNames, m.scorecard.playerNames);
+  if (scorecard.playerNames) {
+    Object.assign(playerNames, scorecard.playerNames);
   }
 
   // Ensure creator name is mapped
@@ -50,10 +51,36 @@ function formatMatch(m, userMap = {}) {
     playerNames[m.createdBy] = playerNames[m.createdBy] || m.creatorName || 'Host';
   }
 
+  const innings = Array.isArray(m.innings) && m.innings.length > 0
+    ? m.innings
+    : (Array.isArray(scorecard.innings) ? scorecard.innings : []);
+
+  let currentInningsIndex = 0;
+  if (m.currentInningsIndex !== undefined && m.currentInningsIndex !== null) {
+    currentInningsIndex = Number(m.currentInningsIndex);
+  } else if (scorecard.currentInning !== undefined && scorecard.currentInning !== null) {
+    currentInningsIndex = Number(scorecard.currentInning);
+  } else if (scorecard.currentInningsIndex !== undefined && scorecard.currentInningsIndex !== null) {
+    currentInningsIndex = Number(scorecard.currentInningsIndex);
+  } else if (innings.length > 1) {
+    currentInningsIndex = 1;
+  }
+
+  const resultText = m.resultText || m.result || scorecard.resultText || scorecard.result || '';
+  const overs = m.overs || scorecard.overs || 6;
+  const toss = m.toss || scorecard.toss || null;
+
   return {
     ...m,
     players: playerIds,
     playerNames: { ...playerNames, ...(m.playerNames || {}) },
+    scorecard,
+    innings,
+    currentInningsIndex,
+    resultText,
+    result: resultText,
+    overs,
+    toss: toss || m.toss,
   };
 }
 
@@ -224,6 +251,7 @@ const matchController = {
    */
   async getMatchById(req, res) {
     const { id } = req.params;
+    const { uid } = req.user;
 
     try {
       const match = await prisma.match.findUnique({
@@ -236,6 +264,14 @@ const matchController = {
       }
 
       const playerIds = (match.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+      const isCreator = match.createdBy === uid;
+      const isParticipant = playerIds.includes(uid);
+      const isPublic = Boolean(match.playWithStrangers);
+
+      if (!isCreator && !isParticipant && !isPublic) {
+        return sendError(res, 'Access denied. You are not a participant of this match.', 403, 'FORBIDDEN');
+      }
+
       const userLookupIds = match.createdBy ? [...playerIds, match.createdBy] : playerIds;
 
       const users = await prisma.user.findMany({
@@ -260,8 +296,23 @@ const matchController = {
    */
   async updateTeams(req, res) {
     const { id } = req.params;
+    const { uid } = req.user;
 
     try {
+      const match = await prisma.match.findUnique({
+        where: { id },
+        include: { players: true },
+      });
+
+      if (!match) {
+        return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+      }
+
+      const playerIds = (match.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+      if (match.createdBy !== uid && !playerIds.includes(uid)) {
+        return sendError(res, 'Access denied. You cannot modify teams for this match.', 403, 'FORBIDDEN');
+      }
+
       const parsed = updateTeamsSchema.parse(req.body);
       const updated = await prisma.match.update({
         where: { id },
@@ -272,9 +323,9 @@ const matchController = {
         include: { players: true },
       });
 
-      const playerIds = (updated.players || []).map((p) => p.userId);
+      const updatedPlayerIds = (updated.players || []).map((p) => p.userId);
       const users = await prisma.user.findMany({
-        where: { id: { in: playerIds } },
+        where: { id: { in: updatedPlayerIds } },
         select: { id: true, name: true },
       });
       const userMap = {};
@@ -292,8 +343,23 @@ const matchController = {
    */
   async saveToss(req, res) {
     const { id } = req.params;
+    const { uid } = req.user;
 
     try {
+      const match = await prisma.match.findUnique({
+        where: { id },
+        include: { players: true },
+      });
+
+      if (!match) {
+        return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+      }
+
+      const playerIds = (match.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+      if (match.createdBy !== uid && !playerIds.includes(uid)) {
+        return sendError(res, 'Access denied. You cannot modify toss for this match.', 403, 'FORBIDDEN');
+      }
+
       const parsed = tossSchema.parse(req.body);
       const updated = await prisma.match.update({
         where: { id },
@@ -305,9 +371,9 @@ const matchController = {
         include: { players: true },
       });
 
-      const playerIds = (updated.players || []).map((p) => p.userId);
+      const updatedPlayerIds = (updated.players || []).map((p) => p.userId);
       const users = await prisma.user.findMany({
-        where: { id: { in: playerIds } },
+        where: { id: { in: updatedPlayerIds } },
         select: { id: true, name: true },
       });
       const userMap = {};
@@ -326,8 +392,21 @@ const matchController = {
    */
   async updateScorecard(req, res) {
     const { id } = req.params;
+    const { uid } = req.user;
 
     try {
+      const existingMatch = await prisma.match.findUnique({
+        where: { id },
+        include: { players: true },
+      });
+
+      if (existingMatch) {
+        const playerIds = (existingMatch.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+        if (existingMatch.createdBy !== uid && !playerIds.includes(uid)) {
+          return sendError(res, 'Access denied. You cannot update the scorecard for this match.', 403, 'FORBIDDEN');
+        }
+      }
+
       const updatePayload = {
         updatedAt: new Date(),
       };
@@ -357,7 +436,7 @@ const matchController = {
           include: { players: true, turf: true },
         });
       } catch (updateErr) {
-        const createdBy = req.body.createdBy || req.user?.uid || 'guest_user';
+        const createdBy = uid || 'guest_user';
         const sport = req.body.sport || 'Cricket';
         const place = req.body.place || 'Turf Arena';
         const joinCode = req.body.joinCode || id.slice(-6).toUpperCase();
@@ -374,6 +453,7 @@ const matchController = {
             scorecard: updatePayload.scorecard || {},
             toss: updatePayload.toss || {},
             status: updatePayload.status || 'live',
+            players: { create: [{ userId: createdBy }] },
           },
           include: { players: true, turf: true },
         });

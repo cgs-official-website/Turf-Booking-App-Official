@@ -9,6 +9,7 @@ const STATUS_CONFIG = {
   pending:   { bg: 'rgba(245, 158, 11, 0.12)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.3)', label: 'PENDING' },
   confirmed: { bg: 'rgba(15, 118, 110, 0.12)', text: '#0F766E', border: 'rgba(15, 118, 110, 0.3)', label: 'CONFIRMED' },
   accepted:  { bg: 'rgba(15, 118, 110, 0.12)', text: '#0F766E', border: 'rgba(15, 118, 110, 0.3)', label: 'CONFIRMED' },
+  completed: { bg: 'rgba(15, 118, 110, 0.12)', text: '#0F766E', border: 'rgba(15, 118, 110, 0.3)', label: 'CONFIRMED' },
   rejected:  { bg: 'rgba(239, 68, 68, 0.12)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.3)', label: 'REJECTED' },
   cancelled: { bg: 'rgba(156, 163, 175, 0.12)', text: '#9CA3AF', border: 'rgba(156, 163, 175, 0.3)', label: 'CANCELLED' },
 };
@@ -24,9 +25,11 @@ const formatDate = (d) => {
 const BookingCard = ({ booking, onPress, onAccept, onReject }) => {
   const { colors } = useTheme();
   const styles = getStyles(colors);
-  const cfg = STATUS_CONFIG[booking.status] || STATUS_CONFIG.pending;
-  const isPending = booking.status === 'pending';
-  const isConfirmed = booking.status === 'confirmed' || booking.status === 'accepted';
+  const rawStatus = booking?.bookingStatus || booking?.status || 'pending';
+  const statusKey = String(rawStatus).toLowerCase();
+  const cfg = STATUS_CONFIG[statusKey] || (['confirmed', 'accepted', 'completed'].includes(statusKey) ? STATUS_CONFIG.confirmed : STATUS_CONFIG.pending);
+  const isPending = statusKey === 'pending';
+  const isConfirmed = ['confirmed', 'accepted', 'completed'].includes(statusKey);
   const userName = booking.user?.name || booking.userName || 'Turf Player';
   const userAvatar = booking.user?.avatar || booking.user?.photo || null;
   const initial = userName.charAt(0).toUpperCase() || 'P';

@@ -269,8 +269,14 @@ const authController = {
     }
 
     // Role: User (Player)
+    const cleanPhone = String(email).replace(/\D/g, '');
     let user = await prisma.user.findFirst({
-      where: { email: cleanEmail },
+      where: {
+        OR: [
+          { email: cleanEmail },
+          ...(cleanPhone.length === 10 ? [{ phone: cleanPhone }, { id: `user_${cleanPhone}` }] : []),
+        ],
+      },
     });
 
     if (!user) {
@@ -314,12 +320,67 @@ const authController = {
     const token = generateSessionToken({
       uid: user.id,
       role: 'user',
-      email: cleanEmail,
+      email: user.email || cleanEmail,
+      phone: user.phone || '',
       admin: false,
     });
 
     const formatted = formatUser(user);
     return sendSuccess(res, {
+      token,
+      profile: formatted,
+      user: formatted,
+    });
+  },
+
+  /**
+   * POST /api/v1/auth/mobile-login (Direct 10-digit Mobile Number sign in)
+   */
+  async mobileLogin(req, res) {
+    const { phone } = req.body;
+
+    if (!phone) {
+      return sendError(res, 'Mobile number is required', 400, 'MISSING_FIELDS');
+    }
+
+    const cleanPhone = String(phone).replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      return sendError(res, 'Please enter a valid 10-digit mobile number', 400, 'INVALID_PHONE');
+    }
+
+    const uid = `user_${cleanPhone}`;
+
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { phone: cleanPhone },
+          { id: uid },
+        ],
+      },
+    });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          id: uid,
+          name: 'Turf Player',
+          phone: cleanPhone,
+          status: 'active',
+        },
+      });
+    }
+
+    const token = generateSessionToken({
+      uid: user.id,
+      role: 'user',
+      phone: cleanPhone,
+      email: user.email || '',
+      admin: false,
+    });
+
+    const formatted = formatUser(user);
+    return sendSuccess(res, {
+      message: 'Mobile login successful',
       token,
       profile: formatted,
       user: formatted,
@@ -350,12 +411,12 @@ const authController = {
     try {
       await msg91Service.sendOtpSms(phone, otp);
     } catch (smsErr) {
-      console.warn('⚠️ SMS Gateway notice:', smsErr.message);
+      console.error('❌ Failed to deliver SMS OTP:', smsErr.message);
+      return sendError(res, smsErr.message || 'SMS delivery failed. Please check mobile number or service configuration.', 500, 'SMS_SEND_FAILED');
     }
 
     return sendSuccess(res, {
       message: 'OTP sent successfully',
-      otp: process.env.NODE_ENV === 'production' ? undefined : otp,
       expiresInSeconds: ttlSeconds,
     });
   },
@@ -368,37 +429,32 @@ const authController = {
     const { phone, otp, role = 'user', name, purpose = 'login' } = parsed;
     const cleanPhone = String(phone).replace(/\D/g, '');
 
-    const isDevBypass = process.env.NODE_ENV !== 'production' &&
-      (otp === '1234' || otp === '123456' || otp === '0000');
-
     const redisKey = `otp:${purpose}:${cleanPhone}`;
     const record = await cacheService.get(redisKey);
 
-    if (!record && !isDevBypass) {
+    if (!record) {
       return sendError(res, 'No OTP request found for this phone number. Please click Send OTP.', 400, 'OTP_NOT_FOUND');
     }
 
-    if (record) {
-      if (record.verified) {
-        return sendError(res, 'This OTP has already been used', 400, 'OTP_ALREADY_USED');
-      }
-
-      if (record.attempts >= 5) {
-        await cacheService.del(redisKey);
-        return sendError(res, 'Too many incorrect attempts. Please request a new OTP.', 400, 'OTP_MAX_ATTEMPTS');
-      }
-
-      const isMatch = record.otpHash ? await bcrypt.compare(otp, record.otpHash) : false;
-      if (!isDevBypass && !isMatch) {
-        record.attempts = (record.attempts || 0) + 1;
-        await cacheService.set(redisKey, record, 600);
-        return sendError(res, 'Invalid OTP. Please check the code and try again.', 400, 'INVALID_OTP');
-      }
-
-      // Mark verified
-      record.verified = true;
-      await cacheService.set(redisKey, record, 600);
+    if (record.verified) {
+      return sendError(res, 'This OTP has already been used. Please request a new OTP.', 400, 'OTP_ALREADY_USED');
     }
+
+    if (record.attempts >= 5) {
+      await cacheService.del(redisKey);
+      return sendError(res, 'Too many incorrect attempts. Please request a new OTP.', 400, 'OTP_MAX_ATTEMPTS');
+    }
+
+    const isMatch = record.otpHash ? await bcrypt.compare(String(otp), record.otpHash) : false;
+    if (!isMatch) {
+      record.attempts = (record.attempts || 0) + 1;
+      await cacheService.set(redisKey, record, 600);
+      return sendError(res, 'Invalid OTP code. Please check the code and try again.', 400, 'INVALID_OTP');
+    }
+
+    // Mark verified
+    record.verified = true;
+    await cacheService.set(redisKey, record, 600);
 
     // Find or create User / Vendor record
     let profile = null;

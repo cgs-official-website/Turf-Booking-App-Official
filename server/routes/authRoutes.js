@@ -5,9 +5,10 @@ const verifySessionToken = require('../middleware/verifySessionToken');
 const verifyFirebaseToken = require('../middleware/verifyFirebaseToken');
 const { otpRateLimiter } = require('../middleware/rateLimiter');
 
-// Registration & Login (Email + Password)
+// Registration & Login (Email + Password / Mobile + Password)
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/mobile-login', authController.mobileLogin);
 
 // OTP Endpoints (rate-limited)
 router.post('/otp/send', otpRateLimiter, authController.sendPhoneOtp);

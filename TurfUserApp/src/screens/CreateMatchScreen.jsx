@@ -31,11 +31,7 @@ export default function CreateMatchScreen({ route, navigation }) {
   const [sportModal, setSportModal] = useState(false);
   const [date, setDate] = useState(params.date ? String(params.date) : 'Today');
   const [time, setTime] = useState(params.time || '07:00 PM');
-  const [dateModal, setDateModal] = useState(false);
-  const [timeModal, setTimeModal] = useState(false);
 
-  const DATE_OPTIONS = ['Today', 'Tomorrow', 'This Weekend', 'Next Week'];
-  const TIME_OPTIONS = ['06:00 AM', '07:00 AM', '08:00 AM', '04:00 PM', '05:00 PM', '06:00 PM', '07:00 PM', '08:00 PM', '09:00 PM'];
   const [strangers, setStrangers] = useState(null); // 'yes' | 'no'
   const [saving, setSaving] = useState(false);
 
@@ -158,26 +154,30 @@ export default function CreateMatchScreen({ route, navigation }) {
         <View style={styles.row2}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: C.text }]}>Game Date</Text>
-            <TouchableOpacity
-              style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}
-              onPress={() => setDateModal(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.inputText, { color: C.text }]} numberOfLines={1}>{date}</Text>
+            <View style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TextInput
+                style={[styles.inputText, { color: C.text, paddingVertical: 0 }]}
+                value={date}
+                onChangeText={setDate}
+                placeholder="e.g. Today or 2026-10-10"
+                placeholderTextColor={C.caption}
+              />
               <Feather name="calendar" size={16} color={C.primary} />
-            </TouchableOpacity>
+            </View>
           </View>
           <View style={{ width: SPACING.md }} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: C.text }]}>Match Time</Text>
-            <TouchableOpacity
-              style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}
-              onPress={() => setTimeModal(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.inputText, { color: C.text }]} numberOfLines={1}>{time}</Text>
+            <View style={[styles.inputBox, { backgroundColor: C.card, borderColor: C.border }]}>
+              <TextInput
+                style={[styles.inputText, { color: C.text, paddingVertical: 0 }]}
+                value={time}
+                onChangeText={setTime}
+                placeholder="e.g. 07:00 PM"
+                placeholderTextColor={C.caption}
+              />
               <Feather name="clock" size={16} color={C.primary} />
-            </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -402,49 +402,7 @@ export default function CreateMatchScreen({ route, navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Date selection modal */}
-      <Modal visible={dateModal} transparent animationType="fade" onRequestClose={() => setDateModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDateModal(false)}>
-          <View style={[styles.modalBox, { backgroundColor: C.card, borderColor: C.border }, SHADOW.floating]}>
-            <Text style={[styles.modalTitle, { color: C.text }]}>Select Game Date</Text>
-            {DATE_OPTIONS.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={[styles.sportRow, { borderBottomColor: C.border }]}
-                onPress={() => { setDate(item); setDateModal(false); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.sportRowText, { color: C.text }]}>{item}</Text>
-                {date === item && <Feather name="check" size={18} color={C.primary} />}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
-      {/* Time selection modal */}
-      <Modal visible={timeModal} transparent animationType="fade" onRequestClose={() => setTimeModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setTimeModal(false)}>
-          <View style={[styles.modalBox, { backgroundColor: C.card, borderColor: C.border }, SHADOW.floating]}>
-            <Text style={[styles.modalTitle, { color: C.text }]}>Select Match Time</Text>
-            <FlatList
-              data={TIME_OPTIONS}
-              keyExtractor={(i) => i}
-              style={{ maxHeight: 260 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.sportRow, { borderBottomColor: C.border }]}
-                  onPress={() => { setTime(item); setTimeModal(false); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.sportRowText, { color: C.text }]}>{item}</Text>
-                  {time === item && <Feather name="check" size={18} color={C.primary} />}
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }

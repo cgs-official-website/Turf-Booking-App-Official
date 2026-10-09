@@ -73,8 +73,13 @@ export default function SelectPlayersScreen({ route, navigation }) {
       Alert.alert('Name required', 'Please enter guest name');
       return;
     }
+    const cleanPhone = guestPhone.replace(/\D/g, '').slice(0, 10);
+    if (guestPhone.trim() && cleanPhone.length !== 10) {
+      Alert.alert('Invalid Mobile Number', 'Mobile number must be exactly 10 digits');
+      return;
+    }
     try {
-      const guest = await playerStorage.addGuestPlayer({ name: guestName.trim(), phone: guestPhone.trim() });
+      const guest = await playerStorage.addGuestPlayer({ name: guestName.trim(), phone: cleanPhone });
       setPlayers((p) => [guest, ...p.filter((x) => x.id !== guest.id)]);
       setSelected((s) => ({ ...s, [guest.id]: true }));
       setGuestName('');
@@ -250,8 +255,9 @@ export default function SelectPlayersScreen({ route, navigation }) {
               placeholder="Enter 10-digit mobile number"
               placeholderTextColor={COLORS.subtext}
               value={guestPhone}
-              onChangeText={setGuestPhone}
+              onChangeText={(text) => setGuestPhone(text.replace(/\D/g, '').slice(0, 10))}
               keyboardType="phone-pad"
+              maxLength={10}
             />
 
             <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.md }}>

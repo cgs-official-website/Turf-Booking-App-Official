@@ -7,17 +7,17 @@ import { Platform } from 'react-native';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL        = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT  = 'http://10.48.78.39:5000/api/v1';
+export const LAN_URL_CURRENT  = 'http://192.168.0.36:5000/api/v1';
 export const EMULATOR_URL     = 'http://10.0.2.2:5000/api/v1';
 export const LOCAL_HOST_URL   = 'http://localhost:5000/api/v1';
 
-export const BASE_URL = LAN_URL_CURRENT;
+export const BASE_URL = LOCAL_URL;
 
 const CANDIDATE_URLS = [
-  LAN_URL_CURRENT,
   LOCAL_URL,
-  Platform.OS === 'android' ? EMULATOR_URL : null,
+  LAN_URL_CURRENT,
   LOCAL_HOST_URL,
+  Platform.OS === 'android' ? EMULATOR_URL : null,
   RAILWAY_PROD_URL,
 ].filter(Boolean);
 
@@ -25,7 +25,7 @@ export const getOrigin = () => {
   if (client && client.activeBaseUrl) {
     return client.activeBaseUrl.replace(/\/api\/v1\/?$/, '');
   }
-  return LAN_URL_CURRENT.replace(/\/api\/v1\/?$/, '');
+  return LOCAL_URL.replace(/\/api\/v1\/?$/, '');
 };
 
 export const getImageUrl = (path) => {
@@ -37,18 +37,14 @@ export const getImageUrl = (path) => {
 
 class ApiClient {
   constructor() {
-    this.activeBaseUrl = typeof __DEV__ !== 'undefined' && __DEV__ ? LAN_URL_CURRENT : LAN_URL_CURRENT;
+    this.activeBaseUrl = LOCAL_URL;
     this.initSavedBaseUrl();
   }
 
   async initSavedBaseUrl() {
     try {
       const saved = await AsyncStorage.getItem('activeBaseUrl');
-      if (saved) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__ && saved === RAILWAY_PROD_URL) {
-          // Ignore saved Railway production URL during local development
-          return;
-        }
+      if (saved && !saved.includes('10.48.78.39')) {
         this.activeBaseUrl = saved;
       }
     } catch {
@@ -78,7 +74,7 @@ class ApiClient {
       try {
         const controller = new AbortController();
         const isLocal = baseUrl.includes('127.0.0.1') || baseUrl.includes('localhost') || baseUrl.includes('10.0.2.2') || baseUrl.includes('10.') || baseUrl.includes('192.168.') || baseUrl.includes('172.');
-        const timeoutMs = isLocal ? 7000 : 10000;
+        const timeoutMs = isLocal ? 3500 : 8000;
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
         const res = await fetch(`${baseUrl}${path}`, {

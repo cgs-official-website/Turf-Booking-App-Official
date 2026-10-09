@@ -74,37 +74,61 @@ function LocationPermissionView({ C, dark }) {
   const handleAllow = async () => {
     setLoading(true);
 
-    const onPosSuccess = async (position) => {
+    let hasPerm = true;
+    if (Platform.OS === 'android') {
       try {
-        const { latitude, longitude } = position.coords;
-        const cityName = await fetchReverseGeocode(latitude, longitude);
-        dispatch(setLocationPermission(cityName));
-      } catch {
-        dispatch(setLocationPermission('Current Location'));
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        hasPerm =
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (e) {
+        hasPerm = false;
       }
+    }
+
+    if (!hasPerm) {
+      dispatch(setLocationPermission('Current Location'));
+      setLoading(false);
+      return;
+    }
+
+    let posDone = false;
+    const finishPos = (placeName) => {
+      if (posDone) return;
+      posDone = true;
+      dispatch(setLocationPermission(placeName || 'Current Location'));
       setLoading(false);
     };
 
-    const onPosFail = () => {
-      dispatch(setLocationPermission(null));
-      setLoading(false);
-    };
+    const timer = setTimeout(() => {
+      finishPos('Current Location');
+    }, 2000);
 
-    Geolocation.getCurrentPosition(
-      onPosSuccess,
-      (err) => {
-        if (err && (err.code === 3 || err.code === 2)) {
-          Geolocation.getCurrentPosition(
-            onPosSuccess,
-            onPosFail,
-            { enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 }
-          );
-        } else {
-          onPosFail();
-        }
-      },
-      { enableHighAccuracy: true, timeout: 3500, maximumAge: 30000 }
-    );
+    try {
+      Geolocation.getCurrentPosition(
+        async (position) => {
+          clearTimeout(timer);
+          try {
+            const { latitude, longitude } = position.coords;
+            const cityName = await fetchReverseGeocode(latitude, longitude);
+            finishPos(cityName || 'Current Location');
+          } catch (_) {
+            finishPos('Current Location');
+          }
+        },
+        () => {
+          clearTimeout(timer);
+          finishPos('Current Location');
+        },
+        { enableHighAccuracy: false, timeout: 2000, maximumAge: 60000 }
+      );
+    } catch (_) {
+      clearTimeout(timer);
+      finishPos('Current Location');
+    }
   };
 
   const handleSkip = () => dispatch(setLocationPermission(null));

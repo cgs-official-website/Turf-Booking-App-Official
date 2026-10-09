@@ -105,7 +105,11 @@ export default function ScorecardScreen({ route, navigation }) {
         const m = await matchStorage.getMatch(matchId);
         if (!active || !m) return;
         setMatch(m);
-        setViewIdx(m.currentInningsIndex);
+        const inningsList = Array.isArray(m.innings) ? m.innings : (Array.isArray(m.scorecard?.innings) ? m.scorecard.innings : []);
+        const defaultIdx = m.currentInningsIndex !== undefined && m.currentInningsIndex !== null
+          ? Number(m.currentInningsIndex)
+          : (inningsList.length > 1 ? 1 : 0);
+        setViewIdx(defaultIdx);
         checkModals(m);
       })();
       return () => { active = false; };
@@ -113,7 +117,10 @@ export default function ScorecardScreen({ route, navigation }) {
   );
 
   const checkModals = (m) => {
-    const inn = m.innings[m.currentInningsIndex];
+    if (!m || m.status === 'completed') { setSetupModal(false); setBowlerModal(false); return; }
+    const inningsList = Array.isArray(m.innings) ? m.innings : (Array.isArray(m.scorecard?.innings) ? m.scorecard.innings : []);
+    const idx = m.currentInningsIndex !== undefined ? Number(m.currentInningsIndex) : 0;
+    const inn = inningsList[idx];
     if (!inn || inn.completed) { setSetupModal(false); setBowlerModal(false); return; }
     if (!inn.strikerId && !inn.nonStrikerId) {
       setPickStriker(null); setPickNonStriker(null); setPickBowler(null);
@@ -225,7 +232,7 @@ export default function ScorecardScreen({ route, navigation }) {
     const next = clone(match);
     next.innings[idx] = inn;
     next.status = 'live';
-    next.timeline = [...next.timeline, { time: Date.now(), text: 'Innings started' }];
+    next.timeline = [...(Array.isArray(next.timeline) ? next.timeline : []), { time: Date.now(), text: 'Innings started' }];
     await persist(next);
   };
 
@@ -253,7 +260,8 @@ export default function ScorecardScreen({ route, navigation }) {
     const battingTeamSize = match.teams[updatedInning.battingTeam].playerIds.length;
     const allOut = updatedInning.strikerId === null;
     const oversDone = updatedInning.legalBalls >= match.overs * 6;
-    const inningsComplete = allOut || oversDone;
+    const targetReached = idx === 1 && Boolean(updatedInning.target) && updatedInning.totalRuns >= updatedInning.target;
+    const inningsComplete = allOut || oversDone || targetReached;
 
     const next = clone(match);
 
@@ -266,6 +274,7 @@ export default function ScorecardScreen({ route, navigation }) {
     updatedInning.completed = true;
     next.innings[idx] = updatedInning;
 
+    const curTimeline = Array.isArray(next.timeline) ? next.timeline : [];
     if (idx === 0) {
       const battingTeam2 = updatedInning.bowlingTeam;
       const bowlingTeam2 = updatedInning.battingTeam;
@@ -278,7 +287,7 @@ export default function ScorecardScreen({ route, navigation }) {
         target: updatedInning.totalRuns + 1,
       });
       next.currentInningsIndex = 1;
-      next.timeline = [...next.timeline, {
+      next.timeline = [...curTimeline, {
         time: Date.now(),
         text: `${match.teams[updatedInning.battingTeam].name} scored ${updatedInning.totalRuns}/${updatedInning.wickets} in ${oversStr(updatedInning.legalBalls)} overs`,
       }];
@@ -299,7 +308,7 @@ export default function ScorecardScreen({ route, navigation }) {
         const margin = target - 1 - chasing.totalRuns;
         resultText = `${match.teams[first.battingTeam].name} won by ${margin} run(s)`;
       }
-      next.timeline = [...next.timeline, { time: Date.now(), text: resultText }];
+      next.timeline = [...curTimeline, { time: Date.now(), text: resultText }];
       next.resultText = resultText;
     }
 
@@ -317,25 +326,67 @@ export default function ScorecardScreen({ route, navigation }) {
     await persist(next);
   };
 
-  const inn = match?.innings?.[viewIdx];
-  const isLiveView = match && viewIdx === match.currentInningsIndex && match.status === 'live';
+  const inningsList = Array.isArray(match?.innings) ? match.innings : (Array.isArray(match?.scorecard?.innings) ? match.scorecard.innings : []);
+  const validViewIdx = Math.min(Math.max(viewIdx, 0), Math.max(inningsList.length - 1, 0));
+  const inn = inningsList[validViewIdx];
+  const isLiveView = match && validViewIdx === match.currentInningsIndex && match.status !== 'completed';
 
-  const battingTeamName = inn ? match.teams[inn.battingTeam].name : '';
-  const bowlingTeamName = inn ? match.teams[inn.bowlingTeam].name : '';
+  const battingTeamName = inn ? (match.teams?.[inn.battingTeam]?.name || (inn.battingTeam === 'A' ? match.teams?.A?.name : match.teams?.B?.name) || 'Team A') : '';
+  const bowlingTeamName = inn ? (match.teams?.[inn.bowlingTeam]?.name || (inn.bowlingTeam === 'A' ? match.teams?.A?.name : match.teams?.B?.name) || 'Team B') : '';
 
   const battingList = useMemo(() => {
-    if (!inn) return [];
+    if (!inn || !inn.batters) return [];
     return Object.keys(inn.batters).map((id) => ({ id, ...inn.batters[id] }));
   }, [inn]);
 
   const bowlingList = useMemo(() => {
-    if (!inn) return [];
+    if (!inn || !inn.bowlers) return [];
     return Object.keys(inn.bowlers).map((id) => ({ id, ...inn.bowlers[id] }));
   }, [inn]);
 
+  if (!match) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Icon name="arrow-back" size={20} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Scorecard</Text>
+          <View style={{ width: 38 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 14, color: COLORS.subtext }}>Loading match scorecard...</Text>
+        </View>
+      </View>
+    );
+  }
 
-
-  if (!match || !inn) return <View style={styles.root} />;
+  if (!inn) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Icon name="arrow-back" size={20} color={COLORS.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerTitle}>{(match.teams?.A?.name || 'Team A')} vs {(match.teams?.B?.name || 'Team B')}</Text>
+            <Text style={styles.headerSub}>{match.place || 'Turf Arena'}</Text>
+          </View>
+          <View style={{ width: 38 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 16, color: COLORS.text, fontWeight: '700' }}>
+            {match.status === 'completed' ? 'Match Completed' : 'Innings setup pending...'}
+          </Text>
+          {match.resultText && (
+            <Text style={{ fontSize: 14, color: COLORS.primary, marginTop: 8, fontWeight: '600' }}>
+              {match.resultText}
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }
 
   const needRuns = inn.target ? inn.target - inn.totalRuns : null;
   const ballsLeft = match.overs * 6 - inn.legalBalls;
@@ -343,24 +394,24 @@ export default function ScorecardScreen({ route, navigation }) {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Match', { matchId })} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-back" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.headerTitle}>{match.teams.A.name} vs {match.teams.B.name}</Text>
-          <Text style={styles.headerSub}>{match.place}</Text>
+          <Text style={styles.headerTitle}>{(match.teams?.A?.name || match.teams?.teamA?.name || 'Team A')} vs {(match.teams?.B?.name || match.teams?.teamB?.name || 'Team B')}</Text>
+          <Text style={styles.headerSub}>{match.place || 'Turf Arena'}</Text>
         </View>
         <View style={{ width: 38 }} />
       </View>
 
       {/* Tabs */}
       <View style={styles.tabRow}>
-        {match.innings.map((i, idx) => (
+        {inningsList.map((i, idx) => (
           <TouchableOpacity key={idx} style={styles.tabBtn} onPress={() => setViewIdx(idx)}>
-            <Text style={[styles.tabText, viewIdx === idx && styles.tabTextActive]}>
-              {match.teams[i.battingTeam].name}
+            <Text style={[styles.tabText, validViewIdx === idx && styles.tabTextActive]}>
+              {match.teams?.[i.battingTeam]?.name || (i.battingTeam === 'A' ? match.teams?.A?.name : match.teams?.B?.name) || `Inning ${idx + 1}`}
             </Text>
-            {viewIdx === idx && <View style={styles.tabUnderline} />}
+            {validViewIdx === idx && <View style={styles.tabUnderline} />}
           </TouchableOpacity>
         ))}
       </View>

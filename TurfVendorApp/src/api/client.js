@@ -2,27 +2,26 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL        = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT  = 'http://10.48.78.39:5000/api/v1';
+export const LAN_URL_CURRENT  = 'http://192.168.0.36:5000/api/v1';
 export const EMULATOR_URL     = 'http://10.0.2.2:5000/api/v1';
 
 const CANDIDATE_URLS = [
-  LAN_URL_CURRENT,
   LOCAL_URL,
-  EMULATOR_URL,
+  LAN_URL_CURRENT,
   'http://localhost:5000/api/v1',
+  EMULATOR_URL,
   RAILWAY_PROD_URL,
 ];
 
 export const BASE_URL = CANDIDATE_URLS[0];
 export const FALLBACK_URL = CANDIDATE_URLS[0];
-export const SERVER_ORIGIN = 'http://10.48.78.39:5000';
 
-let activeBaseUrl = CANDIDATE_URLS[0];
+let activeBaseUrl = LOCAL_URL;
 
 // Hydrate saved active URL asynchronously
 AsyncStorage.getItem('activeVendorBaseUrl')
   .then((saved) => {
-    if (saved) activeBaseUrl = saved;
+    if (saved && !saved.includes('10.48.78.39')) activeBaseUrl = saved;
   })
   .catch(() => {});
 
@@ -30,11 +29,10 @@ export const getServerOrigin = () => {
   if (activeBaseUrl) {
     return activeBaseUrl.replace(/\/api\/v1\/?$/, '');
   }
-  return 'https://turf-booking-app-official-production.up.railway.app';
+  return LOCAL_URL.replace(/\/api\/v1\/?$/, '');
 };
 
 export const SERVER_ORIGIN = getServerOrigin();
->>>>>>> 56d48ba (Fix TurfUserApp login failure, user session storage, location navigation, and match history workflow)
 
 export const getImageUrl = (path) => {
   if (!path) return null;
@@ -66,8 +64,7 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
-    const isPrimary = host === activeBaseUrl;
-    const timeoutMs = isFormData ? 45000 : (isPrimary ? 10000 : 2500);
+    const timeoutMs = isFormData ? 45000 : 3500;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       response = await fetch(`${host}${endpoint}`, {

@@ -109,12 +109,8 @@ export default function OTPScreen({ navigation, route }) {
           <View style={[styles.card, { backgroundColor: C.card }, SHADOW.card]}>
             <Text style={[styles.title, { color: C.text }]}>Enter Verification Code</Text>
             <Text style={[styles.subtitle, { color: C.subtext }]}>
-              Enter the {OTP_LENGTH}-digit code sent to{' '}
+              Enter the {OTP_LENGTH}-digit verification code sent to{' '}
               <Text style={{ fontWeight: '800', color: C.text }}>+91 {phone}</Text>
-              {'\n'}
-              <Text style={{ fontWeight: '700', color: C.primary, fontSize: 13, marginTop: 4 }}>
-                (Verification Code: 1234)
-              </Text>
             </Text>
 
             <View style={styles.otpRow}>
