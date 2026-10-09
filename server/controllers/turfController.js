@@ -107,7 +107,7 @@ const turfController = {
             if (part && !ignores.includes(part.toLowerCase())) {
               conditions.push({ city: { contains: part, mode: 'insensitive' } });
               conditions.push({ name: { contains: part, mode: 'insensitive' } });
-              conditions.push({ address: { contains: part, mode: 'insensitive' } });
+
             }
           }
           if (conditions.length > 0) {
