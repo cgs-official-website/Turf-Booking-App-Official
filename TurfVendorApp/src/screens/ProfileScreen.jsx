@@ -393,20 +393,12 @@ const ProfileScreen = ({ navigation }) => {
         <SectionHeader title="Legal & Information" icon="shield" colors={colors} />
         <View style={[styles.menuContainer, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <MenuItem
-            icon="file-text"
-            iconBg="rgba(107, 114, 128, 0.12)"
-            iconColor="#6B7280"
-            label="Terms of Service"
-            onPress={() => navigation.navigate('Terms')}
-            isFirst
-            colors={colors}
-          />
-          <MenuItem
             icon="lock"
             iconBg="rgba(107, 114, 128, 0.12)"
             iconColor="#6B7280"
             label="Privacy Policy"
             onPress={() => navigation.navigate('Terms')}
+            isFirst
             isLast
             colors={colors}
           />

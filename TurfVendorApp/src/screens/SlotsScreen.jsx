@@ -188,8 +188,20 @@ const SlotsScreen = ({ navigation }) => {
     () => safeCalendar.filter((s) => s && s.status === 'available'),
     [safeCalendar],
   );
+  const requestedSlots = useMemo(
+    () => safeCalendar.filter((s) => s && s.status === 'requested'),
+    [safeCalendar],
+  );
+  const bookedSlots = useMemo(
+    () => safeCalendar.filter((s) => s && s.status === 'booked'),
+    [safeCalendar],
+  );
   const frozenSlots = useMemo(
     () => safeCalendar.filter((s) => s && s.status === 'frozen'),
+    [safeCalendar],
+  );
+  const bookedBlockedSlots = useMemo(
+    () => safeCalendar.filter((s) => s && (s.status === 'booked' || s.status === 'frozen')),
     [safeCalendar],
   );
   const freezableSlots = useMemo(
@@ -201,10 +213,10 @@ const SlotsScreen = ({ navigation }) => {
   const filteredCalendar = useMemo(() => {
     if (filterType === 'all') return safeCalendar;
     if (filterType === 'available') return availableSlots;
-    if (filterType === 'frozen') return frozenSlots;
-    if (filterType === 'booked') return safeCalendar.filter((s) => s && (s.status === 'booked' || s.status === 'requested'));
+    if (filterType === 'requested') return requestedSlots;
+    if (filterType === 'booked_blocked') return bookedBlockedSlots;
     return safeCalendar;
-  }, [safeCalendar, filterType, availableSlots, frozenSlots]);
+  }, [safeCalendar, filterType, availableSlots, requestedSlots, bookedBlockedSlots]);
 
   const categorizedSections = useMemo(() => categorizeSlots(filteredCalendar), [filteredCalendar]);
 
@@ -264,6 +276,10 @@ const SlotsScreen = ({ navigation }) => {
         else next.add(slot.startTime);
         return next;
       });
+      return;
+    }
+    if (slot?.bookingId && (slot.status === 'booked' || slot.status === 'requested')) {
+      navigation.navigate('BookingDetail', { bookingId: slot.bookingId });
       return;
     }
     setModalSlot(slot);
@@ -402,29 +418,29 @@ const SlotsScreen = ({ navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.statBox, filterType === 'booked' && styles.statBoxActive, { borderColor: 'rgba(245, 158, 11, 0.35)' }, SHADOWS.sm]}
-            onPress={() => setFilterType(filterType === 'booked' ? 'all' : 'booked')}
+            style={[styles.statBox, filterType === 'requested' && styles.statBoxActive, { borderColor: 'rgba(245, 158, 11, 0.35)' }, SHADOWS.sm]}
+            onPress={() => setFilterType(filterType === 'requested' ? 'all' : 'requested')}
             activeOpacity={0.7}
           >
             <View style={[styles.statIconBadge, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
               <Feather name="clock" size={14} color={colors.warning || '#F59E0B'} />
             </View>
             <Text style={[styles.statNum, { color: colors.warning || '#F59E0B' }]}>
-              {String(slotCounts?.requested ?? 0).padStart(2, '0')}
+              {String(slotCounts?.requested ?? requestedSlots.length).padStart(2, '0')}
             </Text>
             <Text style={styles.statLabel}>REQUESTED</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.statBox, filterType === 'frozen' && styles.statBoxActive, { borderColor: 'rgba(239, 68, 68, 0.35)' }, SHADOWS.sm]}
-            onPress={() => setFilterType(filterType === 'frozen' ? 'all' : 'frozen')}
+            style={[styles.statBox, filterType === 'booked_blocked' && styles.statBoxActive, { borderColor: 'rgba(239, 68, 68, 0.35)' }, SHADOWS.sm]}
+            onPress={() => setFilterType(filterType === 'booked_blocked' ? 'all' : 'booked_blocked')}
             activeOpacity={0.7}
           >
             <View style={[styles.statIconBadge, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
               <Feather name="slash" size={14} color={colors.error || '#EF4444'} />
             </View>
             <Text style={[styles.statNum, { color: colors.error || '#EF4444' }]}>
-              {String((slotCounts?.booked ?? 0) + (slotCounts?.frozen ?? frozenSlots.length)).padStart(2, '0')}
+              {String((slotCounts?.booked ?? bookedSlots.length) + (slotCounts?.frozen ?? frozenSlots.length)).padStart(2, '0')}
             </Text>
             <Text style={styles.statLabel}>BOOKED/BLOCKED</Text>
           </TouchableOpacity>
@@ -475,7 +491,15 @@ const SlotsScreen = ({ navigation }) => {
           </View>
         ) : categorizedSections.length === 0 ? (
           <View style={[styles.emptyGridCard, SHADOWS.sm]}>
-            <Text style={styles.emptyGridTitle}>No {filterType} slots found</Text>
+            <Text style={styles.emptyGridTitle}>
+              {filterType === 'requested'
+                ? 'No requested slots found'
+                : filterType === 'booked_blocked'
+                ? 'No booked/blocked slots found'
+                : filterType === 'available'
+                ? 'No available slots found'
+                : 'No slots found'}
+            </Text>
             <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setFilterType('all')}>
               <Text style={{ color: colors.primary, fontWeight: '700' }}>Show All Slots</Text>
             </TouchableOpacity>
@@ -612,6 +636,21 @@ const SlotsScreen = ({ navigation }) => {
                             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setModalSlot(null)} activeOpacity={0.8}>
                               <Text style={styles.modalCancelText}>Close</Text>
                             </TouchableOpacity>
+                            {!!modalSlot?.bookingId && (
+                              <TouchableOpacity
+                                style={[styles.modalActionBtn, { backgroundColor: colors.primary }]}
+                                onPress={() => {
+                                  const bId = modalSlot.bookingId;
+                                  setModalSlot(null);
+                                  navigation.navigate('BookingDetail', { bookingId: bId });
+                                }}
+                                activeOpacity={0.85}
+                              >
+                                <Text style={styles.modalActionBtnText}>
+                                  {modalSlot.status === 'requested' ? 'Review Request' : 'View Details'}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
                         </>
                       ) : (
