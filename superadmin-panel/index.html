@@ -1,76 +1,106 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logosm.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Turf Booking — Super Admin Dashboard</title>
-    <!-- Google Fonts: Poppins (All Weights 100-900) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
-    <script>
-      tailwind = {
-        config: {
-          darkMode: 'class',
-          theme: {
-            extend: {
-              fontFamily: {
-                sans: ['Poppins', 'system-ui', 'sans-serif'],
-                poppins: ['Poppins', 'sans-serif'],
-              },
-              colors: {
-                emerald: {
-                  50: '#f0fdfa',
-                  100: '#ccfbf1',
-                  200: '#99f6e4',
-                  300: '#5eead4',
-                  400: '#2dd4bf',
-                  500: '#0F766E',
-                  600: '#0F766E',
-                  700: '#0d655e',
-                  800: '#115e59',
-                  900: '#134e4a',
-                  950: '#042f2e',
-                },
-                brand: {
-                  50: '#f0fdfa',
-                  100: '#ccfbf1',
-                  500: '#0F766E',
-                  600: '#0F766E',
-                  700: '#0d655e',
-                  900: '#042f2e',
-                }
-              }
-            }
-          }
-        }
-      };
-      tailwind.config = tailwind.config || tailwind;
-    </script>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 
-      html, body, #root {
-        font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-      }
-      *:not(code):not(pre):not(.font-mono) {
-        font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/logosm.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turf Booking — Super Admin Dashboard</title>
+  <!-- Google Fonts: Poppins (All Weights 100-900) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap"
+    rel="stylesheet">
 
-      /* Force emerald theme overrides for Tailwind CDN */
-      .bg-emerald-500, .bg-emerald-600 { background-color: #0F766E !important; }
-      .hover\:bg-emerald-600:hover, .hover\:bg-emerald-700:hover { background-color: #0d655e !important; }
-      .text-emerald-500, .text-emerald-600 { color: #0F766E !important; }
-      .border-emerald-500, .border-emerald-600 { border-color: #0F766E !important; }
-      .from-emerald-500 { --tw-gradient-from: #0F766E var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(15 118 110 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-from), var(--tw-gradient-to)) !important; }
-      .to-emerald-600 { --tw-gradient-to: #0F766E var(--tw-gradient-to-position) !important; }
-    </style>
-  </head>
-  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white font-sans transition-colors duration-200">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  <!-- Tailwind CSS CDN (must load BEFORE the config script below) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Poppins', 'system-ui', 'sans-serif'],
+            poppins: ['Poppins', 'sans-serif'],
+          },
+          colors: {
+            emerald: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              300: '#5eead4',
+              400: '#2dd4bf',
+              500: '#0F766E',
+              600: '#0F766E',
+              700: '#0d655e',
+              800: '#115e59',
+              900: '#134e4a',
+              950: '#042f2e',
+            },
+            brand: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              500: '#0F766E',
+              600: '#0F766E',
+              700: '#0d655e',
+              900: '#042f2e',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+    html,
+    body,
+    #root {
+      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    }
+
+    *:not(code):not(pre):not(.font-mono) {
+      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    }
+
+    /* Force emerald theme overrides for Tailwind CDN */
+    .bg-emerald-500,
+    .bg-emerald-600 {
+      background-color: #0F766E !important;
+    }
+
+    .hover\:bg-emerald-600:hover,
+    .hover\:bg-emerald-700:hover {
+      background-color: #0d655e !important;
+    }
+
+    .text-emerald-500,
+    .text-emerald-600 {
+      color: #0F766E !important;
+    }
+
+    .border-emerald-500,
+    .border-emerald-600 {
+      border-color: #0F766E !important;
+    }
+
+    .from-emerald-500 {
+      --tw-gradient-from: #0F766E var(--tw-gradient-from-position) !important;
+      --tw-gradient-to: rgb(15 118 110 / 0) var(--tw-gradient-to-position) !important;
+      --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-from), var(--tw-gradient-to)) !important;
+    }
+
+    .to-emerald-600 {
+      --tw-gradient-to: #0F766E var(--tw-gradient-to-position) !important;
+    }
+  </style>
+</head>
+
+<body
+  class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased selection:bg-emerald-500 selection:text-white font-sans transition-colors duration-200">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>
