@@ -23,17 +23,17 @@ export default function BookingConfirmScreen({ route, navigation }) {
   const user = useSelector((s) => s.auth?.user);
   const { C, dark } = useTheme();
 
-  const [players,       setPlayers]       = useState(turfData?.minPlayers || 4);
+  const [players, setPlayers] = useState(turfData?.minPlayers || 4);
   const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' (Hand Cash) | 'online' (Razorpay / UPI)
-  const [paying,        setPaying]        = useState(false);
+  const [paying, setPaying] = useState(false);
 
-  const turfId        = turfData?._id || turfData?.id;
+  const turfId = turfData?._id || turfData?.id;
   const durationHours = Number(route.params?.duration || 1);
-  const hourlyRate    = Number(turfData?.pricePerHour ?? turfData?.price ?? turfData?.pricing?.baseRate ?? 500);
-  const total         = hourlyRate * durationHours;
-  const perPerson     = Math.round(total / (players || 1));
-  const rawImage  = turfData?.images?.[0] || turfData?.image;
-  const imageUri  = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
+  const hourlyRate = Number(turfData?.pricePerHour ?? turfData?.price ?? turfData?.pricing?.baseRate ?? 500);
+  const total = hourlyRate * durationHours;
+  const perPerson = Math.round(total / (players || 1));
+  const rawImage = turfData?.images?.[0] || turfData?.image;
+  const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
 
   const handleBookNow = async () => {
     if (!user) {
@@ -96,8 +96,8 @@ export default function BookingConfirmScreen({ route, navigation }) {
         amount: amount || total * 100,
         name: turfData?.name || 'Turf Arena',
         prefill: {
-          email: user?.email || 'player@turfapp.com',
-          contact: user?.phone || '9999999999',
+          email: user?.email || '',
+          contact: user?.phone || '',
           name: user?.name || 'Player',
         },
         theme: { color: C.primary || '#0CB053' },
@@ -432,8 +432,8 @@ export default function BookingConfirmScreen({ route, navigation }) {
             paying
               ? 'Processing...'
               : (paymentMethod === 'cash'
-                  ? 'Confirm (Hand Cash)'
-                  : `Pay ₹${total} Online →`)
+                ? 'Confirm (Hand Cash)'
+                : `Pay ₹${total} Online →`)
           }
           onPress={handleBookNow}
           loading={paying}

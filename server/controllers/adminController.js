@@ -486,7 +486,7 @@ const adminController = {
         recipientId: uid,
         recipientRole: 'vendor',
         title: 'KYC & Turf Approved!',
-        body: 'Your KYC documents and turf listing have been approved by Super Admin. You can now choose a subscription plan!',
+        body: 'Your KYC documents and turf listing have been approved by Super Admin. You can now start managing your turf!',
         type: 'kyc',
         data: { kycStatus: 'approved' },
       });

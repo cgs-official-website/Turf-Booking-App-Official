@@ -85,7 +85,7 @@ function DashboardApp() {
   const isSuperAdmin =
     isAuthenticated &&
     admin &&
-    (admin.role === 'superadmin' || admin.role === 'admin' || String(admin.email || '').includes('admin@'));
+    (admin.role === 'superadmin' || admin.role === 'admin');
 
   if (!isSuperAdmin) {
     return <NotFoundView onNavigateHome={() => navigate('/')} />;
@@ -150,7 +150,7 @@ function CgsLoginRoute() {
   const isSuperAdmin = Boolean(
     isAuthenticated &&
     admin &&
-    (admin.role === 'superadmin' || admin.role === 'admin' || String(admin.email || '').includes('admin@'))
+    (admin.role === 'superadmin')
   );
 
   if (isSuperAdmin) {

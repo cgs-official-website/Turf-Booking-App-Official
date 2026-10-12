@@ -171,6 +171,15 @@ const RootNavigator = () => {
             />
             <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: 'Booking Details' }} />
           </>
+        ) : needsApprovalAck ? (
+          // Approved: show the "KYC & Turf Approved" screen once, then the Main stack
+          <>
+            <Stack.Screen
+              name="TurfApproved"
+              component={TurfApprovedScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
+          </>
         ) : (
           // Main App Stack (Active status -> Vendor Dashboard)
           <>

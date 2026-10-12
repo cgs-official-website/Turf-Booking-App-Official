@@ -14,16 +14,20 @@ export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Primary base URL is cloud Railway production. LAN candidate is secondary fallback.
+// Production URL is always the primary base URL.
 export const BASE_URL = RAILWAY_PROD_URL;
 
-const CANDIDATE_URLS = [
-  RAILWAY_PROD_URL,
-  LAN_URL_CURRENT,
-  LOCAL_URL,
-  LOCAL_HOST_URL,
-  Platform.OS === 'android' ? EMULATOR_URL : null,
-].filter(Boolean);
+// Release build (APK): Railway only.
+// Dev build: Railway first, then local / LAN / emulator as fallback.
+const CANDIDATE_URLS = IS_DEV
+  ? [
+    RAILWAY_PROD_URL,
+    LAN_URL_CURRENT,
+    LOCAL_URL,
+    LOCAL_HOST_URL,
+    Platform.OS === 'android' ? EMULATOR_URL : null,
+  ].filter(Boolean)
+  : [RAILWAY_PROD_URL];
 
 export const getOrigin = () => {
   if (client && client.activeBaseUrl) {
@@ -42,7 +46,12 @@ export const getImageUrl = (path) => {
 class ApiClient {
   constructor() {
     this.activeBaseUrl = BASE_URL;
-    this.initSavedBaseUrl();
+    if (IS_DEV) {
+      this.initSavedBaseUrl();
+    } else {
+      // Release build: clear any local URL saved by old test builds
+      AsyncStorage.removeItem('activeBaseUrl').catch(() => { });
+    }
   }
 
   async initSavedBaseUrl() {
@@ -77,13 +86,7 @@ class ApiClient {
       const baseUrl = urlsToTry[i];
       try {
         const controller = new AbortController();
-        const isLocal =
-          baseUrl.includes('127.0.0.1') ||
-          baseUrl.includes('localhost') ||
-          baseUrl.includes('10.0.2.2') ||
-          baseUrl.includes('10.') ||
-          baseUrl.includes('192.168.') ||
-          baseUrl.includes('172.');
+        const isLocal = /^https?:\/\/(127\.|localhost|10\.|192\.168\.|172\.)/.test(baseUrl);
         const timeoutMs = isLocal ? 2000 : 25000;
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -94,10 +97,14 @@ class ApiClient {
         clearTimeout(timeoutId);
 
         // Server responded! Lock in this working base URL
-        console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
+        if (IS_DEV) {
+          console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
+        }
         if (this.activeBaseUrl !== baseUrl) {
           this.activeBaseUrl = baseUrl;
-          AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
+          if (IS_DEV) {
+            AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
+          }
         }
         return res;
       } catch (err) {
