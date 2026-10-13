@@ -71,10 +71,23 @@ function formatTurf(t) {
 
     // Only apply the discount to the displayed general starting rate if the scope covers all slots today
     // (i.e. 'day', 'date_range', or matching 'weekdays'). For 'slot' scope, show the badge, but don't cross out the base rate.
-    const qualifiesForGeneralPrice = top.scope !== 'slot';
     const calculatedOfferPrice = isPct
       ? Math.max(1, Math.round(baseRate * (1 - val / 100)))
       : Math.max(1, Math.round(val));
+
+    let eligibleSlotLabel = 'All Day Slots';
+    const scope = String(top.scope || 'date_range').toLowerCase();
+    if (scope === 'slot') {
+      const slots = Array.isArray(top.applicableSlots) ? top.applicableSlots : [];
+      eligibleSlotLabel = slots.length > 0 ? `Slots: ${slots.slice(0, 2).join(', ')}${slots.length > 2 ? '...' : ''}` : 'Specific Slots';
+    } else if (scope === 'day') {
+      eligibleSlotLabel = 'All Slots Today';
+    } else if (scope === 'weekdays') {
+      const days = Array.isArray(top.weekdays) ? top.weekdays : [];
+      const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
+      const names = days.map((d) => map[d] || d);
+      eligibleSlotLabel = names.length > 0 ? `${names.join(', ')} Slots` : 'Weekday Slots';
+    }
 
     activeOffer = {
       id: top.id,
@@ -83,15 +96,16 @@ function formatTurf(t) {
       discountType: top.discountType,
       discountValue: val,
       discountLabel,
-      offerPrice: qualifiesForGeneralPrice ? calculatedOfferPrice : null,
-      saving: qualifiesForGeneralPrice ? Math.max(0, baseRate - calculatedOfferPrice) : 0,
+      offerPrice: calculatedOfferPrice,
+      saving: Math.max(0, baseRate - calculatedOfferPrice),
       scope: top.scope,
       startDate: top.startDate,
       endDate: top.endDate,
       applicableSlots: Array.isArray(top.applicableSlots) ? top.applicableSlots : [],
       weekdays: Array.isArray(top.weekdays) ? top.weekdays : [],
       bannerUrl: top.bannerUrl || null,
-      qualifiesForGeneralPrice,
+      qualifiesForGeneralPrice: true,
+      eligibleSlotLabel,
     };
   }
 
@@ -152,6 +166,7 @@ function formatTurf(t) {
     hasOffer: !!activeOffer,
     offerPrice: activeOffer ? activeOffer.offerPrice : null,
     offerDiscount: activeOffer ? activeOffer.discountLabel : null,
+    eligibleSlotLabel: activeOffer ? activeOffer.eligibleSlotLabel : null,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };

@@ -97,8 +97,33 @@ function isOfferCurrentlyLive(turf) {
     }
     return true;
   }
-
   return Boolean(turf.hasOffer);
+}
+
+function getEligibleSlotLabel(activeOffer, turf) {
+  if (turf?.eligibleSlotLabel) return turf.eligibleSlotLabel;
+  if (activeOffer?.eligibleSlotLabel) return activeOffer.eligibleSlotLabel;
+  if (!activeOffer) return '';
+  const scope = String(activeOffer.scope || activeOffer.scopeType || 'date_range').toLowerCase();
+  if (scope === 'slot' || scope === 'specific_slot') {
+    const slots = Array.isArray(activeOffer.applicableSlots) && activeOffer.applicableSlots.length > 0
+      ? activeOffer.applicableSlots
+      : (Array.isArray(activeOffer.timeSlots) ? activeOffer.timeSlots : []);
+    if (slots.length > 0) {
+      return `Slots: ${slots.slice(0, 2).join(', ')}${slots.length > 2 ? '...' : ''}`;
+    }
+    return 'Specific Slots';
+  }
+  if (scope === 'day') {
+    return 'All Slots Today';
+  }
+  if (scope === 'weekdays') {
+    const days = Array.isArray(activeOffer.weekdays) ? activeOffer.weekdays : (Array.isArray(activeOffer.selectedDays) ? activeOffer.selectedDays : []);
+    const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
+    const dayNames = days.map((d) => map[d] || d);
+    return dayNames.length > 0 ? `${dayNames.slice(0, 2).join(', ')} Slots` : 'Weekday Slots';
+  }
+  return 'All Day Slots';
 }
 
 export default function TurfCard({
@@ -130,8 +155,23 @@ export default function TurfCard({
   const isValidOffer = isOfferCurrentlyLive(turf);
   const hasOffer = isValidOffer;
   const activeOffer = isValidOffer ? (turf.activeOffer || null) : null;
-  const offerPrice = isValidOffer && turf.offerPrice ? Number(turf.offerPrice) : (isValidOffer && activeOffer?.offerPrice ? Number(activeOffer.offerPrice) : null);
+
+  let offerPrice = null;
+  if (hasOffer) {
+    if (turf.offerPrice) {
+      offerPrice = Number(turf.offerPrice);
+    } else if (activeOffer?.offerPrice) {
+      offerPrice = Number(activeOffer.offerPrice);
+    } else if (activeOffer) {
+      const isPct = activeOffer.discountType === 'percentage';
+      const val = Number(activeOffer.discountValue || 0);
+      offerPrice = isPct ? Math.max(1, Math.round(price * (1 - val / 100))) : Math.max(1, Math.round(val));
+    }
+    if (offerPrice >= price) offerPrice = null;
+  }
+
   const offerBadgeText = turf.offerDiscount || activeOffer?.discountLabel || 'OFFER';
+  const eligibleSlotLabel = hasOffer ? getEligibleSlotLabel(activeOffer, turf) : '';
 
   if (variant === 'featured') {
     return (
@@ -206,6 +246,15 @@ export default function TurfCard({
               {locationText}
             </Text>
           </View>
+
+          {hasOffer && !!eligibleSlotLabel ? (
+            <View style={[styles.eligibleSlotBadge, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.16)' : '#FEF3C7' }]}>
+              <Feather name="clock" size={10} color="#D97706" style={{ marginRight: 4 }} />
+              <Text style={[styles.eligibleSlotText, { color: dark ? '#FBBF24' : '#B45309' }]} numberOfLines={1}>
+                Eligible: {eligibleSlotLabel}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Sports tag & price footer */}
           <View style={styles.footerRow}>
@@ -287,6 +336,15 @@ export default function TurfCard({
             {locationText} • {distance}
           </Text>
         </View>
+
+        {hasOffer && !!eligibleSlotLabel ? (
+          <View style={[styles.eligibleSlotBadgeSmall, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.16)' : '#FEF3C7' }]}>
+            <Feather name="clock" size={9} color="#D97706" style={{ marginRight: 3 }} />
+            <Text style={[styles.eligibleSlotTextSmall, { color: dark ? '#FBBF24' : '#B45309' }]} numberOfLines={1}>
+              Eligible: {eligibleSlotLabel}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.verticalFooter}>
           <View style={styles.sportsRow}>
@@ -502,5 +560,31 @@ const styles = StyleSheet.create({
   priceNumberSmall: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  eligibleSlotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  eligibleSlotText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  eligibleSlotBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  eligibleSlotTextSmall: {
+    fontSize: 9.5,
+    fontWeight: '700',
   },
 });

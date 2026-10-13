@@ -71,7 +71,16 @@ export default function SlotPickerScreen({ route, navigation }) {
 
   const days = useMemo(() => nextDays(7), []);
 
-  const [selectedDate, setSelectedDate] = useState(fmtDate(days[0]));
+  const initialDate = useMemo(() => {
+    const passedDate = route.params?.date;
+    if (passedDate) {
+      const match = days.find((d) => fmtDate(d) === passedDate);
+      if (match) return passedDate;
+    }
+    return fmtDate(days[0]);
+  }, [route.params?.date, days]);
+
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [endSlot, setEndSlot] = useState(null);

@@ -180,12 +180,8 @@ export default function TurfDetailScreen({ route, navigation }) {
   const rawActiveOffer = turf?.activeOffer || (offers.length > 0 ? offers[0] : null);
   const activeOffer = isValidOffer(rawActiveOffer) ? rawActiveOffer : null;
 
-  // Price qualification: only cross out the base price if the offer genuinely applies to all slots (scope !== 'slot')
-  const isSlotScoped = activeOffer?.scope === 'slot' || activeOffer?.scopeType === 'specific_slot';
-  const qualifiesForGeneralPrice = Boolean(activeOffer && !isSlotScoped);
-
   let offerPrice = null;
-  if (qualifiesForGeneralPrice) {
+  if (activeOffer) {
     if (turf?.offerPrice) {
       offerPrice = Number(turf.offerPrice);
     } else if (activeOffer.offerPrice) {

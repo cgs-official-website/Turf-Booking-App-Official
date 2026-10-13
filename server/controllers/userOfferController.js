@@ -21,9 +21,22 @@ function formatPublicOffer(offer) {
     ? Math.max(1, Math.round((baseRate * (100 - discountValue)) / 100))
     : Math.max(1, Math.round(discountValue));
 
-  const qualifiesForGeneralPrice = offer.scope !== 'slot';
-  const discountedPrice = qualifiesForGeneralPrice ? calculatedOfferPrice : null;
-  const saving = qualifiesForGeneralPrice ? Math.max(0, Math.round(baseRate - calculatedOfferPrice)) : 0;
+  const discountedPrice = calculatedOfferPrice;
+  const saving = Math.max(0, Math.round(baseRate - calculatedOfferPrice));
+
+  let eligibleSlotLabel = 'All Day Slots';
+  const scope = String(offer.scope || 'date_range').toLowerCase();
+  if (scope === 'slot') {
+    const slots = Array.isArray(offer.applicableSlots) ? offer.applicableSlots : [];
+    eligibleSlotLabel = slots.length > 0 ? `Slots: ${slots.slice(0, 3).join(', ')}${slots.length > 3 ? '...' : ''}` : 'Specific Slots';
+  } else if (scope === 'day') {
+    eligibleSlotLabel = 'All Slots Today';
+  } else if (scope === 'weekdays') {
+    const days = Array.isArray(offer.weekdays) ? offer.weekdays : [];
+    const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
+    const names = days.map((d) => map[d] || d);
+    eligibleSlotLabel = names.length > 0 ? `${names.join(', ')} Slots` : 'Selected Weekdays';
+  }
 
   const rawImages = Array.isArray(turf.images) && turf.images.length > 0
     ? turf.images
@@ -47,9 +60,10 @@ function formatPublicOffer(offer) {
     endDate: offer.endDate,
     applicableSlots: Array.isArray(offer.applicableSlots) ? offer.applicableSlots : [],
     weekdays: Array.isArray(offer.weekdays) ? offer.weekdays : [],
+    eligibleSlotLabel,
     bannerUrl: offer.bannerUrl || null,
     status: offer.status,
-    qualifiesForGeneralPrice,
+    qualifiesForGeneralPrice: true,
     turf: {
       id: turf.id,
       _id: turf.id,

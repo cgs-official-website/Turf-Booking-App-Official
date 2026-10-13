@@ -10,9 +10,12 @@ import {
   ActivityIndicator,
   StatusBar,
   Dimensions,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import { turfsApi } from '../api/turfs';
 import { getImageUrl } from '../api/client';
@@ -22,22 +25,47 @@ import { RADIUS, SPACING, SHADOW, FONT } from '../utils/theme';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
+const getLocalDateStr = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 const formatScheduleText = (offer) => {
   const scope = String(offer.scope || 'date_range').toLowerCase();
-  if (scope === 'slot') {
-    const slots = Array.isArray(offer.applicableSlots) ? offer.applicableSlots : [];
-    return slots.length > 0 ? `Specific Slots: ${slots.slice(0, 3).join(', ')}${slots.length > 3 ? '...' : ''}` : 'Specific Slots';
+  if (scope === 'day') {
+    return `Valid on ${offer.startDate}`;
   }
   if (scope === 'weekdays') {
     const days = Array.isArray(offer.weekdays) ? offer.weekdays : [];
     const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
     const names = days.map((d) => map[d] || d);
-    return names.length > 0 ? `Days: ${names.join(', ')}` : 'Selected Weekdays';
+    return names.length > 0 ? `Valid on: ${names.join(', ')}` : 'Valid on Weekdays';
+  }
+  if (offer.endDate) {
+    return `Valid till ${offer.endDate}`;
+  }
+  return 'Limited Time Deal';
+};
+
+const formatEligibleSlotsText = (offer) => {
+  if (offer.eligibleSlotLabel) return offer.eligibleSlotLabel;
+  const scope = String(offer.scope || 'date_range').toLowerCase();
+  if (scope === 'slot') {
+    const slots = Array.isArray(offer.applicableSlots) ? offer.applicableSlots : [];
+    return slots.length > 0 ? `Slots: ${slots.slice(0, 3).join(', ')}${slots.length > 3 ? '...' : ''}` : 'Specific Slots';
   }
   if (scope === 'day') {
-    return `Valid on ${offer.startDate}`;
+    return 'All Slots Today';
   }
-  return `Valid until ${offer.endDate}`;
+  if (scope === 'weekdays') {
+    const days = Array.isArray(offer.weekdays) ? offer.weekdays : [];
+    const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
+    const names = days.map((d) => map[d] || d);
+    return names.length > 0 ? `${names.join(', ')} Slots` : 'Weekday Slots';
+  }
+  return 'All Day Slots';
 };
 
 export default function OffersScreen({ navigation }) {
@@ -64,12 +92,32 @@ export default function OffersScreen({ navigation }) {
     fetchOffers();
   }, [fetchOffers]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchOffers();
+    }, [fetchOffers])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        fetchOffers();
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [fetchOffers]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchOffers();
   };
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = useMemo(() => getLocalDateStr(), []);
+  const now = useMemo(() => new Date(), []);
+  const dayNum = now.getDay();
+  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const todayName = dayNames[dayNum];
 
   const { activeOffers, upcomingOffers } = useMemo(() => {
     const active = [];
@@ -77,18 +125,32 @@ export default function OffersScreen({ navigation }) {
 
     offers.forEach((o) => {
       if (o.status !== 'active') return;
-      const start = String(o.startDate).slice(0, 10);
-      const end = String(o.endDate).slice(0, 10);
+      const start = String(o.startDate || '').slice(0, 10);
+      const end = String(o.endDate || o.startDate || '').slice(0, 10);
 
       if (todayStr >= start && todayStr <= end) {
-        active.push(o);
+        if (o.scope === 'weekdays') {
+          const wds = Array.isArray(o.weekdays) ? o.weekdays : [];
+          const matchesToday = wds.some((w) => {
+            if (typeof w === 'number') return w === dayNum;
+            const s = String(w).trim().toLowerCase();
+            return s === todayName || s === String(dayNum);
+          });
+          if (matchesToday) {
+            active.push(o);
+          } else {
+            upcoming.push(o);
+          }
+        } else {
+          active.push(o);
+        }
       } else if (todayStr < start) {
         upcoming.push(o);
       }
     });
 
     return { activeOffers: active, upcomingOffers: upcoming };
-  }, [offers, todayStr]);
+  }, [offers, todayStr, dayNum, todayName]);
 
   const displayedList = activeTab === 'active' ? activeOffers : upcomingOffers;
 
@@ -101,6 +163,7 @@ export default function OffersScreen({ navigation }) {
         _id: offer.turfId,
         activeOffer: offer,
       },
+      date: offer.startDate && offer.startDate >= todayStr ? offer.startDate : todayStr,
     });
   };
 
@@ -194,7 +257,7 @@ export default function OffersScreen({ navigation }) {
           {displayedList.length === 0 ? (
             <View style={styles.emptyCard}>
               <View style={[styles.emptyIconWrap, { backgroundColor: C.primaryLight }]}>
-                <Feather name="tag" size={32} color={C.primary} />
+                <Ionicons name="pricetag" size={32} color={C.primary} />
               </View>
               <Text style={[styles.emptyTitle, { color: C.text }]}>
                 {activeTab === 'active' ? 'No Active Deals Right Now' : 'No Upcoming Deals Scheduled'}
@@ -218,8 +281,10 @@ export default function OffersScreen({ navigation }) {
               const banner = item.bannerUrl ? getImageUrl(item.bannerUrl) : null;
               const turfThumb = turf.images?.[0] ? getImageUrl(turf.images[0]) : PLACEHOLDER_IMG;
               const original = item.originalPrice || turf.pricePerHour || 800;
-              const discounted = item.discountedPrice || Math.round(original * 0.8);
+              const discounted = item.discountedPrice || item.offerPrice || Math.round(original * 0.8);
+              const saving = item.saving || Math.max(0, original - discounted);
               const scheduleInfo = formatScheduleText(item);
+              const eligibleSlotsInfo = formatEligibleSlotsText(item);
 
               return (
                 <View
@@ -230,21 +295,27 @@ export default function OffersScreen({ navigation }) {
                     SHADOW.card,
                   ]}
                 >
-                  {/* Banner or Default Vibrant Header */}
+                  {/* Banner or Premium Dark-Green-and-Gold Fallback Header */}
                   {banner ? (
                     <View style={styles.bannerWrap}>
                       <Image source={{ uri: banner }} style={styles.bannerImg} resizeMode="cover" />
                       <View style={styles.badgeOverlay}>
+                        <Ionicons name="pricetag" size={11} color="#FFFFFF" style={{ marginRight: 4 }} />
                         <Text style={styles.badgeText}>{item.discountLabel}</Text>
                       </View>
                     </View>
                   ) : (
-                    <View style={[styles.gradientBanner, { backgroundColor: C.primary }]}>
-                      <View style={styles.gradientBadge}>
-                        <Feather name="percent" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
-                        <Text style={styles.gradientBadgeText}>{item.discountLabel}</Text>
+                    <View style={styles.fallbackGoldenBanner}>
+                      <View style={styles.fallbackTopRow}>
+                        <View style={styles.fallbackTagBadge}>
+                          <Ionicons name="sparkles" size={11} color="#FBBF24" style={{ marginRight: 4 }} />
+                          <Text style={styles.fallbackTagText}>GOLDEN TURF DEAL</Text>
+                        </View>
+                        <View style={styles.fallbackDiscountPill}>
+                          <Text style={styles.fallbackDiscountText}>{item.discountLabel}</Text>
+                        </View>
                       </View>
-                      <Text style={styles.gradientTitle} numberOfLines={1}>
+                      <Text style={styles.fallbackTitle} numberOfLines={1}>
                         {item.title}
                       </Text>
                     </View>
@@ -283,18 +354,34 @@ export default function OffersScreen({ navigation }) {
                       <RatingBadge rating={turf.ratingAvg || 4.8} count={turf.reviewsCount || 10} size="sm" />
                     </TouchableOpacity>
 
-                    {/* Validity & Timing Pill */}
-                    <View style={[styles.validityPill, { backgroundColor: C.bgSoft }]}>
-                      <Feather name="clock" size={12} color={C.primary} style={{ marginRight: 6 }} />
-                      <Text style={[styles.validityText, { color: C.text }]} numberOfLines={1}>
-                        {scheduleInfo}
-                      </Text>
+                    {/* Validity & Eligible Slots Pills */}
+                    <View style={styles.metaPillsRow}>
+                      <View style={[styles.metaPill, { backgroundColor: C.bgSoft }]}>
+                        <Feather name="calendar" size={11} color={C.primary} style={{ marginRight: 5 }} />
+                        <Text style={[styles.metaPillText, { color: C.text }]} numberOfLines={1}>
+                          {scheduleInfo}
+                        </Text>
+                      </View>
+
+                      <View style={[styles.metaPill, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.16)' : '#FEF3C7' }]}>
+                        <Feather name="clock" size={11} color="#D97706" style={{ marginRight: 5 }} />
+                        <Text style={[styles.metaPillText, { color: dark ? '#FBBF24' : '#B45309' }]} numberOfLines={1}>
+                          {eligibleSlotsInfo}
+                        </Text>
+                      </View>
                     </View>
 
                     {/* Price & Booking Actions */}
                     <View style={[styles.footerRow, { borderTopColor: C.border }]}>
                       <View>
-                        <Text style={[styles.pricePrefix, { color: C.subtext }]}>Slot Price</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                          <Text style={[styles.pricePrefix, { color: C.subtext }]}>Slot Price</Text>
+                          {saving > 0 && (
+                            <View style={styles.savingsPill}>
+                              <Text style={styles.savingsText}>Save ₹{saving}</Text>
+                            </View>
+                          )}
+                        </View>
                         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                           <Text style={[styles.discountPrice, { color: C.primary }]}>₹{discounted}</Text>
                           <Text style={[styles.originalPrice, { color: C.subtext }]}>₹{original}</Text>
@@ -316,8 +403,8 @@ export default function OffersScreen({ navigation }) {
                           onPress={() => handleBookOffer(item)}
                           activeOpacity={0.85}
                         >
-                          <Text style={styles.bookBtnText}>Book Slot</Text>
-                          <Feather name="chevron-right" size={14} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                          <Text style={styles.bookBtnText}>Book at This Price</Text>
+                          <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 4 }} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -436,7 +523,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   bannerWrap: {
-    height: 140,
+    height: 145,
     width: '100%',
   },
   bannerImg: {
@@ -451,6 +538,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: RADIUS.round,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   badgeText: {
     color: '#FFFFFF',
@@ -458,33 +547,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.5,
   },
-  gradientBanner: {
+  fallbackGoldenBanner: {
+    backgroundColor: '#062C22',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#D4AF37',
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  fallbackTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  gradientBadge: {
+  fallbackTagBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(251, 191, 36, 0.18)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.4)',
+  },
+  fallbackTagText: {
+    color: '#FBBF24',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  fallbackDiscountPill: {
+    backgroundColor: '#F59E0B',
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: RADIUS.round,
   },
-  gradientBadgeText: {
-    color: '#FFFFFF',
+  fallbackDiscountText: {
+    color: '#062C22',
+    fontSize: 12,
     fontWeight: '900',
-    fontSize: 13,
   },
-  gradientTitle: {
+  fallbackTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
-    flex: 1,
-    marginLeft: 12,
-    textAlign: 'right',
+    letterSpacing: -0.2,
   },
   cardContent: {
     padding: 16,
@@ -519,16 +626,20 @@ const styles = StyleSheet.create({
   turfLocation: {
     fontSize: 11,
   },
-  validityPill: {
+  metaPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  metaPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: RADIUS.round,
-    marginTop: 10,
-    alignSelf: 'flex-start',
   },
-  validityText: {
+  metaPillText: {
     fontSize: 11,
     fontWeight: '700',
   },
@@ -545,6 +656,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  savingsPill: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.xs,
+    marginLeft: 6,
+  },
+  savingsText: {
+    color: '#15803D',
+    fontSize: 9.5,
+    fontWeight: '800',
   },
   discountPrice: {
     fontSize: 19,
@@ -577,13 +700,13 @@ const styles = StyleSheet.create({
   bookBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 15,
     paddingVertical: 9,
     borderRadius: RADIUS.round,
   },
   bookBtnText: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: 12.5,
   },
 });
