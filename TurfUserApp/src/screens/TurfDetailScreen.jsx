@@ -20,30 +20,30 @@ const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1
 
 const AMENITY_CONFIG = {
   'FIFA Approved Turf': { icon: 'award', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
-  Floodlights:          { icon: 'sun', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
-  Parking:              { icon: 'truck', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.12)' },
-  'Locker Room':        { icon: 'lock', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  'Changing Rooms':     { icon: 'user-check', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  Showers:              { icon: 'droplet', color: '#06B6D4', bg: 'rgba(6, 182, 212, 0.12)' },
-  'Mineral Water':      { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
-  'Water Dispenser':    { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
-  Cafeteria:            { icon: 'coffee', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)' },
-  Dugout:               { icon: 'shield', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
-  CCTV:                 { icon: 'video', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },
-  'First Aid':          { icon: 'plus-circle', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
-  'Cricket Nets':       { icon: 'grid', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
-  'Bowling Machine':    { icon: 'zap', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)' },
-  'Badminton Courts':   { icon: 'activity', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  'Tennis Court':       { icon: 'circle', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
-  'Basketball Court':   { icon: 'disc', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
+  Floodlights: { icon: 'sun', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
+  Parking: { icon: 'truck', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.12)' },
+  'Locker Room': { icon: 'lock', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
+  'Changing Rooms': { icon: 'user-check', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
+  Showers: { icon: 'droplet', color: '#06B6D4', bg: 'rgba(6, 182, 212, 0.12)' },
+  'Mineral Water': { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
+  'Water Dispenser': { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
+  Cafeteria: { icon: 'coffee', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)' },
+  Dugout: { icon: 'shield', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
+  CCTV: { icon: 'video', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },
+  'First Aid': { icon: 'plus-circle', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
+  'Cricket Nets': { icon: 'grid', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
+  'Bowling Machine': { icon: 'zap', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)' },
+  'Badminton Courts': { icon: 'activity', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
+  'Tennis Court': { icon: 'circle', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
+  'Basketball Court': { icon: 'disc', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
 };
 
 const openMap = (address, lat, lng) => {
   const url = (lat && lng)
     ? Platform.select({
-        ios:     `maps://app?ll=${lat},${lng}&q=${encodeURIComponent(address)}`,
-        android: `geo:${lat},${lng}?q=${encodeURIComponent(address)}`,
-      })
+      ios: `maps://app?ll=${lat},${lng}&q=${encodeURIComponent(address)}`,
+      android: `geo:${lat},${lng}?q=${encodeURIComponent(address)}`,
+    })
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   Linking.openURL(url).catch(() =>
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`)
@@ -57,25 +57,25 @@ const shareTurf = async (turf) => {
       title: turf.name,
       message: `🏟️ ${turf.name}\n📍 ${turf.address || turf.location?.address || turf.city || 'Tamil Nadu'}\n💰 ₹${price}/hour\n\nBook your slot now on Turf Booking App!`,
     });
-  } catch (e) {}
+  } catch (e) { }
 };
 
 export default function TurfDetailScreen({ route, navigation }) {
   const id = route.params?.turfId ?? route.params?.id;
 
-  const dispatch    = useDispatch();
+  const dispatch = useDispatch();
   const { C, dark } = useTheme();
-  const wishlist    = useSelector((s) => s.wishlist.wishlist || []);
+  const wishlist = useSelector((s) => s.wishlist.wishlist || []);
 
-  const [turf,          setTurf]          = useState(null);
-  const [reviews,       setReviews]       = useState([]);
-  const [imgIndex,      setImgIndex]      = useState(0);
-  const [modalVisible,  setModalVisible]  = useState(false);
-  const [modalIndex,    setModalIndex]    = useState(0);
-  const [loading,       setLoading]       = useState(true);
+  const [turf, setTurf] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [imgIndex, setImgIndex] = useState(0);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalIndex, setModalIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [selectedSport, setSelectedSport] = useState(null);
 
-  const sliderRef      = useRef(null);
+  const sliderRef = useRef(null);
   const modalSliderRef = useRef(null);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export default function TurfDetailScreen({ route, navigation }) {
           setSelectedSport(availableSports[0]);
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
 
     dispatch(fetchWishlist());
@@ -110,18 +110,18 @@ export default function TurfDetailScreen({ route, navigation }) {
   }
 
   const isWishlisted = wishlist.some((t) => (t._id || t.id) === (turf._id || turf.id));
-  const rawImages    = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
-  const images       = rawImages.map(getImageUrl);
-  const lat          = turf.location?.lat  || turf.location?.latitude  || null;
-  const lng          = turf.location?.lng  || turf.location?.longitude || null;
-  const city         = turf.city || turf.location?.city || 'Chennai';
-  const address      = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
-  const sports       = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
-  const amenities    = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
+  const rawImages = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
+  const images = rawImages.map(getImageUrl);
+  const lat = turf.location?.lat || turf.location?.latitude || null;
+  const lng = turf.location?.lng || turf.location?.longitude || null;
+  const city = turf.city || turf.location?.city || 'Chennai';
+  const address = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
+  const sports = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
+  const amenities = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
   const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
-  const reviewCount  = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
-  const ratingAvg    = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
-  const openTiming   = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
+  const reviewCount = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
+  const ratingAvg = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
+  const openTiming = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
 
   const openFullscreenGallery = (index = 0) => {
     setModalIndex(index);
@@ -380,6 +380,51 @@ export default function TurfDetailScreen({ route, navigation }) {
             })}
           </View>
 
+          {/* ── Pricing & Timings (set by the turf owner) ── */}
+          {(() => {
+            const cfg = turf.slotConfig || {};
+            const p = cfg.pricing || {};
+            const pick = (v) => (Number(v) > 0 ? Number(v) : null);
+            const evening = pick(turf.eveningPrice ?? p.evening);
+            const weekend = pick(turf.weekendPrice ?? p.weekend);
+            const ball = pick(turf.ballPrice ?? p.ball);
+            const slotMins = Number(turf.slotDuration ?? cfg.slotDurationMins) || 60;
+            const to12 = (t) => {
+              if (!t) return '';
+              if (/AM|PM/i.test(t)) return t;
+              const [h, m] = String(t).split(':').map(Number);
+              return `${String(h % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${h >= 12 && h < 24 ? 'PM' : 'AM'}`;
+            };
+            const rows = [
+              { label: 'Regular hours', value: `₹${pricePerHour} / hour` },
+              evening && { label: 'Evening (after 6 PM)', value: `₹${evening} / hour` },
+              weekend && { label: 'Weekend (Sat & Sun)', value: `₹${weekend} / hour` },
+              ball && { label: 'Equipment / ball add-on', value: `₹${ball}` },
+              { label: 'Slot duration', value: slotMins === 30 ? '30 minutes' : `${slotMins} minutes` },
+              { label: 'Open hours', value: `${to12(turf.openingTime || cfg.openTime || '06:00')} - ${to12(turf.closingTime || cfg.closeTime || '23:00')}` },
+            ].filter(Boolean);
+            return (
+              <>
+                <Text style={[styles.sectionTitle, { color: C.text }]}>Pricing & Timings</Text>
+                <View style={{ backgroundColor: C.card, borderColor: C.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 }}>
+                  {rows.map((r, i) => (
+                    <View
+                      key={r.label}
+                      style={{
+                        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                        paddingVertical: 12,
+                        borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.border,
+                      }}
+                    >
+                      <Text style={{ color: C.subtext, fontSize: 13, fontWeight: '600' }}>{r.label}</Text>
+                      <Text style={{ color: C.text, fontSize: 14, fontWeight: '800' }}>{r.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            );
+          })()}
+
           {/* ── Amenities & Ground Facilities ── */}
           <Text style={[styles.sectionTitle, { color: C.text }]}>World-Class Facilities</Text>
           <View style={styles.amenitiesGrid}>
@@ -454,29 +499,29 @@ export default function TurfDetailScreen({ route, navigation }) {
               .sort((a, b) => (b.rating || 5) - (a.rating || 5))
               .slice(0, 5)
               .map((rv) => (
-              <View
-                key={rv._id || rv.id}
-                style={[styles.reviewCard, { backgroundColor: C.card, borderColor: C.border }]}
-              >
-                <View style={styles.reviewTop}>
-                  <View style={[styles.reviewerAvatar, { backgroundColor: C.primaryLight }]}>
-                    <Text style={[styles.avatarLetter, { color: C.primary }]}>
-                      {(rv.user?.name || 'P')[0].toUpperCase()}
-                    </Text>
+                <View
+                  key={rv._id || rv.id}
+                  style={[styles.reviewCard, { backgroundColor: C.card, borderColor: C.border }]}
+                >
+                  <View style={styles.reviewTop}>
+                    <View style={[styles.reviewerAvatar, { backgroundColor: C.primaryLight }]}>
+                      <Text style={[styles.avatarLetter, { color: C.primary }]}>
+                        {(rv.user?.name || 'P')[0].toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.reviewerName, { color: C.text }]}>
+                        {rv.user?.name || 'Verified Player'}
+                      </Text>
+                      <Text style={[styles.reviewDate, { color: C.caption }]}>Verified Match Booking</Text>
+                    </View>
+                    <RatingBadge rating={rv.rating || 5} size="sm" />
                   </View>
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={[styles.reviewerName, { color: C.text }]}>
-                      {rv.user?.name || 'Verified Player'}
-                    </Text>
-                    <Text style={[styles.reviewDate, { color: C.caption }]}>Verified Match Booking</Text>
-                  </View>
-                  <RatingBadge rating={rv.rating || 5} size="sm" />
+                  {!!rv.comment && (
+                    <Text style={[styles.reviewComment, { color: C.subtext }]}>{rv.comment}</Text>
+                  )}
                 </View>
-                {!!rv.comment && (
-                  <Text style={[styles.reviewComment, { color: C.subtext }]}>{rv.comment}</Text>
-                )}
-              </View>
-            ))
+              ))
           )}
         </View>
       </ScrollView>
@@ -493,7 +538,7 @@ export default function TurfDetailScreen({ route, navigation }) {
         ]}
       >
         <View style={styles.bottomPriceCol}>
-          <Text style={[styles.pricePrefix, { color: C.subtext }]}>Slot Price</Text>
+          <Text style={[styles.pricePrefix, { color: C.subtext }]}>Starting from</Text>
           <View style={styles.priceRow}>
             <Text style={[styles.priceAmount, { color: C.primary }]}>₹{pricePerHour}</Text>
             <Text style={[styles.priceUnit, { color: C.subtext }]}> / hour</Text>
