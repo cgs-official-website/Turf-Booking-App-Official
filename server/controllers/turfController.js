@@ -1,3 +1,5 @@
+
+Turfcontroller · JS
 const prisma = require('../config/prisma');
 const bookingService = require('../services/bookingService');
 const cacheService = require('../services/cacheService');
@@ -6,6 +8,15 @@ const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 /**
  * Standardize turf entity shape across UserApp, VendorApp, and AdminPanel
  */
+const to12h = (t24) => {
+  if (!t24) return undefined;
+  const [h, m] = String(t24).split(':').map(Number);
+  if (Number.isNaN(h)) return undefined;
+  const hh = h % 24;
+  const ap = hh >= 12 ? 'PM' : 'AM';
+  return `${String(hh % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ap}`;
+};
+
 function formatTurf(t) {
   if (!t) return null;
   const baseRate = Number(t.pricePerHour || 0);
@@ -17,6 +28,9 @@ function formatTurf(t) {
   const images = Array.isArray(t.images) ? t.images : [];
   const lat = t.latitude ?? t.lat ?? (t.location?.geo?.lat || t.location?.lat || null);
   const lng = t.longitude ?? t.lng ?? (t.location?.geo?.lng || t.location?.lng || null);
+  const cfg = (t.slotConfig && typeof t.slotConfig === 'object') ? t.slotConfig : {};
+  const pricing = cfg.pricing || {};
+  const pincode = t.location?.pincode || '';
 
   return {
     id: t.id,
@@ -34,6 +48,7 @@ function formatTurf(t) {
     location: {
       city,
       address,
+      pincode,
       geo: (lat && lng) ? { lat, lng } : (t.location?.geo || null),
     },
     sportTypes: sports,
@@ -42,8 +57,8 @@ function formatTurf(t) {
     price: baseRate,
     pricing: {
       baseRate,
-      weekendRate: Number(t.pricing?.weekendRate || baseRate),
-      peakHourRate: Number(t.pricing?.peakHourRate || baseRate),
+      weekendRate: Number(pricing.weekend || baseRate),
+      peakHourRate: Number(pricing.evening || baseRate),
     },
     courtCount: t.courtCount || 1,
     rating: {
@@ -56,6 +71,16 @@ function formatTurf(t) {
     status: t.status,
     images,
     image: images[0] || '',
+    logo: t.logo || '',
+    pinCode: pincode,
+    openingTime: to12h(cfg.openTime || '06:00'),
+    closingTime: to12h(cfg.closeTime || '23:00'),
+    slotDuration: String(cfg.slotDurationMins || 60),
+    basePrice: baseRate,
+    eveningPrice: pricing.evening,
+    weekendPrice: pricing.weekend,
+    weekendEveningPrice: pricing.weekendEvening,
+    ballPrice: pricing.ball,
     amenities: Array.isArray(t.amenities) ? t.amenities : [],
     slotConfig: t.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 },
     rejectionReason: t.rejectionReason || null,
@@ -546,3 +571,5 @@ const turfController = {
 };
 
 module.exports = turfController;
+ 
+Claude finished the response

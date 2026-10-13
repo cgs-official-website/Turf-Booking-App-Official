@@ -48,7 +48,11 @@ router.get('/reports', vendorController.getMyReports);
 router.get('/turfs', vendorController.getMyTurfs);
 router.post('/turfs', vendorController.addTurf);
 router.get('/turfs/:turfId', vendorController.getTurfById);
-router.put('/turfs/:turfId', vendorController.updateTurf);
+router.put(
+  '/turfs/:turfId',
+  upload.fields([{ name: 'logo', maxCount: 1 }, { name: 'images', maxCount: 10 }]),
+  vendorController.updateTurf
+);
 router.delete('/turfs/:turfId', vendorController.deleteTurf);
 
 router.get('/slots/calendar', vendorController.getSlotCalendar);
