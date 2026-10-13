@@ -44,6 +44,7 @@ function formatApprovalDateTime(dateStr) {
 export default function TurfApprovedScreen({ navigation }) {
   const dispatch = useDispatch();
   const vendor = useSelector((s) => s.auth.vendor);
+  const turfInfo = useSelector((s) => s.auth.turfInfo);
 
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors, isDark);
@@ -68,8 +69,8 @@ export default function TurfApprovedScreen({ navigation }) {
   };
 
   // Vendor account approval timestamp from Superadmin review
-  const accountApprovalDate = vendor?.reviewedAt || null;
-  const approvalDateTimeFormatted = formatApprovalDateTime(accountApprovalDate);
+  const rawApprovalDate = vendor?.reviewedAt || turfInfo?.reviewedAt;
+  const approvalDateTimeFormatted = formatApprovalDateTime(rawApprovalDate);
 
   // Status confirmed only if Superadmin approved the vendor account
   const isAccountApproved = vendor?.kycStatus === 'approved';

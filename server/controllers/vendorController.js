@@ -522,7 +522,7 @@ const vendorController = {
           city: turf.city || '',
           location: turf.location || null,
           status: turf.status,
-          reviewedAt: turf.reviewedAt || vendor.reviewedAt || null,
+          reviewedAt: vendor.reviewedAt || null, // approval date = vendors.reviewed_at, set by superadmin approval
           createdAt: turf.createdAt,
         } : null,
         vendor: formatVendor(vendor),
