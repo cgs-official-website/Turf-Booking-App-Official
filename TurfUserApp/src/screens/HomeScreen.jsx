@@ -519,6 +519,19 @@ export default function HomeScreen({ navigation }) {
 
             <TouchableOpacity
               style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
+              onPress={() => navigation.navigate('Offers')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.quickIconWrap, { backgroundColor: '#FCE7F3' }]}>
+                <Feather name="tag" size={16} color="#E11D48" />
+              </View>
+              <Text style={[styles.quickTitle, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                Offers
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
               onPress={() => navigation.navigate('CreateMatch')}
               activeOpacity={0.8}
             >
@@ -804,32 +817,32 @@ const styles = StyleSheet.create({
   quickActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.md || 14,
     marginTop: 14,
-    gap: 8,
+    gap: 6,
   },
   quickCard: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
     borderRadius: RADIUS.xl,
     borderWidth: 1.5,
   },
   quickIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 5,
   },
   quickTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     textAlign: 'center',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   sportsSection: {
     marginTop: 22,

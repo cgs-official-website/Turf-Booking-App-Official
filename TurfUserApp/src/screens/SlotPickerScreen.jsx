@@ -139,10 +139,18 @@ export default function SlotPickerScreen({ route, navigation }) {
     return { status: 'available', label: 'Available', color: '#0F766E', isAvail: true };
   };
 
-  // Price of one slot. The server already applies evening / weekend / base rates per slot.
-  const slotPrice = (slot) => {
+  // Slot regular price before discount
+  const slotRegularPrice = (slot) => {
+    const rp = Number(slot.regularPrice);
+    if (Number.isFinite(rp) && rp > 0) return rp;
     const p = Number(slot.price);
     return Number.isFinite(p) && p > 0 ? p : Math.round((turfPrice * slotLength(slot)) / 60);
+  };
+
+  // Price of one slot. The server already applies offers / evening / weekend / base rates per slot.
+  const slotPrice = (slot) => {
+    const p = Number(slot.price);
+    return Number.isFinite(p) && p > 0 ? p : slotRegularPrice(slot);
   };
 
   // Duration choices: walk forward slot-by-slot from the chosen start while the next slot is free.
@@ -153,17 +161,30 @@ export default function SlotPickerScreen({ route, navigation }) {
     let cursor = selectedSlot;
     let totalMins = 0;
     let totalPrice = 0;
+    let totalOriginalPrice = 0;
+    let matchedOffer = null;
 
     while (cursor) {
       const len = slotLength(cursor);
       if (len <= 0 || totalMins + len > MAX_PLAY_MINS) break;
       totalMins += len;
       totalPrice += slotPrice(cursor);
+      totalOriginalPrice += slotRegularPrice(cursor);
+      if (cursor.offer && !matchedOffer) {
+        matchedOffer = cursor.offer;
+      }
+
+      const discountAmt = Math.max(0, totalOriginalPrice - totalPrice);
+
       options.push({
         end: cursor.end || cursor.endTime,
         duration: totalMins / 60,
         durationMins: totalMins,
         price: totalPrice,
+        originalPrice: totalOriginalPrice,
+        discountAmount: discountAmt,
+        offer: matchedOffer,
+        offerId: matchedOffer?.id || null,
       });
 
       const nextStart = cursor.end || cursor.endTime;
@@ -202,6 +223,10 @@ export default function SlotPickerScreen({ route, navigation }) {
       duration: endSlot.duration || 1,
       durationMins: endSlot.durationMins,
       totalPrice: endSlot.price,
+      originalPrice: endSlot.originalPrice || endSlot.price,
+      discountAmount: endSlot.discountAmount || 0,
+      offerId: endSlot.offerId || null,
+      appliedOffer: endSlot.offer || null,
     });
   };
 
@@ -347,6 +372,15 @@ export default function SlotPickerScreen({ route, navigation }) {
                     onPress={() => handleSlotSelect(slot)}
                     activeOpacity={0.8}
                   >
+                    {slot.hasOffer && isAvail && (
+                      <View style={styles.slotOfferTag}>
+                        <Text style={styles.slotOfferTagText}>
+                          {slot.offer?.discountType === 'percentage'
+                            ? `${slot.offer.discountValue}% OFF`
+                            : 'OFFER'}
+                        </Text>
+                      </View>
+                    )}
                     <Text
                       style={[
                         styles.slotTime,
@@ -370,11 +404,19 @@ export default function SlotPickerScreen({ route, navigation }) {
                         },
                       ]}
                     >
-                      {isSelected ? 'SELECTED' : slotInfo.label}                    </Text>
+                      {isSelected ? 'SELECTED' : slotInfo.label}
+                    </Text>
                     {isAvail && Number(slot.price) > 0 && (
-                      <Text style={{ fontSize: 11, fontWeight: '700', marginTop: 2, color: isSelected ? '#FFFFFF' : C.primary }}>
-                        ₹{slot.price}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 4 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: isSelected ? '#FFFFFF' : (slot.hasOffer ? '#059669' : C.primary) }}>
+                          ₹{slot.price}
+                        </Text>
+                        {slot.hasOffer && slot.regularPrice && slot.regularPrice > slot.price && (
+                          <Text style={{ fontSize: 9, textDecorationLine: 'line-through', color: isSelected ? 'rgba(255,255,255,0.7)' : C.caption }}>
+                            ₹{slot.regularPrice}
+                          </Text>
+                        )}
+                      </View>
                     )}
                   </TouchableOpacity>
                 );
@@ -387,9 +429,21 @@ export default function SlotPickerScreen({ route, navigation }) {
         <View style={[styles.footer, { backgroundColor: dark ? '#131E2F' : '#FFFFFF', borderTopColor: C.border }]}>
           <View>
             <Text style={[styles.footerLabel, { color: C.subtext }]}>Total Amount</Text>
-            <Text style={[styles.footerPrice, { color: C.primary }]}>
-              ₹{endSlot ? endSlot.price : 0}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={[styles.footerPrice, { color: endSlot?.discountAmount > 0 ? '#059669' : C.primary }]}>
+                ₹{endSlot ? endSlot.price : 0}
+              </Text>
+              {endSlot?.discountAmount > 0 && (
+                <Text style={{ textDecorationLine: 'line-through', color: C.subtext, fontSize: 13, fontWeight: '600' }}>
+                  ₹{endSlot.originalPrice}
+                </Text>
+              )}
+            </View>
+            {endSlot?.discountAmount > 0 && (
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669', marginTop: 1 }}>
+                🎉 Saving ₹{endSlot.discountAmount}
+              </Text>
+            )}
           </View>
           <PrimaryButton
             title="Continue to Confirm →"
@@ -427,14 +481,28 @@ export default function SlotPickerScreen({ route, navigation }) {
                   activeOpacity={0.8}
                 >
                   <View>
-                    <Text style={[styles.durationHours, { color: C.text }]}>
-                      {formatDuration(opt.durationMins)} Play
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.durationHours, { color: C.text }]}>
+                        {formatDuration(opt.durationMins)} Play
+                      </Text>
+                      {opt.discountAmount > 0 && (
+                        <View style={styles.durationSaveBadge}>
+                          <Text style={styles.durationSaveBadgeText}>Save ₹{opt.discountAmount}</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[styles.durationEnd, { color: C.subtext }]}>Until {to12h(opt.end)}</Text>
                   </View>
-                  <Text style={[styles.durationPrice, { color: C.primary }]}>
-                    ₹{opt.price}
-                  </Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.durationPrice, { color: opt.discountAmount > 0 ? '#059669' : C.primary }]}>
+                      ₹{opt.price}
+                    </Text>
+                    {opt.discountAmount > 0 && (
+                      <Text style={{ fontSize: 11, textDecorationLine: 'line-through', color: C.subtext }}>
+                        ₹{opt.originalPrice}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -629,5 +697,32 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     alignItems: 'center',
+  },
+  slotOfferTag: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#10B981',
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    zIndex: 2,
+  },
+  slotOfferTagText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  durationSaveBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+  durationSaveBadgeText: {
+    color: '#059669',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

@@ -19,6 +19,7 @@ import BookingDetailScreen   from '../screens/BookingDetailScreen';
 import RequestPendingScreen  from '../screens/RequestPendingScreen';
 import NotificationsScreen   from '../screens/NotificationsScreen';
 import ExploreScreen         from '../screens/ExploreScreen';
+import OffersScreen          from '../screens/OffersScreen';
 import PersonalInfoScreen    from '../screens/PersonalInfoScreen';
 import CreateMatchScreen     from '../screens/CreateMatchScreen';
 import SelectPlayersScreen   from '../screens/SelectPlayersScreen';
@@ -87,6 +88,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="Location"       component={LocationScreen} />
             <Stack.Screen name="Explore"        component={ExploreScreen}        options={{ presentation: 'card' }} />
+            <Stack.Screen name="Offers"         component={OffersScreen}         options={{ presentation: 'card' }} />
             <Stack.Screen name="TurfDetail"     component={TurfDetailScreen}     options={{ presentation: 'card' }} />
             <Stack.Screen name="SlotPicker"     component={SlotPickerScreen}     options={{ presentation: 'card' }} />
             <Stack.Screen name="RequestPending" component={RequestPendingScreen} options={{ presentation: 'card' }} />

@@ -12,6 +12,7 @@ import {
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
+import VendorOffersModal from '../components/VendorOffersModal';
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -163,6 +164,7 @@ const SlotsScreen = ({ navigation }) => {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [selectAllConfirmOpen, setSelectAllConfirmOpen] = useState(false);
   const [filterType, setFilterType] = useState('all');
+  const [offersModalOpen, setOffersModalOpen] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -334,10 +336,18 @@ const SlotsScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Screen Header */}
         <View style={styles.headerRow}>
-          <View>
+          <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.screenTitle}>Slot Calendar</Text>
             <Text style={styles.screenSub}>Real-time availability & block management</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.offersHeaderBtn, { backgroundColor: colors.primary || '#0F766E' }]}
+            onPress={() => setOffersModalOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Feather name="tag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.offersHeaderBtnText}>Offers</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Turf Selector Strip (If Multiple Turfs) */}
@@ -730,6 +740,17 @@ const SlotsScreen = ({ navigation }) => {
         colors={colors}
         isDark={isDark}
       />
+
+      {/* Vendor Offers & Discounts Modal */}
+      <VendorOffersModal
+        visible={offersModalOpen}
+        onClose={() => setOffersModalOpen(false)}
+        activeTurf={activeTurf}
+        availableSlots={availableSlots}
+        currentDateStr={dateStr}
+        colors={colors}
+        onOffersChanged={refresh}
+      />
     </View>
   );
 };
@@ -1108,6 +1129,18 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '500',
     marginTop: 2,
+  },
+  offersHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  offersHeaderBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: SIZES.xs,
   },
   templateBtn: {
     flexDirection: 'row',

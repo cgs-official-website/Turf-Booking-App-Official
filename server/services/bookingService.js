@@ -1,6 +1,6 @@
 const prisma = require('../config/prisma');
 const { query } = require('../config/db');
-const { priceForRange } = require('../utils/pricing');
+const { priceForRange, calculateRangePricing } = require('../utils/pricing');
 
 /**
  * Retry helper for transient DB connection errors (e.g. Railway proxy resets).
@@ -179,6 +179,9 @@ function toApi(row, { turf, user } = {}) {
     paymentMode,
     sport: row.sport || null,
     courtNumber: row.courtNumber || 1,
+    offerId: row.offerId || null,
+    discountAmount: Number(row.discountAmount || 0),
+    originalAmount: row.originalAmount ? Number(row.originalAmount) : amountNum,
     razorpayOrderId: row.razorpayOrderId || null,
     razorpayPaymentId: row.razorpayPaymentId || null,
     reservedAt,
@@ -291,14 +294,38 @@ const bookingService = {
       payload.endTime = `${String(eh).padStart(2, '0')}:${String(sm || 0).padStart(2, '0')}`;
     }
 
-    // Price = sum of each slot in the range, using evening / weekend / base rates.
-    const price = priceForRange({
+    const bookingDateStr = String(payload.date).slice(0, 10);
+
+    // Fetch active offers for this turf and date
+    let activeOffers = [];
+    try {
+      activeOffers = await prisma.offer.findMany({
+        where: {
+          turfId: turf.id,
+          status: 'active',
+          startDate: { lte: bookingDateStr },
+          endDate: { gte: bookingDateStr },
+        },
+      });
+    } catch (offerErr) {
+      console.warn('⚠️ Warning checking active offers in reserveSlot:', offerErr.message);
+    }
+
+    // Detailed server-side price calculation applying offers and overrides
+    const pricingResult = calculateRangePricing({
       turf,
-      date: String(payload.date).slice(0, 10),
+      date: bookingDateStr,
       startTime: payload.startTime,
       endTime: payload.endTime,
       overrides: priceOverrides,
+      offers: activeOffers,
     });
+
+    const price = pricingResult.total;
+    const appliedOfferId = pricingResult.appliedOffer?.id || null;
+    const discountAmount = pricingResult.discountAmount || 0;
+    const originalAmount = pricingResult.originalTotal || price;
+
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
     const bookingId = generateBookingId();
@@ -372,6 +399,9 @@ const bookingService = {
                 startTime: payload.startTime,
                 endTime: payload.endTime,
                 totalAmount: price,
+                offerId: appliedOfferId,
+                discountAmount: discountAmount,
+                originalAmount: originalAmount,
                 sport: bookingSport,
                 holdExpiresAt: expiresAt,
                 updatedAt: now,
@@ -398,6 +428,9 @@ const bookingService = {
             startTime: payload.startTime,
             endTime: payload.endTime,
             totalAmount: price,
+            offerId: appliedOfferId,
+            discountAmount: discountAmount,
+            originalAmount: originalAmount,
             bookingStatus: 'reserved',
             paymentStatus: 'pending',
             courtNumber,

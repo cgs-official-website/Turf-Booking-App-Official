@@ -74,18 +74,25 @@ export default function TurfDetailScreen({ route, navigation }) {
   const [modalIndex, setModalIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedSport, setSelectedSport] = useState(null);
+  const [offers, setOffers] = useState([]);
 
   const sliderRef = useRef(null);
   const modalSliderRef = useRef(null);
 
   useEffect(() => {
-    Promise.all([turfsApi.getTurf(id), turfsApi.getReviews(id)])
-      .then(([t, r]) => {
+    Promise.all([
+      turfsApi.getTurf(id),
+      turfsApi.getReviews(id),
+      turfsApi.getTurfOffers ? turfsApi.getTurfOffers(id).catch(() => ({ offers: [] })) : Promise.resolve({ offers: [] }),
+    ])
+      .then(([t, r, o]) => {
         const loadedTurf = t?.turf || t;
         setTurf(loadedTurf);
         const rawReviews = r?.reviews || r?.items || [];
         const sorted = [...rawReviews].sort((a, b) => (b.rating || 5) - (a.rating || 5));
         setReviews(sorted);
+        const rawOffers = o?.offers || o?.data?.offers || (Array.isArray(o) ? o : []);
+        setOffers(rawOffers);
 
         const availableSports = (Array.isArray(loadedTurf?.sports) && loadedTurf.sports.length > 0)
           ? loadedTurf.sports
@@ -119,6 +126,9 @@ export default function TurfDetailScreen({ route, navigation }) {
   const sports = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
   const amenities = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
   const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
+  const activeOffer = turf?.activeOffer || (offers.length > 0 ? offers[0] : null);
+  const offerPrice = turf?.offerPrice || (activeOffer ? (activeOffer.discountType === 'percentage' ? Math.round(pricePerHour * (1 - activeOffer.discountValue / 100)) : Math.max(0, pricePerHour - activeOffer.discountValue)) : null);
+  const offerSavings = offerPrice ? Math.max(0, pricePerHour - offerPrice) : 0;
   const reviewCount = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
   const ratingAvg = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
   const openTiming = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
@@ -380,6 +390,69 @@ export default function TurfDetailScreen({ route, navigation }) {
             })}
           </View>
 
+          {/* ── Active Special Deals & Offers Card ── */}
+          {activeOffer && (
+            <View style={[styles.offerCard, { borderColor: '#10B981', backgroundColor: dark ? '#064E3B20' : '#ECFDF5' }, SHADOW.card]}>
+              {activeOffer.bannerImage ? (
+                <Image
+                  source={{ uri: getImageUrl(activeOffer.bannerImage) }}
+                  style={styles.offerBannerImg}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.offerContent}>
+                <View style={styles.offerTopRow}>
+                  <View style={styles.offerBadge}>
+                    <Ionicons name="pricetag" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.offerBadgeText}>
+                      {activeOffer.discountType === 'percentage'
+                        ? `${activeOffer.discountValue}% OFF`
+                        : `FLAT ₹${activeOffer.discountValue} OFF`}
+                    </Text>
+                  </View>
+                  <Text style={[styles.offerExpiry, { color: C.subtext }]}>
+                    {activeOffer.endDate ? `Valid till ${activeOffer.endDate}` : 'Limited Time Deal'}
+                  </Text>
+                </View>
+
+                <Text style={[styles.offerTitle, { color: C.text }]}>{activeOffer.title}</Text>
+                {!!activeOffer.description && (
+                  <Text style={[styles.offerDesc, { color: C.subtext }]} numberOfLines={2}>
+                    {activeOffer.description}
+                  </Text>
+                )}
+
+                {/* Offer Scope / Eligibility Details */}
+                <View style={styles.offerScopeRow}>
+                  <Feather name="info" size={13} color="#059669" style={{ marginRight: 5 }} />
+                  <Text style={[styles.offerScopeText, { color: dark ? '#34D399' : '#065F46' }]}>
+                    {activeOffer.scopeType === 'weekdays' && Array.isArray(activeOffer.selectedDays) && activeOffer.selectedDays.length > 0
+                      ? `Valid on: ${activeOffer.selectedDays.map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d] || d).join(', ')}`
+                      : activeOffer.scopeType === 'specific_slot' && Array.isArray(activeOffer.timeSlots) && activeOffer.timeSlots.length > 0
+                      ? `Valid for slots: ${activeOffer.timeSlots.slice(0, 3).join(', ')}${activeOffer.timeSlots.length > 3 ? '...' : ''}`
+                      : activeOffer.scopeType === 'day'
+                      ? `Valid on date: ${activeOffer.startDate}`
+                      : 'Applicable to matching slots on this pitch'}
+                  </Text>
+                </View>
+
+                {offerPrice && (
+                  <View style={styles.offerPricingPill}>
+                    <Text style={[styles.offerPriceNow, { color: '#059669' }]}>
+                      ₹{offerPrice}/hr
+                    </Text>
+                    <Text style={[styles.offerPriceOld, { color: C.subtext }]}>
+                      ₹{pricePerHour}/hr
+                    </Text>
+                    <Text style={styles.offerPriceSave}>
+                      Save ₹{offerSavings}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* ── Pricing & Timings (set by the turf owner) ── */}
           {(() => {
             const cfg = turf.slotConfig || {};
@@ -538,10 +611,24 @@ export default function TurfDetailScreen({ route, navigation }) {
         ]}
       >
         <View style={styles.bottomPriceCol}>
-          <Text style={[styles.pricePrefix, { color: C.subtext }]}>Starting from</Text>
+          <Text style={[styles.pricePrefix, { color: C.subtext }]}>
+            {activeOffer && offerPrice ? 'Special Offer Price' : 'Starting from'}
+          </Text>
           <View style={styles.priceRow}>
-            <Text style={[styles.priceAmount, { color: C.primary }]}>₹{pricePerHour}</Text>
-            <Text style={[styles.priceUnit, { color: C.subtext }]}> / hour</Text>
+            {activeOffer && offerPrice ? (
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={[styles.priceAmount, { color: '#059669' }]}>₹{offerPrice}</Text>
+                <Text style={{ textDecorationLine: 'line-through', color: C.subtext, fontSize: 13, marginLeft: 6 }}>
+                  ₹{pricePerHour}
+                </Text>
+                <Text style={[styles.priceUnit, { color: C.subtext }]}> / hr</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.priceAmount, { color: C.primary }]}>₹{pricePerHour}</Text>
+                <Text style={[styles.priceUnit, { color: C.subtext }]}> / hour</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -1185,5 +1272,86 @@ const styles = StyleSheet.create({
   thumbImage: {
     width: '100%',
     height: '100%',
+  },
+  offerCard: {
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  offerBannerImg: {
+    width: '100%',
+    height: 120,
+  },
+  offerContent: {
+    padding: SPACING.md,
+  },
+  offerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  offerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  offerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  offerExpiry: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  offerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  offerDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  offerScopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  offerScopeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  offerPricingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.md,
+  },
+  offerPriceNow: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginRight: 6,
+  },
+  offerPriceOld: {
+    fontSize: 12,
+    textDecorationLine: 'line-through',
+    marginRight: 8,
+  },
+  offerPriceSave: {
+    color: '#059669',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

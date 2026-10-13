@@ -89,6 +89,10 @@ export default function TurfCard({
   const count = turf.rating?.count ?? turf.reviewsCount ?? 0;
   const sports = turf.sportTypes || turf.sports || [];
   const distance = getDisplayDistance(turf, userCoords);
+  const hasOffer = Boolean(turf.hasOffer || turf.activeOffer);
+  const activeOffer = turf.activeOffer || null;
+  const offerPrice = turf.offerPrice ?? (activeOffer ? activeOffer.offerPrice : null);
+  const offerBadgeText = turf.offerDiscount || activeOffer?.discountLabel || 'OFFER';
 
   if (variant === 'featured') {
     return (
@@ -99,7 +103,7 @@ export default function TurfCard({
           styles.featuredCard,
           {
             backgroundColor: dark ? '#131E2F' : '#FFFFFF',
-            borderColor: dark ? '#223249' : '#E2E8F0',
+            borderColor: hasOffer ? (dark ? '#BE123C' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
           },
           SHADOW.card,
           style,
@@ -111,9 +115,18 @@ export default function TurfCard({
 
           {/* Top floating badges */}
           <View style={styles.topFloatingRow}>
-            <View style={styles.verifiedBadge}>
-              <Feather name="check-circle" size={12} color="#0F766E" style={{ marginRight: 4 }} />
-              <Text style={styles.verifiedText}>Verified Pitch</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.verifiedBadge}>
+                <Feather name="check-circle" size={12} color="#0F766E" style={{ marginRight: 4 }} />
+                <Text style={styles.verifiedText}>Verified Pitch</Text>
+              </View>
+
+              {hasOffer && (
+                <View style={styles.offerBadgeFloating}>
+                  <Feather name="tag" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
+                  <Text style={styles.offerBadgeFloatingText}>{offerBadgeText}</Text>
+                </View>
+              )}
             </View>
 
             {onToggleFavorite && (
@@ -165,7 +178,12 @@ export default function TurfCard({
             </View>
 
             <View style={styles.priceRow}>
-              <Text style={[styles.priceNumber, { color: C.primary }]}>₹{price}</Text>
+              {hasOffer && offerPrice && (
+                <Text style={[styles.originalPriceStrikethrough, { color: C.subtext }]}>₹{price}</Text>
+              )}
+              <Text style={[styles.priceNumber, { color: hasOffer ? '#E11D48' : C.primary }]}>
+                ₹{hasOffer && offerPrice ? offerPrice : price}
+              </Text>
               <Text style={[styles.priceUnit, { color: C.subtext }]}>/hr</Text>
             </View>
           </View>
@@ -182,7 +200,7 @@ export default function TurfCard({
         styles.verticalCard,
         {
           backgroundColor: dark ? '#131E2F' : '#FFFFFF',
-          borderColor: dark ? '#223249' : '#E2E8F0',
+          borderColor: hasOffer ? (dark ? 'rgba(225,29,72,0.45)' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
         },
         SHADOW.subtle,
         style,
@@ -190,6 +208,14 @@ export default function TurfCard({
     >
       <View style={styles.verticalImageWrap}>
         <Image source={{ uri: imageUri }} style={styles.verticalImage} resizeMode="cover" />
+
+        {hasOffer && (
+          <View style={styles.offerBadgeVertical}>
+            <Feather name="tag" size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
+            <Text style={styles.offerBadgeVerticalText}>{offerBadgeText}</Text>
+          </View>
+        )}
+
         {onToggleFavorite && (
           <TouchableOpacity
             style={styles.favoriteBtnSmall}
@@ -231,7 +257,12 @@ export default function TurfCard({
           </View>
 
           <View style={styles.priceRow}>
-            <Text style={[styles.priceNumberSmall, { color: C.primary }]}>₹{price}</Text>
+            {hasOffer && offerPrice && (
+              <Text style={[styles.originalPriceStrikethroughSmall, { color: C.subtext }]}>₹{price}</Text>
+            )}
+            <Text style={[styles.priceNumberSmall, { color: hasOffer ? '#E11D48' : C.primary }]}>
+              ₹{hasOffer && offerPrice ? offerPrice : price}
+            </Text>
             <Text style={[styles.priceUnit, { color: C.subtext }]}>/hr</Text>
           </View>
         </View>

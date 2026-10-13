@@ -62,6 +62,7 @@ const reserveSlotSchema = z.object({
   endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'EndTime must be HH:mm format'),
   courtNumber: z.number().optional().default(1),
   sport: z.string().optional(),
+  offerId: z.string().optional().nullable(),
 });
 
 // Razorpay Payment Verify Schema

@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const vendorController = require('../controllers/vendorController');
+const vendorOfferController = require('../controllers/vendorOfferController');
 const verifySessionToken = require('../middleware/verifySessionToken');
 const requireRole = require('../middleware/requireRole');
 
@@ -61,5 +62,12 @@ router.post('/slots/freeze', vendorController.freezeSlot);
 router.post('/turfs/:turfId/slots/freeze', vendorController.freezeSlot);
 router.post('/turfs/:turfId/slots', vendorController.addSlot);
 router.delete('/turfs/:turfId/slots/:slotId', vendorController.deleteSlot);
+
+// Vendor Offers & Discounts Management
+router.post('/turfs/:turfId/offers', upload.single('banner'), vendorOfferController.createOffer);
+router.get('/turfs/:turfId/offers', vendorOfferController.getOffers);
+router.put('/turfs/:turfId/offers/:offerId', upload.single('banner'), vendorOfferController.updateOffer);
+router.patch('/turfs/:turfId/offers/:offerId/status', vendorOfferController.toggleOfferStatus);
+router.delete('/turfs/:turfId/offers/:offerId', vendorOfferController.deleteOffer);
 
 module.exports = router;

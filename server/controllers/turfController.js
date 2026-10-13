@@ -2,7 +2,7 @@ const prisma = require('../config/prisma');
 const bookingService = require('../services/bookingService');
 const cacheService = require('../services/cacheService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
-const { getChunkPrice, getHourlyRate } = require('../utils/pricing');
+const { getChunkPrice, getHourlyRate, resolveBestOffer } = require('../utils/pricing');
 
 /**
  * Standardize turf entity shape across UserApp, VendorApp, and AdminPanel
@@ -30,6 +30,33 @@ function formatTurf(t) {
   const cfg = (t.slotConfig && typeof t.slotConfig === 'object') ? t.slotConfig : {};
   const pricing = cfg.pricing || {};
   const pincode = t.location?.pincode || '';
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const activeOffers = (Array.isArray(t.offers) ? t.offers : []).filter(
+    (o) => o.status === 'active' && o.startDate <= todayStr && o.endDate >= todayStr
+  );
+  let activeOffer = null;
+  if (activeOffers.length > 0) {
+    const top = activeOffers[0];
+    const isPct = top.discountType === 'percentage';
+    const val = Number(top.discountValue);
+    const discountLabel = isPct ? `${Math.round(val)}% OFF` : `₹${Math.round(val)}/hr`;
+    const offerPrice = isPct ? Math.max(1, Math.round(baseRate * (1 - val / 100))) : Math.max(1, Math.round(val));
+    activeOffer = {
+      id: top.id,
+      title: top.title,
+      description: top.description || '',
+      discountType: top.discountType,
+      discountValue: val,
+      discountLabel,
+      offerPrice,
+      saving: Math.max(0, baseRate - offerPrice),
+      scope: top.scope,
+      startDate: top.startDate,
+      endDate: top.endDate,
+      bannerUrl: top.bannerUrl || null,
+    };
+  }
 
   return {
     id: t.id,
@@ -84,6 +111,10 @@ function formatTurf(t) {
     slotConfig: t.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 },
     rejectionReason: t.rejectionReason || null,
     reviewedAt: t.reviewedAt || null,
+    activeOffer,
+    hasOffer: !!activeOffer,
+    offerPrice: activeOffer ? activeOffer.offerPrice : null,
+    offerDiscount: activeOffer ? activeOffer.discountLabel : null,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -198,6 +229,11 @@ const turfController = {
         where,
         orderBy,
         take: take + 1,
+        include: {
+          offers: {
+            where: { status: 'active' },
+          },
+        },
       };
 
       if (cursor) {
@@ -337,6 +373,11 @@ const turfController = {
 
       const turf = await prisma.turf.findUnique({
         where: { id: turfId },
+        include: {
+          offers: {
+            where: { status: 'active' },
+          },
+        },
       });
 
       if (!turf) {
@@ -391,6 +432,21 @@ const turfController = {
         console.warn('Error reading slot overrides:', err.message);
       }
 
+      // Read active offers for this turf and date
+      let activeOffers = [];
+      try {
+        activeOffers = await prisma.offer.findMany({
+          where: {
+            turfId,
+            status: 'active',
+            startDate: { lte: date },
+            endDate: { gte: date },
+          },
+        });
+      } catch (err) {
+        console.warn('Error reading active offers in getAvailableSlots:', err.message);
+      }
+
       const courtCount = turf.courtCount || 1;
       const activeBookings = await bookingService.activeForSlot(turfId, date);
 
@@ -422,10 +478,13 @@ const turfController = {
         }).length;
         const isBooked = bookedCourts >= courtCount;
 
-        // Price of THIS slot: evening / weekend / base rate (or the vendor's per-slot override),
-        // scaled to the slot length so 30-minute slots cost half of the hourly rate.
-        const price = Math.round(getChunkPrice(turf, date, startTime, endTime, slotOverrides.priceOverrides));
-        const rate = Math.round(getHourlyRate(turf, date, startTime));
+        const regularRate = Math.round(getHourlyRate(turf, date, startTime));
+        const regularPrice = Math.round((regularRate * duration) / 60);
+
+        const bestOffer = resolveBestOffer(turf, date, startTime, endTime, activeOffers);
+        const price = Math.round(getChunkPrice(turf, date, startTime, endTime, slotOverrides.priceOverrides, activeOffers));
+        const hasSlotOverride = slotOverrides.priceOverrides && (slotOverrides.priceOverrides[slotKey] !== undefined || slotOverrides.priceOverrides[startTime] !== undefined);
+        const hasOffer = !hasSlotOverride && !!bestOffer && price < regularPrice;
 
         slots.push({
           slotKey,
@@ -434,11 +493,22 @@ const turfController = {
           start: startTime,
           end: endTime,
           price,
-          rate,
+          regularPrice,
+          rate: regularRate,
           durationMins: duration,
           available: !isBlocked && !isBooked,
           isBlocked,
           isBooked,
+          hasOffer,
+          offer: hasOffer && bestOffer ? {
+            id: bestOffer.offer.id,
+            title: bestOffer.offer.title,
+            discountType: bestOffer.offer.discountType,
+            discountValue: Number(bestOffer.offer.discountValue),
+            discountPercent: bestOffer.discountPercent,
+            saving: bestOffer.saving,
+            bannerUrl: bestOffer.offer.bannerUrl,
+          } : null,
         });
 
         current = next;
@@ -448,6 +518,17 @@ const turfController = {
         turfId,
         date,
         slots,
+        activeOffers: activeOffers.map((o) => ({
+          id: o.id,
+          title: o.title,
+          description: o.description,
+          discountType: o.discountType,
+          discountValue: Number(o.discountValue),
+          scope: o.scope,
+          startDate: o.startDate,
+          endDate: o.endDate,
+          bannerUrl: o.bannerUrl,
+        })),
       });
     } catch (err) {
       console.error('getAvailableSlots error:', err);

@@ -30,9 +30,13 @@ export default function BookingConfirmScreen({ route, navigation }) {
   const turfId = turfData?._id || turfData?.id;
   const durationHours = Number(route.params?.duration || 1);
   const hourlyRate = Number(turfData?.pricePerHour ?? turfData?.price ?? turfData?.pricing?.baseRate ?? 500);
-  // Total comes from the slot picker (evening / weekend / 30-minute pricing already applied).
+  // Total comes from the slot picker (evening / weekend / 30-minute / offers pricing already applied).
   const pickedTotal = Number(route.params?.totalPrice);
   const total = Number.isFinite(pickedTotal) && pickedTotal > 0 ? pickedTotal : hourlyRate * durationHours;
+  const originalTotal = Number(route.params?.originalPrice) || (route.params?.discountAmount ? total + route.params.discountAmount : total);
+  const discountAmount = Number(route.params?.discountAmount) || Math.max(0, originalTotal - total);
+  const offerId = route.params?.offerId || null;
+  const appliedOffer = route.params?.appliedOffer || null;
   const perPerson = Math.round(total / (players || 1));
   const rawImage = turfData?.images?.[0] || turfData?.image;
   const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
@@ -60,6 +64,7 @@ export default function BookingConfirmScreen({ route, navigation }) {
         startTime,
         endTime,
         courtNumber: 1,
+        offerId: offerId || undefined,
       });
 
       const booking = reserveRes.data?.booking || reserveRes.booking;
@@ -395,9 +400,26 @@ export default function BookingConfirmScreen({ route, navigation }) {
           <Text style={[styles.cardTitle, { color: C.text }]}>Payment Breakdown</Text>
 
           <View style={styles.invoiceRow}>
-            <Text style={[styles.invoiceItem, { color: C.subtext }]}>Court Slot Base Fee</Text>
-            <Text style={[styles.invoiceVal, { color: C.text }]}>₹{total}</Text>
+            <Text style={[styles.invoiceItem, { color: C.subtext }]}>
+              {discountAmount > 0 ? 'Court Regular Price' : 'Court Slot Base Fee'}
+            </Text>
+            <Text style={[styles.invoiceVal, { color: C.text, textDecorationLine: discountAmount > 0 ? 'line-through' : 'none' }]}>
+              ₹{originalTotal}
+            </Text>
           </View>
+
+          {discountAmount > 0 && (
+            <View style={styles.invoiceRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.invoiceItem, { color: '#059669', fontWeight: '700' }]}>
+                  Offer Discount {appliedOffer?.title ? `(${appliedOffer.title})` : ''}
+                </Text>
+              </View>
+              <Text style={[styles.invoiceVal, { color: '#059669', fontWeight: '800' }]}>
+                -₹{discountAmount}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.invoiceRow}>
             <Text style={[styles.invoiceItem, { color: C.subtext }]}>Payment Mode</Text>
@@ -411,10 +433,19 @@ export default function BookingConfirmScreen({ route, navigation }) {
             <Text style={[styles.invoiceVal, { color: '#0F766E', fontWeight: '700' }]}>FREE</Text>
           </View>
 
+          {discountAmount > 0 && (
+            <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', borderRadius: 8, padding: 8, marginVertical: 6, flexDirection: 'row', alignItems: 'center' }}>
+              <Feather name="tag" size={14} color="#059669" style={{ marginRight: 6 }} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#059669' }}>
+                You are saving ₹{discountAmount} on this booking!
+              </Text>
+            </View>
+          )}
+
           <View style={[styles.invoiceDivider, { backgroundColor: C.border }]} />
 
           <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, { color: C.text }]}>Total Amount</Text>
+            <Text style={[styles.totalLabel, { color: C.text }]}>Total Payable</Text>
             <Text style={[styles.totalPrice, { color: C.primary }]}>₹{total}</Text>
           </View>
         </View>
@@ -426,7 +457,14 @@ export default function BookingConfirmScreen({ route, navigation }) {
           <Text style={[styles.footerLabel, { color: C.subtext }]}>
             {paymentMethod === 'cash' ? 'Pay at Ground' : 'Pay Online'}
           </Text>
-          <Text style={[styles.footerAmount, { color: C.primary }]}>₹{total}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <Text style={[styles.footerAmount, { color: C.primary }]}>₹{total}</Text>
+            {discountAmount > 0 && (
+              <Text style={{ textDecorationLine: 'line-through', color: C.subtext, fontSize: 13, fontWeight: '600' }}>
+                ₹{originalTotal}
+              </Text>
+            )}
+          </View>
         </View>
 
         <PrimaryButton
