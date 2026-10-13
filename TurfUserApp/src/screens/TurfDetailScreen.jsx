@@ -531,7 +531,6 @@ export default function TurfDetailScreen({ route, navigation }) {
             const pick = (v) => (Number(v) > 0 ? Number(v) : null);
             const evening = pick(turf.eveningPrice ?? p.evening);
             const weekend = pick(turf.weekendPrice ?? p.weekend);
-            const ball = pick(turf.ballPrice ?? p.ball);
             const slotMins = Number(turf.slotDuration ?? cfg.slotDurationMins) || 60;
             const to12 = (t) => {
               if (!t) return '';
@@ -543,7 +542,6 @@ export default function TurfDetailScreen({ route, navigation }) {
               { label: 'Regular hours', value: `₹${pricePerHour} / hour` },
               evening && { label: 'Evening (after 6 PM)', value: `₹${evening} / hour` },
               weekend && { label: 'Weekend (Sat & Sun)', value: `₹${weekend} / hour` },
-              ball && { label: 'Equipment / ball add-on', value: `₹${ball}` },
               { label: 'Slot duration', value: slotMins === 30 ? '30 minutes' : `${slotMins} minutes` },
               { label: 'Open hours', value: `${to12(turf.openingTime || cfg.openTime || '06:00')} - ${to12(turf.closingTime || cfg.closeTime || '23:00')}` },
             ].filter(Boolean);

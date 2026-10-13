@@ -170,6 +170,7 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
         <Image
           source={{
             uri:
+              item.logo ||
               item.image ||
               'https://images.unsplash.com/photo-1529900245534-5e117b604e5a?auto=format&fit=crop&w=800&q=80',
           }}

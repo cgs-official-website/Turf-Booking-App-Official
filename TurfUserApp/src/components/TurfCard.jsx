@@ -118,7 +118,7 @@ export default function TurfCard({
 
   const turfId = turf.id || turf._id;
   const name = turf.name || 'Turf Arena';
-  const rawImage = turf.images?.[0] || turf.image || turf.photo;
+  const rawImage = turf.logo || turf.images?.[0] || turf.image || turf.photo;
   const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
   const price = turf.pricePerHour || turf.pricing?.baseRate || turf.price || 800;
   const locationText = turf.location?.city || turf.location?.address || turf.address || 'Local Venue';

@@ -1184,7 +1184,10 @@ const vendorController = {
       });
 
       await cacheService.del(`turf:${turfId}`);
+      await cacheService.del('turfs_meta_locations');
       await cacheService.invalidatePattern('turf*');
+      await cacheService.invalidatePattern('*nearby*');
+      await cacheService.invalidatePattern('*featured*');
       await cacheService.invalidateDashboard(uid);
 
       return sendSuccess(res, { turf: formatTurf(updated) });

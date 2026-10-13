@@ -960,30 +960,34 @@ const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors,
           <View style={calModalStyles.grid}>
             {cells.map((c) => {
               if (!c.day) {
-                return <View key={c.key} style={calModalStyles.cell} />;
+                return <View key={c.key} style={calModalStyles.cellWrap} />;
               }
               return (
                 <TouchableOpacity
                   key={c.key}
-                  style={[
-                    calModalStyles.cell,
-                    c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#0F766E' }],
-                    c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#0F766E' }],
-                  ]}
+                  style={calModalStyles.cellWrap}
                   onPress={() => onSelectDate(c.date)}
                   activeOpacity={0.7}
                 >
-                  <Text
+                  <View
                     style={[
-                      calModalStyles.cellText,
-                      { color: colors.text },
-                      c.isSelected && calModalStyles.selectedCellText,
-                      c.isToday && !c.isSelected && { color: colors.primary || '#0F766E', fontWeight: '700' },
-                      c.isPast && !c.isSelected && { color: colors.textSecondary, opacity: 0.45 },
+                      calModalStyles.cell,
+                      c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#0F766E' }],
+                      c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#0F766E' }],
                     ]}
                   >
-                    {c.day}
-                  </Text>
+                    <Text
+                      style={[
+                        calModalStyles.cellText,
+                        { color: colors.text },
+                        c.isSelected && calModalStyles.selectedCellText,
+                        c.isToday && !c.isSelected && { color: colors.primary || '#0F766E', fontWeight: '700' },
+                        c.isPast && !c.isSelected && { color: colors.textSecondary, opacity: 0.45 },
+                      ]}
+                    >
+                      {c.day}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -1048,11 +1052,10 @@ const calModalStyles = StyleSheet.create({
   },
   weekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     marginBottom: 8,
   },
   weekLabel: {
-    width: 38,
+    width: '14.2857%',
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '600',
@@ -1060,14 +1063,17 @@ const calModalStyles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-around',
+  },
+  cellWrap: {
+    width: '14.2857%',
+    alignItems: 'center',
+    marginVertical: 3,
   },
   cell: {
     width: 38,
     height: 38,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 3,
     borderRadius: 19,
   },
   cellText: {

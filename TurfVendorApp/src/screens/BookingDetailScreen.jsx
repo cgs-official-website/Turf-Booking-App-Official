@@ -78,6 +78,38 @@ const BookingDetailScreen = ({ route, navigation }) => {
     cancelled: colors.textSecondary,
   };
 
+  // Convert "06:00" or "6:00 AM" into minutes since midnight
+  const timeToMinutes = (t) => {
+    if (!t) return null;
+    const m = String(t).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const ap = m[3] ? m[3].toUpperCase() : null;
+    if (ap === 'PM' && h < 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return h * 60 + min;
+  };
+
+  // True when the booking's date + end time is already in the past
+  const isSlotPassed = (() => {
+    try {
+      const datePart = String(booking.date || '').split('T')[0];
+      const [y, mo, d] = datePart.split('-').map(Number);
+      const endMin = timeToMinutes(booking.endTime);
+      if (!y || !mo || !d || endMin === null) return false;
+      const slotEnd = new Date(y, mo - 1, d, Math.floor(endMin / 60), endMin % 60, 0);
+      return new Date() >= slotEnd;
+    } catch {
+      return false;
+    }
+  })();
+
+  // Pending + slot time passed => Expired
+  const isExpired = booking.status === 'pending' && isSlotPassed;
+  const bannerColor = isExpired ? colors.error : STATUS_COLOR[booking.status];
+  const bannerLabel = isExpired ? 'Booking Expired' : `Booking ${booking.status?.toUpperCase()}`;
+
   const formatDate = (rawDate) => {
     if (!rawDate) return 'N/A';
     try {
@@ -126,10 +158,10 @@ const BookingDetailScreen = ({ route, navigation }) => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Status Banner */}
-      <View style={[styles.statusBanner, { backgroundColor: STATUS_COLOR[booking.status] + '15' }]}>
-        <Feather name="info" size={20} color={STATUS_COLOR[booking.status]} style={{ marginRight: 8 }} />
-        <Text style={[styles.statusText, { color: STATUS_COLOR[booking.status] }]}>
-          Booking {booking.status?.toUpperCase()}
+      <View style={[styles.statusBanner, { backgroundColor: bannerColor + '15' }]}>
+        <Feather name={isExpired ? 'clock' : 'info'} size={20} color={bannerColor} style={{ marginRight: 8 }} />
+        <Text style={[styles.statusText, { color: bannerColor }]}>
+          {bannerLabel}
         </Text>
       </View>
 
@@ -180,18 +212,20 @@ const BookingDetailScreen = ({ route, navigation }) => {
       {/* Actions */}
       {booking.status === 'pending' && (
         <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.acceptBtn, loading && { opacity: 0.7 }]}
-            onPress={handleAccept}
-            disabled={loading}
-          >
-            {loading ? <ActivityIndicator color={colors.onAccent} /> : (
-              <>
-                <Feather name="check-circle" size={20} color={colors.onAccent} style={{ marginRight: 8 }} />
-                <Text style={styles.actionBtnText}>Accept Booking</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {!isExpired && (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.acceptBtn, loading && { opacity: 0.7 }]}
+              onPress={handleAccept}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color={colors.onAccent} /> : (
+                <>
+                  <Feather name="check-circle" size={20} color={colors.onAccent} style={{ marginRight: 8 }} />
+                  <Text style={styles.actionBtnText}>Accept Booking</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={() => setRejectModal(true)}>
             <Feather name="x-circle" size={20} color={colors.error} style={{ marginRight: 8 }} />

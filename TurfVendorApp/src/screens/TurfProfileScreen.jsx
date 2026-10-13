@@ -95,7 +95,6 @@ const TurfProfileScreen = ({ navigation, route }) => {
   const [basePrice, setBasePrice] = useState('');
   const [eveningPrice, setEveningPrice] = useState('');
   const [weekendPrice, setWeekendPrice] = useState('');
-  const [ballPrice, setBallPrice] = useState('');
   const [weekendEveningPrice, setWeekendEveningPrice] = useState('');
 
   const [sports, setSports] = useState(DEFAULT_SPORTS);
@@ -138,7 +137,6 @@ const TurfProfileScreen = ({ navigation, route }) => {
     setBasePrice(priceText(turf.basePrice ?? turf.pricePerHour));
     setEveningPrice(priceText(turf.eveningPrice));
     setWeekendPrice(priceText(turf.weekendPrice));
-    setBallPrice(priceText(turf.ballPrice));
     setWeekendEveningPrice(priceText(turf.weekendEveningPrice));
 
     const turfSportsList = turf.sports?.length ? turf.sports : (turf.sportTypes?.length ? turf.sportTypes : []);
@@ -176,6 +174,19 @@ const TurfProfileScreen = ({ navigation, route }) => {
         }
       },
     );
+  };
+
+  const handlePickHeroLogo = () => {
+    pickSingleImage(async (uri) => {
+      setLogo(uri);
+      try {
+        await dispatch(updateTurfInfo({ logo: uri })).unwrap();
+        logoDirtyRef.current = false;
+        Alert.alert('Success', 'Turf card photo updated.');
+      } catch (err) {
+        Alert.alert('Update Failed', typeof err === 'string' ? err : 'Could not update turf photo.');
+      }
+    });
   };
 
   const handleSaveInfo = async () => {
@@ -219,11 +230,10 @@ const TurfProfileScreen = ({ navigation, route }) => {
       Alert.alert('Base Price Required', 'Please enter the base price (regular hours). It must be greater than 0.');
       return;
     }
-    // Evening / weekend / equipment are OPTIONAL: blank = not set (turf uses the base price instead)
+    // Evening / weekend are OPTIONAL: blank = not set (turf uses the base price instead)
     const optional = [
       ['Evening price', eveningPrice],
       ['Weekend price', weekendPrice],
-      ['Equipment / ball price', ballPrice],
     ];
     for (const [label, value] of optional) {
       const t = String(value).trim();
@@ -243,7 +253,6 @@ const TurfProfileScreen = ({ navigation, route }) => {
         basePrice: base,
         eveningPrice: optionalValue(eveningPrice),
         weekendPrice: optionalValue(weekendPrice),
-        ballPrice: optionalValue(ballPrice),
       })).unwrap();
       Alert.alert('Success', 'Pricing structure saved.');
       setActiveTab(3);
@@ -327,7 +336,7 @@ const TurfProfileScreen = ({ navigation, route }) => {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Turf Header Banner Card */}
         <View style={[styles.heroCard, SHADOWS.md]}>
-          <TouchableOpacity onPress={() => pickSingleImage(setLogo)} activeOpacity={0.85} style={styles.heroLogoWrap}>
+          <TouchableOpacity onPress={handlePickHeroLogo} activeOpacity={0.85} style={styles.heroLogoWrap}>
             {logo ? (
               <Image source={{ uri: getImageUrl(logo) }} style={styles.heroLogo} />
             ) : (
@@ -503,19 +512,13 @@ const TurfProfileScreen = ({ navigation, route }) => {
             <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Evening Price (After 6 PM) <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text></Text>
             <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Text style={styles.rupeeSign}>₹</Text>
-              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={eveningPrice} onChangeText={setEveningPrice} keyboardType="numeric" placeholder="Optional (uses base price if blank)" placeholderTextColor={colors.textSecondary} />
+              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={eveningPrice} onChangeText={setEveningPrice} keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
             </View>
 
             <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Weekend Price <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text></Text>
             <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Text style={styles.rupeeSign}>₹</Text>
-              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={weekendPrice} onChangeText={setWeekendPrice} keyboardType="numeric" placeholder="Optional (uses base price if blank)" placeholderTextColor={colors.textSecondary} />
-            </View>
-
-            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Equipment / Ball Addon Price <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text></Text>
-            <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-              <Text style={styles.rupeeSign}>₹</Text>
-              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={ballPrice} onChangeText={setBallPrice} keyboardType="numeric" placeholder="Optional" placeholderTextColor={colors.textSecondary} />
+              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={weekendPrice} onChangeText={setWeekendPrice} keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
             </View>
 
             <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSavePricing} disabled={saving} activeOpacity={0.85}>
