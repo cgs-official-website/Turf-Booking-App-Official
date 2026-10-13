@@ -9,6 +9,8 @@ const { otpRateLimiter } = require('../middleware/rateLimiter');
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/mobile-login', authController.mobileLogin);
+router.get('/vendor-status', authController.getVendorStatus);
+router.post('/vendor-status', authController.getVendorStatus);
 
 // OTP Endpoints (rate-limited)
 router.post('/otp/send', otpRateLimiter, authController.sendPhoneOtp);

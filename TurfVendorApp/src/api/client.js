@@ -133,7 +133,11 @@ export const apiRequest = async (endpoint, options = {}) => {
         data?.message ||
         (typeof data?.error === 'string' ? data.error : null) ||
         `Request failed with status ${response.status}`;
-      throw new Error(errorMessage);
+      const err = new Error(errorMessage);
+      err.status = response.status;
+      err.data = data;
+      err.code = data?.error?.code || data?.code;
+      throw err;
     }
 
     // Backend wraps response in { success: true, data: { ... } }

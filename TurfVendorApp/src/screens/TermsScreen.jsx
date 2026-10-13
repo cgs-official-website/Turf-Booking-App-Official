@@ -4,6 +4,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useDispatch, useSelector } from 'react-redux';
 import { useIsFocused } from '@react-navigation/native';
 import { registerVendor, clearError, clearRegistrationSuccess } from '../redux/authSlice';
@@ -74,14 +75,23 @@ const TermsScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (registrationSuccess) {
+      const email = formData?.email ? String(formData.email).trim() : '';
+      if (email) {
+        AsyncStorage.setItem('lastRegisteredVendorEmail', email).catch(() => {});
+      }
       dispatch(clearRegistrationSuccess());
-      Alert.alert(
-        'Registration Submitted',
-        'Registration submitted successfully. Your account is pending Superadmin approval.',
-        [{ text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }) }]
-      );
+      navigation.reset({
+        index: 0,
+        routes: [{
+          name: 'Login',
+          params: {
+            email,
+            registrationSubmitted: true,
+          },
+        }],
+      });
     }
-  }, [registrationSuccess, navigation]);
+  }, [registrationSuccess, navigation, formData]);
 
   const handleContinue = () => {
     if (!agreed) {

@@ -20,6 +20,11 @@ export const updateProfileApi = (data) =>
     body: JSON.stringify(data),
   });
 
+export const getVendorStatusApi = (email) =>
+  apiRequest(`/auth/vendor-status?email=${encodeURIComponent(String(email).trim().toLowerCase())}`, {
+    method: 'GET',
+  });
+
 // ─── Forgot / Reset password ───────────────────────────────────────────────
 
 export const forgotPasswordApi = (email) =>

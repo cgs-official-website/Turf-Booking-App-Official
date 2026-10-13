@@ -48,11 +48,30 @@ export const loginVendor = createAsyncThunk(
       const data = await loginVendorApi(credentials);
       const vendor = data.vendor || data.profile;
 
+      if (vendor?.kycStatus === 'pending') {
+        return rejectWithValue({
+          message: 'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.',
+          code: 'ACCOUNT_PENDING',
+          kycStatus: 'pending',
+        });
+      }
+
       if (vendor?.kycStatus === 'rejected') {
         const reason = vendor?.rejectionReason ? `\nReason: ${vendor.rejectionReason}` : '';
-        return rejectWithValue(
-          `Your account registration was not approved.${reason}\nPlease contact support.`
-        );
+        return rejectWithValue({
+          message: `Your profile was rejected by Super Admin.${reason}\nPlease review the rejection reason and contact support or update your details if the existing workflow permits it.`,
+          code: 'KYC_REJECTED',
+          kycStatus: 'rejected',
+          rejectionReason: vendor?.rejectionReason,
+        });
+      }
+
+      if (vendor?.kycStatus !== 'approved') {
+        return rejectWithValue({
+          message: 'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.',
+          code: 'ACCOUNT_PENDING',
+          kycStatus: vendor?.kycStatus || 'pending',
+        });
       }
 
       await AsyncStorage.setItem('vendorToken', data.token);
@@ -60,7 +79,15 @@ export const loginVendor = createAsyncThunk(
       const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, turfApprovalAcknowledged };
     } catch (err) {
-      return rejectWithValue(err.message);
+      const code = err?.code || err?.data?.error?.code;
+      const kycStatus = err?.data?.kycStatus || (code === 'ACCOUNT_PENDING' ? 'pending' : code === 'KYC_REJECTED' ? 'rejected' : null);
+      const rejectionReason = err?.data?.rejectionReason;
+      return rejectWithValue({
+        message: err.message,
+        code,
+        kycStatus,
+        rejectionReason,
+      });
     }
   }
 );
@@ -103,10 +130,20 @@ export const bootstrapAuth = createAsyncThunk(
         try { cachedData = JSON.parse(cachedDataStr); } catch (e) {}
       }
 
+      // If cached vendor exists but is not approved, clear token and do not authenticate
+      if (cachedData && cachedData.vendor && cachedData.vendor.kycStatus !== 'approved') {
+        await AsyncStorage.removeItem('vendorToken');
+        await AsyncStorage.removeItem('vendorData');
+        return null;
+      }
+
       if (cachedData && cachedData.vendor) {
         const turfApprovalAcknowledged = await getPersistedTurfAck(cachedData.vendor?._id || cachedData.vendor?.uid);
-        getMeApi().then((data) => {
-          if (data?.vendor) {
+        getMeApi().then(async (data) => {
+          if (data?.vendor?.kycStatus !== 'approved') {
+            await AsyncStorage.removeItem('vendorToken');
+            await AsyncStorage.removeItem('vendorData');
+          } else if (data?.vendor) {
             AsyncStorage.setItem('vendorData', JSON.stringify(data)).catch(() => {});
           }
         }).catch(() => {});
@@ -119,22 +156,28 @@ export const bootstrapAuth = createAsyncThunk(
       ]);
 
       const vendor = data.vendor || data.profile;
+      if (vendor && vendor.kycStatus !== 'approved') {
+        await AsyncStorage.removeItem('vendorToken');
+        await AsyncStorage.removeItem('vendorData');
+        return null;
+      }
+
       if (vendor) {
         await AsyncStorage.setItem('vendorData', JSON.stringify(data));
       }
       const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, token, turfApprovalAcknowledged };
     } catch (err) {
-      if (err?.response?.status === 401 || err?.status === 401) {
+      if (err?.response?.status === 401 || err?.status === 401 || err?.status === 403) {
         await AsyncStorage.removeItem('vendorToken');
         await AsyncStorage.removeItem('vendorData');
-        return rejectWithValue('Session expired. Please log in again.');
+        return rejectWithValue('Session expired or not authorized.');
       }
       const cachedDataStr = await AsyncStorage.getItem('vendorData');
       if (cachedDataStr) {
         try {
           const cachedData = JSON.parse(cachedDataStr);
-          if (cachedData && cachedData.vendor) {
+          if (cachedData && cachedData.vendor && cachedData.vendor.kycStatus === 'approved') {
             const turfApprovalAcknowledged = await getPersistedTurfAck(cachedData.vendor?._id || cachedData.vendor?.uid);
             return { ...cachedData, token, turfApprovalAcknowledged };
           }
