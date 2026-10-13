@@ -516,7 +516,15 @@ const vendorController = {
         turfApprovalAcknowledged: vendor.turfApprovalAcknowledged || false,
         hasActiveSubscription: hasActiveSub,
         subscription: hasActiveSub ? vendor.subscriptions[0] : (vendor.subscription || null),
-        turf: turf ? { id: turf.id, name: turf.name, status: turf.status } : null,
+        turf: turf ? {
+          id: turf.id,
+          name: turf.name,
+          city: turf.city || '',
+          location: turf.location || null,
+          status: turf.status,
+          reviewedAt: turf.reviewedAt || vendor.reviewedAt || null,
+          createdAt: turf.createdAt,
+        } : null,
         vendor: formatVendor(vendor),
       });
     } catch (err) {
