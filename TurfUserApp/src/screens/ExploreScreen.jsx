@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Platform, StatusBar, RefreshControl,
+  Platform, StatusBar, RefreshControl, AppState,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -91,6 +91,16 @@ export default function ExploreScreen({ navigation, route }) {
       load();
     }, [sport, sort, activeFilters, query, route?.params])
   );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        load();
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [sport, sort, activeFilters, query]);
 
   useEffect(() => {
     dispatch(fetchWishlist());

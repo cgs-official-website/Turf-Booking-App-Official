@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
   ActivityIndicator, FlatList, Dimensions, Platform,
-  Linking, Share, StatusBar, StyleSheet, Modal, Alert,
+  Linking, Share, StatusBar, StyleSheet, Modal, Alert, AppState,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import Feather from 'react-native-vector-icons/Feather';
@@ -79,7 +80,7 @@ export default function TurfDetailScreen({ route, navigation }) {
   const sliderRef = useRef(null);
   const modalSliderRef = useRef(null);
 
-  useEffect(() => {
+  const fetchTurfDetails = useCallback(() => {
     Promise.all([
       turfsApi.getTurf(id),
       turfsApi.getReviews(id),
@@ -103,9 +104,28 @@ export default function TurfDetailScreen({ route, navigation }) {
       })
       .catch(() => { })
       .finally(() => setLoading(false));
+  }, [id]);
 
+  useEffect(() => {
+    fetchTurfDetails();
     dispatch(fetchWishlist());
-  }, [id, dispatch]);
+  }, [fetchTurfDetails, dispatch]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTurfDetails();
+    }, [fetchTurfDetails])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        fetchTurfDetails();
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [fetchTurfDetails]);
 
   if (loading || !turf) {
     return (
@@ -115,6 +135,36 @@ export default function TurfDetailScreen({ route, navigation }) {
       </View>
     );
   }
+
+  const isValidOffer = (o) => {
+    if (!o) return false;
+    if (o.status && o.status !== 'active') return false;
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    const startStr = String(o.startDate || '').slice(0, 10);
+    const endStr = String(o.endDate || o.startDate || '').slice(0, 10);
+
+    if (startStr && todayStr < startStr) return false;
+    if (endStr && todayStr > endStr) return false;
+
+    if (o.scope === 'weekdays' && Array.isArray(o.weekdays) && o.weekdays.length > 0) {
+      const dayNum = now.getDay();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayName = dayNames[dayNum];
+      const match = o.weekdays.some((w) => {
+        if (typeof w === 'number') return w === dayNum;
+        const str = String(w).trim().toLowerCase();
+        return str === todayName || str === String(dayNum);
+      });
+      if (!match) return false;
+    }
+    return true;
+  };
 
   const isWishlisted = wishlist.some((t) => (t._id || t.id) === (turf._id || turf.id));
   const rawImages = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
@@ -126,9 +176,28 @@ export default function TurfDetailScreen({ route, navigation }) {
   const sports = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
   const amenities = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
   const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
-  const activeOffer = turf?.activeOffer || (offers.length > 0 ? offers[0] : null);
-  const offerPrice = turf?.offerPrice || (activeOffer ? (activeOffer.discountType === 'percentage' ? Math.round(pricePerHour * (1 - activeOffer.discountValue / 100)) : Math.max(0, pricePerHour - activeOffer.discountValue)) : null);
-  const offerSavings = offerPrice ? Math.max(0, pricePerHour - offerPrice) : 0;
+
+  const rawActiveOffer = turf?.activeOffer || (offers.length > 0 ? offers[0] : null);
+  const activeOffer = isValidOffer(rawActiveOffer) ? rawActiveOffer : null;
+
+  // Price qualification: only cross out the base price if the offer genuinely applies to all slots (scope !== 'slot')
+  const isSlotScoped = activeOffer?.scope === 'slot' || activeOffer?.scopeType === 'specific_slot';
+  const qualifiesForGeneralPrice = Boolean(activeOffer && !isSlotScoped);
+
+  let offerPrice = null;
+  if (qualifiesForGeneralPrice) {
+    if (turf?.offerPrice) {
+      offerPrice = Number(turf.offerPrice);
+    } else if (activeOffer.offerPrice) {
+      offerPrice = Number(activeOffer.offerPrice);
+    } else {
+      const isPct = activeOffer.discountType === 'percentage';
+      const val = Number(activeOffer.discountValue || 0);
+      offerPrice = isPct ? Math.max(1, Math.round(pricePerHour * (1 - val / 100))) : Math.max(1, Math.round(val));
+    }
+    if (offerPrice >= pricePerHour) offerPrice = null;
+  }
+  const offerSavings = (offerPrice && pricePerHour > offerPrice) ? Math.max(0, pricePerHour - offerPrice) : 0;
   const reviewCount = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
   const ratingAvg = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
   const openTiming = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
@@ -393,9 +462,9 @@ export default function TurfDetailScreen({ route, navigation }) {
           {/* ── Active Special Deals & Offers Card ── */}
           {activeOffer && (
             <View style={[styles.offerCard, { borderColor: '#10B981', backgroundColor: dark ? '#064E3B20' : '#ECFDF5' }, SHADOW.card]}>
-              {activeOffer.bannerImage ? (
+              {(activeOffer.bannerUrl || activeOffer.bannerImage) ? (
                 <Image
-                  source={{ uri: getImageUrl(activeOffer.bannerImage) }}
+                  source={{ uri: getImageUrl(activeOffer.bannerUrl || activeOffer.bannerImage) }}
                   style={styles.offerBannerImg}
                   resizeMode="cover"
                 />
@@ -406,8 +475,8 @@ export default function TurfDetailScreen({ route, navigation }) {
                     <Ionicons name="pricetag" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
                     <Text style={styles.offerBadgeText}>
                       {activeOffer.discountType === 'percentage'
-                        ? `${activeOffer.discountValue}% OFF`
-                        : `FLAT ₹${activeOffer.discountValue} OFF`}
+                        ? `${Math.round(activeOffer.discountValue)}% OFF`
+                        : `FLAT ₹${Math.round(activeOffer.discountValue)} OFF`}
                     </Text>
                   </View>
                   <Text style={[styles.offerExpiry, { color: C.subtext }]}>
@@ -426,13 +495,15 @@ export default function TurfDetailScreen({ route, navigation }) {
                 <View style={styles.offerScopeRow}>
                   <Feather name="info" size={13} color="#059669" style={{ marginRight: 5 }} />
                   <Text style={[styles.offerScopeText, { color: dark ? '#34D399' : '#065F46' }]}>
-                    {activeOffer.scopeType === 'weekdays' && Array.isArray(activeOffer.selectedDays) && activeOffer.selectedDays.length > 0
-                      ? `Valid on: ${activeOffer.selectedDays.map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d] || d).join(', ')}`
-                      : activeOffer.scopeType === 'specific_slot' && Array.isArray(activeOffer.timeSlots) && activeOffer.timeSlots.length > 0
-                      ? `Valid for slots: ${activeOffer.timeSlots.slice(0, 3).join(', ')}${activeOffer.timeSlots.length > 3 ? '...' : ''}`
-                      : activeOffer.scopeType === 'day'
+                    {(activeOffer.scope === 'weekdays' || activeOffer.scopeType === 'weekdays')
+                      ? `Valid on: ${(Array.isArray(activeOffer.weekdays) ? activeOffer.weekdays : (activeOffer.selectedDays || []))
+                          .map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d] || d).join(', ')}`
+                      : (activeOffer.scope === 'slot' || activeOffer.scopeType === 'specific_slot')
+                      ? `Valid for slots: ${(Array.isArray(activeOffer.applicableSlots) ? activeOffer.applicableSlots : (activeOffer.timeSlots || []))
+                          .slice(0, 3).join(', ')}${(activeOffer.applicableSlots?.length > 3 || activeOffer.timeSlots?.length > 3) ? '...' : ''}`
+                      : (activeOffer.scope === 'day' || activeOffer.scopeType === 'day')
                       ? `Valid on date: ${activeOffer.startDate}`
-                      : 'Applicable to matching slots on this pitch'}
+                      : 'Applicable to booking dates within range'}
                   </Text>
                 </View>
 

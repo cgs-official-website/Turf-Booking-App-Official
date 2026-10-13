@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, ActivityIndicator, Alert, Modal,
-  Dimensions, Image,
+  Dimensions, Image, AppState,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -80,10 +81,8 @@ export default function SlotPickerScreen({ route, navigation }) {
 
   const { C, dark } = useTheme();
 
-  useEffect(() => {
-    setLoading(true);
-    setSelectedSlot(null);
-    setEndSlot(null);
+  const fetchSlots = useCallback((showLoading = true) => {
+    if (showLoading) setLoading(true);
     turfsApi
       .getAvailability(turfId, selectedDate)
       .then((res) => {
@@ -100,8 +99,32 @@ export default function SlotPickerScreen({ route, navigation }) {
         console.warn('Error fetching slots:', err?.message || err);
         setSlots([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   }, [selectedDate, turfId]);
+
+  useEffect(() => {
+    setSelectedSlot(null);
+    setEndSlot(null);
+    fetchSlots(true);
+  }, [fetchSlots]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSlots(false);
+    }, [fetchSlots])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        fetchSlots(false);
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [fetchSlots]);
 
   const turfPrice = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
 

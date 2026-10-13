@@ -223,9 +223,25 @@ export default function VendorOffersModal({
       return;
     }
 
-    if (startDate > endDate) {
-      Alert.alert('Invalid Dates', 'Start date cannot be after end date.');
+    const cleanStartDate = (startDate || '').trim();
+    const isSingleDateScope = scope === 'day' || scope === 'slot';
+    const effectiveEndDate = isSingleDateScope ? cleanStartDate : (endDate || '').trim();
+
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(cleanStartDate)) {
+      Alert.alert('Invalid Date Format', 'Please enter start date in YYYY-MM-DD format (e.g. 2026-10-15).');
       return;
+    }
+
+    if (!isSingleDateScope) {
+      if (!dateRegex.test(effectiveEndDate)) {
+        Alert.alert('Invalid Date Format', 'Please enter end date in YYYY-MM-DD format (e.g. 2026-10-22).');
+        return;
+      }
+      if (cleanStartDate > effectiveEndDate) {
+        Alert.alert('Invalid Dates', 'Start date cannot be after end date.');
+        return;
+      }
     }
 
     if (scope === 'slot' && selectedSlots.length === 0) {
@@ -246,8 +262,8 @@ export default function VendorOffersModal({
         discountType,
         discountValue: numVal,
         scope,
-        startDate,
-        endDate,
+        startDate: cleanStartDate,
+        endDate: effectiveEndDate,
         applicableSlots: scope === 'slot' ? selectedSlots : [],
         weekdays: scope === 'weekdays' ? selectedWeekdays : [],
         bannerUri,
@@ -543,7 +559,12 @@ export default function VendorOffersModal({
                       { backgroundColor: colors.card || '#131E2F', borderColor: isSelected ? colors.primary || '#0F766E' : colors.border || '#1E293B' },
                       isSelected && styles.scopeOptionActive,
                     ]}
-                    onPress={() => setScope(s.id)}
+                    onPress={() => {
+                      setScope(s.id);
+                      if (s.id === 'day' || s.id === 'slot') {
+                        setEndDate(startDate);
+                      }
+                    }}
                     activeOpacity={0.8}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -571,20 +592,31 @@ export default function VendorOffersModal({
             {/* Date Pickers */}
             <Text style={[styles.sectionTitle, { color: colors.text || '#FFFFFF', marginTop: 20 }]}>Validity Period</Text>
             <View style={styles.dateRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={[styles.fieldLabel, { color: colors.textSecondary || '#94A3B8' }]}>Start Date (YYYY-MM-DD)</Text>
+              <View style={{ flex: 1, marginRight: (scope === 'day' || scope === 'slot') ? 0 : 8 }}>
+                <Text style={[styles.fieldLabel, { color: colors.textSecondary || '#94A3B8' }]}>
+                  {scope === 'day'
+                    ? 'Offer Date (YYYY-MM-DD)'
+                    : scope === 'slot'
+                    ? 'Date for Slots (YYYY-MM-DD)'
+                    : 'Start Date (YYYY-MM-DD)'}
+                </Text>
                 <TextInput
                   style={[
                     styles.input,
                     { backgroundColor: colors.card || '#131E2F', borderColor: colors.border || '#1E293B', color: colors.text || '#FFFFFF' },
                   ]}
                   value={startDate}
-                  onChangeText={setStartDate}
+                  onChangeText={(val) => {
+                    setStartDate(val);
+                    if (scope === 'day' || scope === 'slot') {
+                      setEndDate(val);
+                    }
+                  }}
                   placeholder="2026-10-15"
                   placeholderTextColor="#64748B"
                 />
               </View>
-              {scope !== 'day' && (
+              {scope !== 'day' && scope !== 'slot' && (
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.fieldLabel, { color: colors.textSecondary || '#94A3B8' }]}>End Date (YYYY-MM-DD)</Text>
                   <TextInput

@@ -289,10 +289,29 @@ export default function HomeScreen({ navigation }) {
     );
   }, [onLocationSuccess]);
 
-  // When returning to app after turning on location in mobile settings, auto-detect & view location
+  const load = useCallback(async (showLoading = false) => {
+    try {
+      if (showLoading || turfs.length === 0) {
+        setLoading(true);
+      }
+      const params = {};
+      if (sport) params.sport = sport;
+      if (activeFilters.sort) params.sort = activeFilters.sort;
+      if (activeFilters.time) params.time = activeFilters.time;
+      const res = await turfsApi.getTurfs(params);
+      setTurfs(res.turfs || res.items || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [sport, activeFilters, location, turfs.length]);
+
+  // When returning to app, re-fetch turfs/offers and auto-detect location if needed
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       if (nextAppState === 'active') {
+        load(false);
         if (waitingForLocationRef.current || locationOff) {
           waitingForLocationRef.current = false;
           Geolocation.getCurrentPosition(
@@ -312,25 +331,7 @@ export default function HomeScreen({ navigation }) {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [locationOff, onLocationSuccess]);
-
-  const load = useCallback(async (showLoading = false) => {
-    try {
-      if (showLoading || turfs.length === 0) {
-        setLoading(true);
-      }
-      const params = {};
-      if (sport) params.sport = sport;
-      if (activeFilters.sort) params.sort = activeFilters.sort;
-      if (activeFilters.time) params.time = activeFilters.time;
-      const res = await turfsApi.getTurfs(params);
-      setTurfs(res.turfs || res.items || []);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [sport, activeFilters, location, turfs.length]);
+  }, [locationOff, onLocationSuccess, load]);
 
   useEffect(() => { load(true); }, [sport, activeFilters]);
   useEffect(() => {

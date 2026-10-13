@@ -16,6 +16,13 @@ const to12h = (t24) => {
   return `${String(hh % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ap}`;
 };
 
+const getLocalDateStr = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 function formatTurf(t) {
   if (!t) return null;
   const baseRate = Number(t.pricePerHour || 0);
@@ -31,17 +38,44 @@ function formatTurf(t) {
   const pricing = cfg.pricing || {};
   const pincode = t.location?.pincode || '';
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const activeOffers = (Array.isArray(t.offers) ? t.offers : []).filter(
-    (o) => o.status === 'active' && o.startDate <= todayStr && o.endDate >= todayStr
-  );
+  const todayStr = getLocalDateStr();
+  const now = new Date();
+  const dayNum = now.getDay();
+  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const todayDayName = dayNames[dayNum];
+
+  const activeOffers = (Array.isArray(t.offers) ? t.offers : []).filter((o) => {
+    if (!o || o.status !== 'active') return false;
+    const startStr = String(o.startDate || '').slice(0, 10);
+    const endStr = String(o.endDate || o.startDate || '').slice(0, 10);
+    if (todayStr < startStr || todayStr > endStr) return false;
+
+    if (o.scope === 'weekdays') {
+      const weekdays = Array.isArray(o.weekdays) ? o.weekdays : [];
+      return weekdays.some((w) => {
+        if (typeof w === 'number') return w === dayNum;
+        const str = String(w).trim().toLowerCase();
+        return str === todayDayName || str === String(dayNum);
+      });
+    }
+
+    return true;
+  });
+
   let activeOffer = null;
   if (activeOffers.length > 0) {
     const top = activeOffers[0];
     const isPct = top.discountType === 'percentage';
     const val = Number(top.discountValue);
     const discountLabel = isPct ? `${Math.round(val)}% OFF` : `₹${Math.round(val)}/hr`;
-    const offerPrice = isPct ? Math.max(1, Math.round(baseRate * (1 - val / 100))) : Math.max(1, Math.round(val));
+
+    // Only apply the discount to the displayed general starting rate if the scope covers all slots today
+    // (i.e. 'day', 'date_range', or matching 'weekdays'). For 'slot' scope, show the badge, but don't cross out the base rate.
+    const qualifiesForGeneralPrice = top.scope !== 'slot';
+    const calculatedOfferPrice = isPct
+      ? Math.max(1, Math.round(baseRate * (1 - val / 100)))
+      : Math.max(1, Math.round(val));
+
     activeOffer = {
       id: top.id,
       title: top.title,
@@ -49,12 +83,15 @@ function formatTurf(t) {
       discountType: top.discountType,
       discountValue: val,
       discountLabel,
-      offerPrice,
-      saving: Math.max(0, baseRate - offerPrice),
+      offerPrice: qualifiesForGeneralPrice ? calculatedOfferPrice : null,
+      saving: qualifiesForGeneralPrice ? Math.max(0, baseRate - calculatedOfferPrice) : 0,
       scope: top.scope,
       startDate: top.startDate,
       endDate: top.endDate,
+      applicableSlots: Array.isArray(top.applicableSlots) ? top.applicableSlots : [],
+      weekdays: Array.isArray(top.weekdays) ? top.weekdays : [],
       bannerUrl: top.bannerUrl || null,
+      qualifiesForGeneralPrice,
     };
   }
 
@@ -364,29 +401,28 @@ const turfController = {
   async getTurfById(req, res) {
     try {
       const { turfId } = req.params;
+      const bypassCache = req.query.refresh === 'true' || req.headers['cache-control'] === 'no-cache';
       const cacheKey = `turf:${turfId}`;
 
-      const cached = await cacheService.get(cacheKey);
-      if (cached) {
-        return sendSuccess(res, { turf: cached });
-      }
-
-      const turf = await prisma.turf.findUnique({
-        where: { id: turfId },
-        include: {
-          offers: {
-            where: { status: 'active' },
-          },
-        },
-      });
-
+      let turf = !bypassCache ? await cacheService.get(cacheKey) : null;
       if (!turf) {
-        return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+        turf = await prisma.turf.findUnique({
+          where: { id: turfId },
+          include: {
+            offers: {
+              where: { status: 'active' },
+            },
+          },
+        });
+
+        if (!turf) {
+          return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+        }
+
+        await cacheService.set(cacheKey, turf, 30);
       }
 
       const formatted = formatTurf(turf);
-      await cacheService.set(cacheKey, formatted, 300);
-
       return sendSuccess(res, { turf: formatted });
     } catch (err) {
       console.error('getTurfById error:', err);

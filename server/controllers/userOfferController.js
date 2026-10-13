@@ -1,6 +1,13 @@
 const prisma = require('../config/prisma');
 const { sendSuccess, sendError } = require('../utils/response');
 
+function getLocalDateStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function formatPublicOffer(offer) {
   if (!offer) return null;
   const turf = offer.turf || {};
@@ -8,19 +15,15 @@ function formatPublicOffer(offer) {
   const discountType = offer.discountType;
   const discountValue = Number(offer.discountValue);
 
-  let discountedPrice = baseRate;
-  let discountLabel = '';
-  let saving = 0;
+  const isPct = discountType === 'percentage';
+  const discountLabel = isPct ? `${Math.round(discountValue)}% OFF` : `₹${Math.round(discountValue)}/hr`;
+  const calculatedOfferPrice = isPct
+    ? Math.max(1, Math.round((baseRate * (100 - discountValue)) / 100))
+    : Math.max(1, Math.round(discountValue));
 
-  if (discountType === 'percentage') {
-    discountedPrice = Math.max(1, Math.round((baseRate * (100 - discountValue)) / 100));
-    discountLabel = `${Math.round(discountValue)}% OFF`;
-    saving = Math.round(baseRate - discountedPrice);
-  } else {
-    discountedPrice = Math.max(1, Math.round(discountValue));
-    discountLabel = `₹${discountedPrice}/hr`;
-    saving = Math.max(0, Math.round(baseRate - discountedPrice));
-  }
+  const qualifiesForGeneralPrice = offer.scope !== 'slot';
+  const discountedPrice = qualifiesForGeneralPrice ? calculatedOfferPrice : null;
+  const saving = qualifiesForGeneralPrice ? Math.max(0, Math.round(baseRate - calculatedOfferPrice)) : 0;
 
   const rawImages = Array.isArray(turf.images) && turf.images.length > 0
     ? turf.images
@@ -37,6 +40,7 @@ function formatPublicOffer(offer) {
     discountLabel,
     originalPrice: baseRate,
     discountedPrice,
+    offerPrice: discountedPrice,
     saving,
     scope: offer.scope,
     startDate: offer.startDate,
@@ -45,6 +49,7 @@ function formatPublicOffer(offer) {
     weekdays: Array.isArray(offer.weekdays) ? offer.weekdays : [],
     bannerUrl: offer.bannerUrl || null,
     status: offer.status,
+    qualifiesForGeneralPrice,
     turf: {
       id: turf.id,
       _id: turf.id,
@@ -70,7 +75,7 @@ const userOfferController = {
    */
   async getAllActiveOffers(req, res) {
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getLocalDateStr();
       const includeUpcoming = req.query.includeUpcoming === 'true';
 
       const whereClause = {
@@ -117,7 +122,24 @@ const userOfferController = {
         ],
       });
 
-      const formatted = offers.map(formatPublicOffer);
+      const now = new Date();
+      const dayNum = now.getDay();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayName = dayNames[dayNum];
+
+      const validOffers = offers.filter((o) => {
+        if (!includeUpcoming && o.scope === 'weekdays') {
+          const wds = Array.isArray(o.weekdays) ? o.weekdays : [];
+          return wds.some((w) => {
+            if (typeof w === 'number') return w === dayNum;
+            const str = String(w).trim().toLowerCase();
+            return str === todayName || str === String(dayNum);
+          });
+        }
+        return true;
+      });
+
+      const formatted = validOffers.map(formatPublicOffer);
 
       return sendSuccess(res, {
         count: formatted.length,
@@ -136,7 +158,7 @@ const userOfferController = {
   async getTurfOffers(req, res) {
     try {
       const { turfId } = req.params;
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getLocalDateStr();
 
       const offers = await prisma.offer.findMany({
         where: {
@@ -157,9 +179,26 @@ const userOfferController = {
         orderBy: { createdAt: 'desc' },
       });
 
+      const now = new Date();
+      const dayNum = now.getDay();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayName = dayNames[dayNum];
+
+      const validOffers = offers.filter((o) => {
+        if (o.scope === 'weekdays') {
+          const wds = Array.isArray(o.weekdays) ? o.weekdays : [];
+          return wds.some((w) => {
+            if (typeof w === 'number') return w === dayNum;
+            const str = String(w).trim().toLowerCase();
+            return str === todayName || str === String(dayNum);
+          });
+        }
+        return true;
+      });
+
       return sendSuccess(res, {
         turfId,
-        offers: offers.map(formatPublicOffer),
+        offers: validOffers.map(formatPublicOffer),
       });
     } catch (err) {
       console.error('userOfferController.getTurfOffers error:', err);

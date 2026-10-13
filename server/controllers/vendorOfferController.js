@@ -1,6 +1,17 @@
 const prisma = require('../config/prisma');
 const storageService = require('../services/storageService');
+const cacheService = require('../services/cacheService');
 const { sendSuccess, sendError } = require('../utils/response');
+
+/**
+ * Format local date as YYYY-MM-DD avoiding UTC timezone shifts
+ */
+function getLocalDateStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 /**
  * Helper to compute real-time dynamic status:
@@ -11,7 +22,7 @@ const { sendSuccess, sendError } = require('../utils/response');
  */
 function computeDynamicStatus(offer) {
   if (offer.status === 'paused') return 'paused';
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getLocalDateStr();
   const startStr = String(offer.startDate).slice(0, 10);
   const endStr = String(offer.endDate).slice(0, 10);
 
@@ -109,13 +120,16 @@ const vendorOfferController = {
       }
 
       const startDate = (data.startDate || '').slice(0, 10);
-      const endDate = (data.endDate || data.startDate || '').slice(0, 10);
+      let endDate = (data.endDate || data.startDate || '').slice(0, 10);
+      if (scope === 'day' || scope === 'slot') {
+        endDate = startDate;
+      }
 
       if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
         return sendError(res, 'Valid start date and end date (YYYY-MM-DD) are required', 400, 'INVALID_DATES');
       }
 
-      if (startDate > endDate) {
+      if (scope !== 'day' && scope !== 'slot' && startDate > endDate) {
         return sendError(res, 'Start date cannot be after end date', 400, 'INVALID_DATE_RANGE');
       }
 
@@ -212,6 +226,15 @@ const vendorOfferController = {
           status: 'active',
         },
       });
+
+      // Invalidate turf and slot caches so user app sees the new offer immediately
+      try {
+        await cacheService.del(`turf:${turfId}`);
+        await cacheService.invalidatePattern('turf*');
+        await cacheService.invalidateSlots(turfId);
+      } catch (cacheErr) {
+        console.warn('Cache invalidation warning on createOffer:', cacheErr.message);
+      }
 
       return sendSuccess(res, {
         message: 'Offer created successfully',
@@ -340,10 +363,23 @@ const vendorOfferController = {
         updateData.scope = scope;
       }
 
+      const activeScope = updateData.scope || offer.scope;
+
       if (data.startDate !== undefined) updateData.startDate = String(data.startDate).slice(0, 10);
       if (data.endDate !== undefined) updateData.endDate = String(data.endDate).slice(0, 10);
 
-      if (updateData.startDate && updateData.endDate && updateData.startDate > updateData.endDate) {
+      if (activeScope === 'day' || activeScope === 'slot') {
+        if (updateData.startDate) {
+          updateData.endDate = updateData.startDate;
+        } else if (updateData.endDate && !updateData.startDate) {
+          updateData.startDate = updateData.endDate;
+        }
+      }
+
+      const effStart = updateData.startDate || offer.startDate;
+      const effEnd = updateData.endDate || offer.endDate;
+
+      if (activeScope !== 'day' && activeScope !== 'slot' && effStart && effEnd && effStart > effEnd) {
         return sendError(res, 'Start date cannot be after end date', 400, 'INVALID_DATE_RANGE');
       }
 
@@ -378,6 +414,14 @@ const vendorOfferController = {
         where: { id: offerId },
         data: updateData,
       });
+
+      try {
+        await cacheService.del(`turf:${turfId}`);
+        await cacheService.invalidatePattern('turf*');
+        await cacheService.invalidateSlots(turfId);
+      } catch (cacheErr) {
+        console.warn('Cache invalidation warning on updateOffer:', cacheErr.message);
+      }
 
       return sendSuccess(res, {
         message: 'Offer updated successfully',
@@ -421,6 +465,14 @@ const vendorOfferController = {
         data: { status: nextStatus },
       });
 
+      try {
+        await cacheService.del(`turf:${turfId}`);
+        await cacheService.invalidatePattern('turf*');
+        await cacheService.invalidateSlots(turfId);
+      } catch (cacheErr) {
+        console.warn('Cache invalidation warning on toggleOfferStatus:', cacheErr.message);
+      }
+
       return sendSuccess(res, {
         message: `Offer ${nextStatus === 'active' ? 'resumed' : 'paused'} successfully`,
         offer: formatOffer(updated),
@@ -455,6 +507,14 @@ const vendorOfferController = {
       await prisma.offer.delete({
         where: { id: offerId },
       });
+
+      try {
+        await cacheService.del(`turf:${turfId}`);
+        await cacheService.invalidatePattern('turf*');
+        await cacheService.invalidateSlots(turfId);
+      } catch (cacheErr) {
+        console.warn('Cache invalidation warning on deleteOffer:', cacheErr.message);
+      }
 
       return sendSuccess(res, {
         message: 'Offer deleted successfully',

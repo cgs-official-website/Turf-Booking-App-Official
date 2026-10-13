@@ -64,6 +64,43 @@ function getDisplayDistance(turf, userCoords) {
   return 'Location unavailable';
 }
 
+function isOfferCurrentlyLive(turf) {
+  if (!turf) return false;
+  const offer = turf.activeOffer;
+  if (!offer && !turf.hasOffer) return false;
+
+  if (offer) {
+    if (offer.status && offer.status !== 'active') return false;
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    const startStr = String(offer.startDate || '').slice(0, 10);
+    const endStr = String(offer.endDate || offer.startDate || '').slice(0, 10);
+
+    if (startStr && todayStr < startStr) return false;
+    if (endStr && todayStr > endStr) return false;
+
+    if (offer.scope === 'weekdays' && Array.isArray(offer.weekdays) && offer.weekdays.length > 0) {
+      const dayNum = now.getDay();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayName = dayNames[dayNum];
+      const match = offer.weekdays.some((w) => {
+        if (typeof w === 'number') return w === dayNum;
+        const str = String(w).trim().toLowerCase();
+        return str === todayName || str === String(dayNum);
+      });
+      if (!match) return false;
+    }
+    return true;
+  }
+
+  return Boolean(turf.hasOffer);
+}
+
 export default function TurfCard({
   turf,
   onPress,
@@ -89,9 +126,11 @@ export default function TurfCard({
   const count = turf.rating?.count ?? turf.reviewsCount ?? 0;
   const sports = turf.sportTypes || turf.sports || [];
   const distance = getDisplayDistance(turf, userCoords);
-  const hasOffer = Boolean(turf.hasOffer || turf.activeOffer);
-  const activeOffer = turf.activeOffer || null;
-  const offerPrice = turf.offerPrice ?? (activeOffer ? activeOffer.offerPrice : null);
+
+  const isValidOffer = isOfferCurrentlyLive(turf);
+  const hasOffer = isValidOffer;
+  const activeOffer = isValidOffer ? (turf.activeOffer || null) : null;
+  const offerPrice = isValidOffer && turf.offerPrice ? Number(turf.offerPrice) : (isValidOffer && activeOffer?.offerPrice ? Number(activeOffer.offerPrice) : null);
   const offerBadgeText = turf.offerDiscount || activeOffer?.discountLabel || 'OFFER';
 
   if (variant === 'featured') {
@@ -103,7 +142,8 @@ export default function TurfCard({
           styles.featuredCard,
           {
             backgroundColor: dark ? '#131E2F' : '#FFFFFF',
-            borderColor: hasOffer ? (dark ? '#BE123C' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
+            borderColor: hasOffer ? (dark ? '#E11D48' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
+            borderWidth: hasOffer ? 1.5 : 1,
           },
           SHADOW.card,
           style,
@@ -178,11 +218,11 @@ export default function TurfCard({
             </View>
 
             <View style={styles.priceRow}>
-              {hasOffer && offerPrice && (
+              {hasOffer && offerPrice && offerPrice < price ? (
                 <Text style={[styles.originalPriceStrikethrough, { color: C.subtext }]}>₹{price}</Text>
-              )}
-              <Text style={[styles.priceNumber, { color: hasOffer ? '#E11D48' : C.primary }]}>
-                ₹{hasOffer && offerPrice ? offerPrice : price}
+              ) : null}
+              <Text style={[styles.priceNumber, { color: (hasOffer && offerPrice && offerPrice < price) ? '#E11D48' : C.primary }]}>
+                ₹{hasOffer && offerPrice && offerPrice < price ? offerPrice : price}
               </Text>
               <Text style={[styles.priceUnit, { color: C.subtext }]}>/hr</Text>
             </View>
@@ -200,7 +240,8 @@ export default function TurfCard({
         styles.verticalCard,
         {
           backgroundColor: dark ? '#131E2F' : '#FFFFFF',
-          borderColor: hasOffer ? (dark ? 'rgba(225,29,72,0.45)' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
+          borderColor: hasOffer ? (dark ? 'rgba(225,29,72,0.6)' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
+          borderWidth: hasOffer ? 1.5 : 1,
         },
         SHADOW.subtle,
         style,
@@ -257,11 +298,11 @@ export default function TurfCard({
           </View>
 
           <View style={styles.priceRow}>
-            {hasOffer && offerPrice && (
+            {hasOffer && offerPrice && offerPrice < price ? (
               <Text style={[styles.originalPriceStrikethroughSmall, { color: C.subtext }]}>₹{price}</Text>
-            )}
-            <Text style={[styles.priceNumberSmall, { color: hasOffer ? '#E11D48' : C.primary }]}>
-              ₹{hasOffer && offerPrice ? offerPrice : price}
+            ) : null}
+            <Text style={[styles.priceNumberSmall, { color: (hasOffer && offerPrice && offerPrice < price) ? '#E11D48' : C.primary }]}>
+              ₹{hasOffer && offerPrice && offerPrice < price ? offerPrice : price}
             </Text>
             <Text style={[styles.priceUnit, { color: C.subtext }]}>/hr</Text>
           </View>
