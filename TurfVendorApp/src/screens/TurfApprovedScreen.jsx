@@ -14,11 +14,15 @@ import { acknowledgeTurfApproval } from '../redux/authSlice';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const approvalIllustration = require('../assets/turf-approved-illustration.png');
 
-function formatApprovalDate(dateStr) {
+/**
+ * Format vendor account approval timestamp to readable date & time (e.g., "6 Oct 2026, 4:17 PM").
+ * Uses local device timezone for correct local time representation.
+ * Returns "Not available" if the timestamp is missing or invalid.
+ */
+function formatApprovalDateTime(dateStr) {
   if (!dateStr) return 'Not available';
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return 'Not available';
@@ -39,9 +43,7 @@ function formatApprovalDate(dateStr) {
 
 export default function TurfApprovedScreen({ navigation }) {
   const dispatch = useDispatch();
-  const turfInfo = useSelector((s) => s.auth.turfInfo);
   const vendor = useSelector((s) => s.auth.vendor);
-  const turfStatus = useSelector((s) => s.auth.turfStatus);
 
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors, isDark);
@@ -65,29 +67,12 @@ export default function TurfApprovedScreen({ navigation }) {
     }
   };
 
-  const rawApprovalDate = turfInfo?.reviewedAt || vendor?.reviewedAt;
-  const approvalDate = formatApprovalDate(rawApprovalDate);
+  // Vendor account approval timestamp from Superadmin review
+  const accountApprovalDate = vendor?.reviewedAt || null;
+  const approvalDateTimeFormatted = formatApprovalDateTime(accountApprovalDate);
 
-  const isApproved =
-    turfStatus === 'active' ||
-    turfInfo?.status === 'active' ||
-    vendor?.kycStatus === 'approved';
-
-  const turfName =
-    turfInfo?.name ||
-    vendor?.turfName ||
-    vendor?.businessName ||
-    vendor?.name ||
-    'Turf Facility';
-
-  const locationCity =
-    turfInfo?.city ||
-    turfInfo?.location?.city ||
-    (typeof turfInfo?.location?.address === 'string' ? turfInfo.location.address : null) ||
-    vendor?.city ||
-    null;
-
-  const genuineCode = turfInfo?.code || vendor?.vendorCode || null;
+  // Status confirmed only if Superadmin approved the vendor account
+  const isAccountApproved = vendor?.kycStatus === 'approved';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -129,60 +114,35 @@ export default function TurfApprovedScreen({ navigation }) {
           <Text style={styles.pillText}>APPROVED BY ADMIN</Text>
         </View>
 
-        {/* Information Card */}
+        {/* Information Card (Vendor Account Approval Details) */}
         <View style={[styles.card, SHADOWS.sm]}>
-          {/* Row 1: Turf Name */}
+          {/* Row 1: Approval Date & Time */}
           <View style={styles.cardRow}>
             <View style={styles.iconCircle}>
-              <Ionicons name="storefront" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowLabel}>Turf Name</Text>
-              <View style={styles.nameRow}>
-                <Text style={styles.turfName} numberOfLines={1}>
-                  {turfName}
-                </Text>
-                {!!genuineCode && (
-                  <View style={styles.codeBadge}>
-                    <Text style={styles.codeBadgeText}>{genuineCode}</Text>
-                  </View>
-                )}
-              </View>
-              {!!locationCity && (
-                <View style={styles.locationRow}>
-                  <Feather name="map-pin" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {locationCity}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Row 2: Approval Date */}
-          <View style={styles.cardRow}>
-            <View style={styles.iconCircle}>
-              <Feather name="calendar" size={19} color={colors.primary} />
+              <Feather name="calendar" size={20} color={colors.primary} />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Approval Date</Text>
-              <Text style={styles.rowValue}>{approvalDate}</Text>
+              <Text style={styles.rowValue}>{approvalDateTimeFormatted}</Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
-          {/* Row 3: Admin Review Status */}
+          {/* Row 2: Admin Review Status */}
           <View style={styles.cardRow}>
             <View style={styles.iconCircle}>
-              <Feather name="check-circle" size={19} color={colors.primary} />
+              <Feather name="check-circle" size={20} color={colors.primary} />
             </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowLabel}>Admin Review Status</Text>
-              <Text style={[styles.rowValue, { color: isApproved ? colors.primary : colors.warning }]}>
-                {isApproved ? 'Completed' : 'Under Review'}
+              <Text
+                style={[
+                  styles.rowValue,
+                  { color: isAccountApproved ? colors.primary : colors.warning },
+                ]}
+              >
+                {isAccountApproved ? 'Completed' : 'Under Review'}
               </Text>
             </View>
           </View>
@@ -274,7 +234,7 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 6,
-    marginBottom: 20,
+    marginBottom: 22,
     borderWidth: 1,
     borderColor: isDark ? 'rgba(15, 118, 110, 0.4)' : '#B2DFDB',
   },
@@ -288,8 +248,9 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: SIZES.radiusLg,
-    padding: 18,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    marginBottom: 28,
     backgroundColor: colors.card,
   },
   cardRow: {
@@ -312,40 +273,7 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
-    marginBottom: 2,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  turfName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.text,
-    flexShrink: 1,
-  },
-  codeBadge: {
-    backgroundColor: colors.primary + '15',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginLeft: 8,
-  },
-  codeBadgeText: {
-    color: colors.primary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 3,
-  },
-  locationText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
+    marginBottom: 3,
   },
   rowValue: {
     fontSize: 15,
@@ -355,7 +283,7 @@ const getStyles = (colors, isDark) => StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border,
-    marginVertical: 14,
+    marginVertical: 16,
   },
   continueBtn: {
     flexDirection: 'row',

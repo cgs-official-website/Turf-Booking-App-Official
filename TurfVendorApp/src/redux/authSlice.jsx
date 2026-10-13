@@ -419,11 +419,17 @@ const authSlice = createSlice({
         state.turfInfo = turf || { name: vendor.turfName || vendor.businessName || vendor.name };
 
         if (state.vendor) {
-          state.vendor.hasCompletedTurfOnboarding = true;
-          state.vendor.turfOnboardingComplete = true;
+          state.vendor = {
+            ...state.vendor,
+            ...(payload.vendor || {}),
+            hasCompletedTurfOnboarding: true,
+            turfOnboardingComplete: true,
+          };
           if (isApproved) {
             state.vendor.kycStatus = 'approved';
           }
+        } else if (payload.vendor) {
+          state.vendor = payload.vendor;
         }
 
         if (state.turfStatus === 'pending') {
