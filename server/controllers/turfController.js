@@ -1,5 +1,3 @@
-
-Turfcontroller · JS
 const prisma = require('../config/prisma');
 const bookingService = require('../services/bookingService');
 const cacheService = require('../services/cacheService');
@@ -571,5 +569,3 @@ const turfController = {
 };
 
 module.exports = turfController;
- 
-Claude finished the response
