@@ -2,6 +2,7 @@ const prisma = require('../config/prisma');
 const bookingService = require('../services/bookingService');
 const cacheService = require('../services/cacheService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
+const { getChunkPrice, getHourlyRate } = require('../utils/pricing');
 
 /**
  * Standardize turf entity shape across UserApp, VendorApp, and AdminPanel
@@ -75,10 +76,10 @@ function formatTurf(t) {
     closingTime: to12h(cfg.closeTime || '23:00'),
     slotDuration: String(cfg.slotDurationMins || 60),
     basePrice: baseRate,
-    eveningPrice: pricing.evening,
-    weekendPrice: pricing.weekend,
-    weekendEveningPrice: pricing.weekendEvening,
-    ballPrice: pricing.ball,
+    eveningPrice: pricing.evening || null,
+    weekendPrice: pricing.weekend || null,
+    weekendEveningPrice: pricing.weekendEvening || null,
+    ballPrice: pricing.ball || null,
     amenities: Array.isArray(t.amenities) ? t.amenities : [],
     slotConfig: t.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 },
     rejectionReason: t.rejectionReason || null,
@@ -373,7 +374,6 @@ const turfController = {
       }
 
       const slotConfig = turf.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 };
-      const baseRate = Number(turf.pricePerHour ?? turf.price ?? 500);
 
       // Read slot overrides from Postgres slot_overrides table
       let slotOverrides = { blockedSlots: [], priceOverrides: {} };
@@ -397,7 +397,7 @@ const turfController = {
       const slots = [];
       const [openH, openM] = (slotConfig.openTime || '06:00').split(':').map(Number);
       const [closeH, closeM] = (slotConfig.closeTime || '23:00').split(':').map(Number);
-      const duration = slotConfig.slotDurationMins || 60;
+      const duration = Number(slotConfig.slotDurationMins) || 60;
 
       let current = new Date();
       current.setHours(openH, openM, 0, 0);
@@ -422,12 +422,10 @@ const turfController = {
         }).length;
         const isBooked = bookedCourts >= courtCount;
 
-        let price = baseRate;
-        if (slotOverrides.priceOverrides && slotOverrides.priceOverrides[slotKey]) {
-          price = Number(slotOverrides.priceOverrides[slotKey]);
-        } else if (slotOverrides.priceOverrides && slotOverrides.priceOverrides[startTime]) {
-          price = Number(slotOverrides.priceOverrides[startTime]);
-        }
+        // Price of THIS slot: evening / weekend / base rate (or the vendor's per-slot override),
+        // scaled to the slot length so 30-minute slots cost half of the hourly rate.
+        const price = Math.round(getChunkPrice(turf, date, startTime, endTime, slotOverrides.priceOverrides));
+        const rate = Math.round(getHourlyRate(turf, date, startTime));
 
         slots.push({
           slotKey,
@@ -436,6 +434,8 @@ const turfController = {
           start: startTime,
           end: endTime,
           price,
+          rate,
+          durationMins: duration,
           available: !isBlocked && !isBooked,
           isBlocked,
           isBooked,

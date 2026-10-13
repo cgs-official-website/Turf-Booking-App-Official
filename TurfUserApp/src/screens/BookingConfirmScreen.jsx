@@ -30,7 +30,9 @@ export default function BookingConfirmScreen({ route, navigation }) {
   const turfId = turfData?._id || turfData?.id;
   const durationHours = Number(route.params?.duration || 1);
   const hourlyRate = Number(turfData?.pricePerHour ?? turfData?.price ?? turfData?.pricing?.baseRate ?? 500);
-  const total = hourlyRate * durationHours;
+  // Total comes from the slot picker (evening / weekend / 30-minute pricing already applied).
+  const pickedTotal = Number(route.params?.totalPrice);
+  const total = Number.isFinite(pickedTotal) && pickedTotal > 0 ? pickedTotal : hourlyRate * durationHours;
   const perPerson = Math.round(total / (players || 1));
   const rawImage = turfData?.images?.[0] || turfData?.image;
   const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;

@@ -1128,17 +1128,34 @@ const vendorController = {
       const duration = toNumberOrUndefined(data.slotDuration ?? data.slotDurationMins);
       if (duration) { cfg.slotDurationMins = duration; cfgChanged = true; }
 
-      const priceInput = {
-        base: toNumberOrUndefined(data.basePrice ?? data.pricePerHour ?? data.price),
-        evening: toNumberOrUndefined(data.eveningPrice),
-        weekend: toNumberOrUndefined(data.weekendPrice),
-        weekendEvening: toNumberOrUndefined(data.weekendEveningPrice),
-        ball: toNumberOrUndefined(data.ballPrice),
+      // Base price is REQUIRED (> 0). Evening / weekend / weekend-evening / ball add-on are OPTIONAL:
+      // sending a blank / null / 0 clears that price, and the turf falls back to the base price.
+      const baseRaw = data.basePrice ?? data.pricePerHour ?? data.price;
+      const baseInput = toNumberOrUndefined(baseRaw);
+      if (baseRaw !== undefined && !(baseInput > 0)) {
+        return sendError(res, 'Base price is required and must be greater than 0', 400, 'INVALID_BASE_PRICE');
+      }
+      const optionalPrices = {
+        evening: 'eveningPrice',
+        weekend: 'weekendPrice',
+        weekendEvening: 'weekendEveningPrice',
+        ball: 'ballPrice',
       };
-      if (Object.values(priceInput).some((v) => v !== undefined)) {
-        cfg.pricing = { ...(prevCfg.pricing || {}) };
-        Object.entries(priceInput).forEach(([k, v]) => { if (v !== undefined) cfg.pricing[k] = v; });
-        if (priceInput.base !== undefined) updateData.pricePerHour = priceInput.base;
+      const pricing = { ...((cfg.pricing && typeof cfg.pricing === 'object') ? cfg.pricing : {}) };
+      let pricingTouched = false;
+      if (baseInput !== undefined) {
+        pricing.base = baseInput;
+        updateData.pricePerHour = baseInput;
+        pricingTouched = true;
+      }
+      Object.entries(optionalPrices).forEach(([key, field]) => {
+        if (data[field] === undefined) return; // not sent -> leave as is
+        const n = toNumberOrUndefined(data[field]);
+        if (n > 0) pricing[key] = n; else delete pricing[key];
+        pricingTouched = true;
+      });
+      if (pricingTouched) {
+        cfg.pricing = pricing;
         cfgChanged = true;
       }
       if (cfgChanged) updateData.slotConfig = cfg;

@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { query } = require('../config/db');
+const { priceForRange } = require('../utils/pricing');
 
 /**
  * Retry helper for transient DB connection errors (e.g. Railway proxy resets).
@@ -271,21 +272,14 @@ const bookingService = {
 
     const { dateObj } = validateBookingInput(payload);
     const courtNumber = resolveCourtNumber(turf, payload.courtNumber);
-    let hourlyRate = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
-
-    // Check custom price overrides for this date and slot
+    // Per-slot vendor price overrides for this date (optional)
+    let priceOverrides = null;
     try {
-      const dateStr = payload.date;
       const override = await prisma.slotOverride.findUnique({
-        where: { turfId_date: { turfId: turf.id, date: dateStr } },
+        where: { turfId_date: { turfId: turf.id, date: payload.date } },
       });
-      if (override && override.priceOverrides) {
-        const slotKey = `${payload.startTime}-${payload.endTime}`;
-        if (override.priceOverrides[slotKey] !== undefined) {
-          hourlyRate = Number(override.priceOverrides[slotKey]);
-        } else if (override.priceOverrides[payload.startTime] !== undefined) {
-          hourlyRate = Number(override.priceOverrides[payload.startTime]);
-        }
+      if (override && override.priceOverrides && typeof override.priceOverrides === 'object') {
+        priceOverrides = override.priceOverrides;
       }
     } catch (overrideErr) {
       console.warn('⚠️ Warning checking slot price override in reserveSlot:', overrideErr.message);
@@ -297,16 +291,14 @@ const bookingService = {
       payload.endTime = `${String(eh).padStart(2, '0')}:${String(sm || 0).padStart(2, '0')}`;
     }
 
-    let durationHours = 1;
-    if (payload.startTime && payload.endTime) {
-      const [sh, sm] = payload.startTime.split(':').map(Number);
-      const [eh, em] = payload.endTime.split(':').map(Number);
-      const diffMins = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
-      if (diffMins > 0) {
-        durationHours = Math.max(1, Math.round(diffMins / 60));
-      }
-    }
-    const price = hourlyRate * durationHours;
+    // Price = sum of each slot in the range, using evening / weekend / base rates.
+    const price = priceForRange({
+      turf,
+      date: String(payload.date).slice(0, 10),
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      overrides: priceOverrides,
+    });
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
     const bookingId = generateBookingId();
