@@ -75,9 +75,9 @@ const TermsScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (registrationSuccess) {
-      const email = formData?.email ? String(formData.email).trim() : '';
+      const email = formData?.email ? String(formData.email).toLowerCase().trim() : '';
       if (email) {
-        AsyncStorage.setItem('lastRegisteredVendorEmail', email).catch(() => {});
+        AsyncStorage.setItem('pendingApprovalFlowEmail', email).catch(() => {});
       }
       dispatch(clearRegistrationSuccess());
       navigation.reset({
@@ -86,6 +86,7 @@ const TermsScreen = ({ navigation, route }) => {
           name: 'Login',
           params: {
             email,
+            isNewlyRegistered: true,
             registrationSubmitted: true,
           },
         }],

@@ -76,6 +76,8 @@ export const loginVendor = createAsyncThunk(
 
       await AsyncStorage.setItem('vendorToken', data.token);
       await AsyncStorage.setItem('vendorData', JSON.stringify(data));
+      await AsyncStorage.removeItem('pendingApprovalFlowEmail');
+      await AsyncStorage.removeItem('lastRegisteredVendorEmail');
       const turfApprovalAcknowledged = await getPersistedTurfAck(vendor?._id || vendor?.uid);
       return { ...data, turfApprovalAcknowledged };
     } catch (err) {
@@ -211,6 +213,8 @@ export const logoutVendor = createAsyncThunk('auth/logout', async (_, { getState
   }
   await AsyncStorage.removeItem('vendorToken');
   await AsyncStorage.removeItem('vendorData');
+  await AsyncStorage.removeItem('pendingApprovalFlowEmail');
+  await AsyncStorage.removeItem('lastRegisteredVendorEmail');
   await setPersistedTurfAck(vendorId, false);
 });
 

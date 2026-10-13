@@ -27,10 +27,37 @@ const LoginScreen = ({ navigation, route }) => {
 
   const [statusData, setStatusData] = useState(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [isInitialRegFlow, setIsInitialRegFlow] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const handleAcknowledgeApproval = async () => {
+    try {
+      await AsyncStorage.removeItem('pendingApprovalFlowEmail');
+      await AsyncStorage.removeItem('lastRegisteredVendorEmail');
+    } catch (e) {}
+    setIsInitialRegFlow(false);
+    setStatusData(null);
+  };
 
   const fetchStatus = useCallback(async (emailToCheck, showLoading = false) => {
     const clean = (emailToCheck || '').trim().toLowerCase();
@@ -43,8 +70,11 @@ const LoginScreen = ({ navigation, route }) => {
         setStatusData({
           kycStatus: res.kycStatus,
           rejectionReason: res.rejectionReason || null,
+          name: res.name || null,
+          email: res.email || clean,
+          reviewedAt: res.reviewedAt || null,
+          createdAt: res.createdAt || null,
         });
-        AsyncStorage.setItem('lastRegisteredVendorEmail', clean).catch(() => {});
       }
     } catch (err) {
       if (err?.status === 404 || err?.code === 'ACCOUNT_NOT_FOUND') {
@@ -56,31 +86,67 @@ const LoginScreen = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    const initEmail = route?.params?.email;
-    const isRegSubmitted = route?.params?.registrationSubmitted;
+    let isMounted = true;
+    const init = async () => {
+      const initEmail = route?.params?.email;
+      const isNewlyRegistered = route?.params?.isNewlyRegistered;
+      const isRegSubmitted = route?.params?.registrationSubmitted;
 
-    if (initEmail) {
-      const clean = String(initEmail).trim();
-      setForm((prev) => ({ ...prev, email: clean }));
-      if (isRegSubmitted) {
-        setStatusData({ kycStatus: 'pending', rejectionReason: null });
+      // 1. Newly registered vendor navigated directly from registration completion
+      if (isNewlyRegistered && initEmail) {
+        const clean = String(initEmail).trim().toLowerCase();
+        if (!isMounted) return;
+        setForm((prev) => ({ ...prev, email: clean }));
+        setIsInitialRegFlow(true);
+        if (isRegSubmitted) {
+          setStatusData({
+            kycStatus: 'pending',
+            rejectionReason: null,
+            name: null,
+            email: clean,
+            reviewedAt: null,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        await AsyncStorage.setItem('pendingApprovalFlowEmail', clean).catch(() => {});
+        fetchStatus(clean, true);
+        return;
       }
-      fetchStatus(clean, true);
-    } else {
-      AsyncStorage.getItem('lastRegisteredVendorEmail').then((saved) => {
-        if (saved) {
-          setForm((prev) => (prev.email ? prev : { ...prev, email: saved }));
-          fetchStatus(saved, false);
+
+      // 2. Initial registration flow temporarily persisted in AsyncStorage
+      try {
+        const pendingEmail = await AsyncStorage.getItem('pendingApprovalFlowEmail');
+        if (pendingEmail && isMounted) {
+          const clean = String(pendingEmail).trim().toLowerCase();
+          setIsInitialRegFlow(true);
+          setForm((prev) => (prev.email ? prev : { ...prev, email: clean }));
+          fetchStatus(clean, false);
+          return;
+        }
+      } catch (e) {}
+
+      // 3. Normal existing vendor or clean login - do not show approval card
+      if (isMounted) {
+        setIsInitialRegFlow(false);
+        setStatusData(null);
+      }
+    };
+
+    init();
+    return () => {
+      isMounted = false;
+    };
+  }, [route?.params?.email, route?.params?.isNewlyRegistered, route?.params?.registrationSubmitted, fetchStatus]);
+
+  useEffect(() => {
+    if (isFocused && isInitialRegFlow && form.email) {
+      AsyncStorage.getItem('pendingApprovalFlowEmail').then((pending) => {
+        if (pending && pending.toLowerCase().trim() === form.email.toLowerCase().trim()) {
+          fetchStatus(form.email, false);
         }
       }).catch(() => {});
     }
-  }, [route?.params?.email, route?.params?.registrationSubmitted, fetchStatus]);
-
-  useEffect(() => {
-    if (isFocused && form.email) {
-      fetchStatus(form.email, false);
-    }
-  }, [isFocused, form.email, fetchStatus]);
+  }, [isFocused, isInitialRegFlow, form.email, fetchStatus]);
 
   useEffect(() => {
     if (error && isFocused) {
@@ -99,19 +165,29 @@ const LoginScreen = ({ navigation, route }) => {
         lower.includes('not approved');
 
       if (isPending) {
-        setStatusData({ kycStatus: 'pending', rejectionReason: null });
+        if (isInitialRegFlow) {
+          setStatusData((prev) => ({
+            ...prev,
+            kycStatus: 'pending',
+            rejectionReason: null,
+          }));
+        }
         Alert.alert(
           'Registration Submitted Successfully',
           'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.'
         );
       } else if (isRejected) {
-        setStatusData({
-          kycStatus: 'rejected',
-          rejectionReason: error?.rejectionReason || null,
-        });
+        if (isInitialRegFlow) {
+          setStatusData((prev) => ({
+            ...prev,
+            kycStatus: 'rejected',
+            rejectionReason: error?.rejectionReason || prev?.rejectionReason || null,
+          }));
+        }
+        const reasonText = error?.rejectionReason ? `\n\nReason: ${error.rejectionReason}` : '';
         Alert.alert(
           'Application Rejected',
-          'Your profile was rejected by Super Admin. Please review the rejection reason and contact support or update your details if the existing workflow permits it.'
+          `Your profile was rejected by Super Admin.${reasonText}\nPlease review the rejection reason and contact support or update your details if the existing workflow permits it.`
         );
       } else {
         const title = isNotFound ? 'Account Not Found' : 'Login Failed';
@@ -119,7 +195,7 @@ const LoginScreen = ({ navigation, route }) => {
       }
       dispatch(clearError());
     }
-  }, [error, isFocused, dispatch]);
+  }, [error, isFocused, isInitialRegFlow, dispatch]);
 
   const handleLogin = () => {
     if (!form.email.trim() || !form.password) {
@@ -153,8 +229,8 @@ const LoginScreen = ({ navigation, route }) => {
           </Text>
         </View>
 
-        {/* Status Card (Shown when vendor approval status is active/known) */}
-        {statusData && (
+        {/* Status Card (Shown ONLY during initial registration-to-approval flow for newly registered vendors) */}
+        {isInitialRegFlow && statusData && (
           <View
             style={[
               styles.statusCard,
@@ -238,24 +314,41 @@ const LoginScreen = ({ navigation, route }) => {
                 </Text>
               </View>
 
-              <TouchableOpacity
-                onPress={() => fetchStatus(form.email, true)}
-                disabled={checkingStatus}
-                style={[
-                  styles.statusRefreshBtn,
-                  {
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
-                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-                  },
-                ]}
-                activeOpacity={0.7}
-              >
-                {checkingStatus ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Feather name="refresh-cw" size={13} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
+              {statusData.kycStatus === 'approved' ? (
+                <TouchableOpacity
+                  onPress={handleAcknowledgeApproval}
+                  style={[
+                    styles.statusDismissBtn,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
+                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Feather name="x" size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => fetchStatus(form.email, true)}
+                  disabled={checkingStatus}
+                  style={[
+                    styles.statusRefreshBtn,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
+                      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  {checkingStatus ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Feather name="refresh-cw" size={13} color={colors.textSecondary} />
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
             <Text
@@ -278,22 +371,140 @@ const LoginScreen = ({ navigation, route }) => {
                 : 'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.'}
             </Text>
 
-            {statusData.kycStatus === 'rejected' && !!statusData.rejectionReason && (
+            {/* Approved Details Box */}
+            {statusData.kycStatus === 'approved' && (
               <View
                 style={[
-                  styles.rejectionReasonBox,
+                  styles.detailsBox,
+                  {
+                    backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : '#FFFFFF',
+                    borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#A7F3D0',
+                  },
+                ]}
+              >
+                {!!statusData.name && (
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Partner Name</Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
+                      {statusData.name}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Account Email</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
+                    {statusData.email || form.email}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Super Admin Review</Text>
+                  <View style={[styles.verifiedBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : '#D1FAE5' }]}>
+                    <Feather name="check" size={11} color="#10B981" style={{ marginRight: 4 }} />
+                    <Text style={styles.verifiedBadgeText}>Verified & Approved</Text>
+                  </View>
+                </View>
+
+                {!!statusData.reviewedAt && (
+                  <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Approval Date</Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatDate(statusData.reviewedAt)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Approved Action Button */}
+            {statusData.kycStatus === 'approved' && (
+              <TouchableOpacity
+                onPress={handleAcknowledgeApproval}
+                style={[styles.acknowledgeBtn, { backgroundColor: '#10B981' }]}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.acknowledgeBtnText}>Got it, Continue to Login</Text>
+                <Feather name="arrow-right" size={15} color="#FFFFFF" style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
+            )}
+
+            {/* Pending Details Box */}
+            {statusData.kycStatus === 'pending' && (
+              <View
+                style={[
+                  styles.detailsBox,
+                  {
+                    backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : '#FFFFFF',
+                    borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : '#FDE68A',
+                  },
+                ]}
+              >
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Account Email</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
+                    {statusData.email || form.email}
+                  </Text>
+                </View>
+
+                <View style={[styles.detailRow, !statusData.createdAt && { borderBottomWidth: 0 }]}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Review Status</Text>
+                  <View style={[styles.verifiedBadge, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.2)' : '#FEF3C7' }]}>
+                    <Feather name="clock" size={11} color="#F59E0B" style={{ marginRight: 4 }} />
+                    <Text style={[styles.verifiedBadgeText, { color: isDark ? '#FBBF24' : '#B45309' }]}>
+                      Pending Review
+                    </Text>
+                  </View>
+                </View>
+
+                {!!statusData.createdAt && (
+                  <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Submitted Date</Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatDate(statusData.createdAt)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Rejected Details Box */}
+            {statusData.kycStatus === 'rejected' && (
+              <View
+                style={[
+                  styles.detailsBox,
                   {
                     backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : '#FFFFFF',
                     borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
                   },
                 ]}
               >
-                <Text style={[styles.rejectionReasonLabel, { color: isDark ? '#F87171' : '#991B1B' }]}>
-                  Rejection Reason:
-                </Text>
-                <Text style={[styles.rejectionReasonText, { color: colors.text }]}>
-                  {statusData.rejectionReason}
-                </Text>
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Account Email</Text>
+                  <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
+                    {statusData.email || form.email}
+                  </Text>
+                </View>
+
+                <View style={[styles.detailRow, !statusData.reviewedAt && { borderBottomWidth: 0 }]}>
+                  <View style={{ flex: 1, paddingVertical: 2 }}>
+                    <Text style={[styles.detailLabel, { color: isDark ? '#F87171' : '#991B1B', marginBottom: 4 }]}>
+                      Rejection Reason:
+                    </Text>
+                    <Text style={[styles.rejectionReasonText, { color: colors.text }]}>
+                      {statusData.rejectionReason || 'No specific reason provided by Super Admin.'}
+                    </Text>
+                  </View>
+                </View>
+
+                {!!statusData.reviewedAt && (
+                  <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Reviewed On</Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatDate(statusData.reviewedAt)}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -326,10 +537,27 @@ const LoginScreen = ({ navigation, route }) => {
               value={form.email}
               onFocus={() => setFocusedField('email')}
               onBlur={() => setFocusedField(null)}
-              onChangeText={(v) => setForm({ ...form, email: v })}
+              onChangeText={(v) => {
+                setForm((prev) => ({ ...prev, email: v }));
+                if (isInitialRegFlow && statusData?.email) {
+                  if (v.trim().toLowerCase() !== statusData.email.toLowerCase()) {
+                    setIsInitialRegFlow(false);
+                    setStatusData(null);
+                  }
+                }
+              }}
             />
             {form.email.length > 0 && (
-              <TouchableOpacity onPress={() => setForm({ ...form, email: '' })} style={styles.clearBtn}>
+              <TouchableOpacity
+                onPress={() => {
+                  setForm((prev) => ({ ...prev, email: '' }));
+                  if (isInitialRegFlow) {
+                    setIsInitialRegFlow(false);
+                    setStatusData(null);
+                  }
+                }}
+                style={styles.clearBtn}
+              >
                 <Feather name="x-circle" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
@@ -604,11 +832,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  statusDismissBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   statusDesc: {
     fontSize: SIZES.xs,
     lineHeight: 18,
     marginTop: 8,
     fontWeight: '500',
+  },
+  detailsBox: {
+    marginTop: 12,
+    borderRadius: SIZES.radiusSm,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+  },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  detailValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    maxWidth: '65%',
+    textAlign: 'right',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  verifiedBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  acknowledgeBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: SIZES.radiusSm,
+  },
+  acknowledgeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.1,
   },
   rejectionReasonBox: {
     marginTop: 10,
