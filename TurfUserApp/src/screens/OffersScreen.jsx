@@ -327,7 +327,6 @@ export default function OffersScreen({ navigation }) {
                     <View style={styles.fallbackGoldenBanner}>
                       <View style={styles.fallbackTopRow}>
                         <View style={styles.fallbackTagBadge}>
-                          <Ionicons name="pricetag" size={11} color="#FFFFFF" style={{ marginRight: 5 }} />
                           <Text style={styles.fallbackTagText}>TURF DEAL</Text>
                         </View>
                         <View style={styles.fallbackDiscountPill}>
@@ -567,7 +566,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   fallbackGoldenBanner: {
-    backgroundColor: '#0F766E',
+    backgroundColor: '#062C22',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#D4AF37',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -580,25 +581,27 @@ const styles = StyleSheet.create({
   fallbackTagBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: 10,
+    backgroundColor: 'rgba(251, 191, 36, 0.18)',
+    paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: RADIUS.round,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.4)',
   },
   fallbackTagText: {
-    color: '#FFFFFF',
+    color: '#FBBF24',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
   fallbackDiscountPill: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F59E0B',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: RADIUS.round,
   },
   fallbackDiscountText: {
-    color: '#0F766E',
+    color: '#062C22',
     fontSize: 12,
     fontWeight: '900',
   },
