@@ -48,6 +48,16 @@ const WEEKDAY_OPTIONS = [
 const pad = (n) => String(n).padStart(2, '0');
 const toDateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+// "14:00" -> "2:00 PM"  (display only; the saved slot value stays 24-hour)
+const formatTime12h = (t) => {
+  const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return String(t || '');
+  const h24 = Number(m[1]) % 24;
+  const ap = h24 >= 12 ? 'PM' : 'AM';
+  const h = h24 % 12 || 12;
+  return `${h}:${m[2]} ${ap}`;
+};
+
 export default function VendorOffersModal({
   visible,
   onClose,
@@ -597,8 +607,8 @@ export default function VendorOffersModal({
                   {scope === 'day'
                     ? 'Offer Date (YYYY-MM-DD)'
                     : scope === 'slot'
-                    ? 'Date for Slots (YYYY-MM-DD)'
-                    : 'Start Date (YYYY-MM-DD)'}
+                      ? 'Date for Slots (YYYY-MM-DD)'
+                      : 'Start Date (YYYY-MM-DD)'}
                 </Text>
                 <TextInput
                   style={[
@@ -686,7 +696,7 @@ export default function VendorOffersModal({
                           onPress={() => toggleSlotSelection(slotKey)}
                         >
                           <Text style={[styles.slotChipText, { color: isSelected ? '#FFFFFF' : colors.text || '#FFFFFF' }]}>
-                            {s.startTime || s.start}
+                            {formatTime12h(s.startTime || s.start)}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -797,10 +807,10 @@ export default function VendorOffersModal({
                   dynamicStatus === 'active'
                     ? '#10B981'
                     : dynamicStatus === 'scheduled'
-                    ? '#3B82F6'
-                    : dynamicStatus === 'paused'
-                    ? '#F59E0B'
-                    : '#94A3B8';
+                      ? '#3B82F6'
+                      : dynamicStatus === 'paused'
+                        ? '#F59E0B'
+                        : '#94A3B8';
 
                 return (
                   <View
@@ -878,10 +888,10 @@ export default function VendorOffersModal({
                             {item.scope === 'date_range'
                               ? 'Date Range'
                               : item.scope === 'day'
-                              ? 'Single Day'
-                              : item.scope === 'weekdays'
-                              ? 'Weekdays'
-                              : `${item.applicableSlots?.length || 0} Slots`}
+                                ? 'Single Day'
+                                : item.scope === 'weekdays'
+                                  ? 'Weekdays'
+                                  : `${item.applicableSlots?.length || 0} Slots`}
                           </Text>
                         </View>
                       </View>

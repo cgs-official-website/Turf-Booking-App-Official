@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { sendSuccess, sendError } = require('../utils/response');
+const { formatSlotsLabel } = require('../utils/slotLabel');
 
 function getLocalDateStr(d = new Date()) {
   const y = d.getFullYear();
@@ -28,7 +29,8 @@ function formatPublicOffer(offer) {
   const scope = String(offer.scope || 'date_range').toLowerCase();
   if (scope === 'slot') {
     const slots = Array.isArray(offer.applicableSlots) ? offer.applicableSlots : [];
-    eligibleSlotLabel = slots.length > 0 ? `Slots: ${slots.slice(0, 3).join(', ')}${slots.length > 3 ? '...' : ''}` : 'Specific Slots';
+    const slotText = formatSlotsLabel(slots, 3);
+    eligibleSlotLabel = slotText ? `Slots: ${slotText}` : 'Specific Slots';
   } else if (scope === 'day') {
     eligibleSlotLabel = 'All Slots Today';
   } else if (scope === 'weekdays') {

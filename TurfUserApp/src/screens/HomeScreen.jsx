@@ -578,34 +578,35 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* ── Premium Dark-Green-and-Gold "Golden Turf Deals" Promotional Banner ── */}
+          {/* ── Turf Deals Promotional Banner ── */}
           <TouchableOpacity
-            style={[styles.goldenDealsBanner, SHADOW.card]}
+            style={[styles.dealsBanner, SHADOW.card]}
             onPress={() => navigation.navigate('Offers')}
             activeOpacity={0.9}
           >
-            <View style={styles.goldenDealsHeader}>
-              <View style={styles.goldenTagPill}>
-                <Ionicons name="sparkles" size={11} color="#FBBF24" style={{ marginRight: 4 }} />
-                <Text style={styles.goldenTagText}>EXCLUSIVE DISCOUNTS</Text>
-              </View>
-              <View style={styles.goldenDealLivePill}>
-                <View style={styles.livePulseDot} />
-                <Text style={styles.goldenLiveText}>LIVE DEALS</Text>
-              </View>
-            </View>
+            <View style={styles.dealsCircleLg} />
+            <View style={styles.dealsCircleSm} />
 
-            <View style={styles.goldenDealsBody}>
-              <Text style={styles.goldenDealsHeadline}>Golden Turf Deals</Text>
-              <Text style={styles.goldenDealsDesc}>
-                Unlock exclusive verified discounts & prime match hours across top arenas.
-              </Text>
-            </View>
+            <View style={styles.dealsRow}>
+              <View style={styles.dealsTextCol}>
+                <View style={styles.dealsLivePill}>
+                  <View style={styles.dealsLiveDot} />
+                  <Text style={styles.dealsLiveText}>LIVE OFFERS</Text>
+                </View>
 
-            <View style={styles.goldenDealsFooter}>
-              <View style={styles.goldenExploreBtn}>
-                <Text style={styles.goldenExploreBtnText}>Explore Offers</Text>
-                <Feather name="arrow-right" size={13} color="#062C22" style={{ marginLeft: 5 }} />
+                <Text style={styles.dealsHeadline}>Turf Deals</Text>
+                <Text style={styles.dealsDesc}>
+                  Save on discounted slots at verified turfs near you.
+                </Text>
+
+                <View style={styles.dealsBtn}>
+                  <Text style={styles.dealsBtnText}>View Offers</Text>
+                  <Feather name="arrow-right" size={14} color="#0F766E" style={{ marginLeft: 6 }} />
+                </View>
+              </View>
+
+              <View style={styles.dealsIconWrap}>
+                <Feather name="percent" size={30} color="#FFFFFF" />
               </View>
             </View>
           </TouchableOpacity>
@@ -884,91 +885,98 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.1,
   },
-  goldenDealsBanner: {
+  dealsBanner: {
     marginHorizontal: SPACING.md || 14,
     marginTop: 14,
     borderRadius: RADIUS.xxl,
-    backgroundColor: '#062C22',
-    borderWidth: 1.5,
-    borderColor: '#D4AF37',
-    padding: 16,
+    backgroundColor: '#0F766E',
+    padding: 18,
     overflow: 'hidden',
   },
-  goldenDealsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+  dealsCircleLg: {
+    position: 'absolute',
+    right: -34,
+    top: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
-  goldenTagPill: {
+  dealsCircleSm: {
+    position: 'absolute',
+    right: 56,
+    bottom: -34,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+  },
+  dealsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(251, 191, 36, 0.18)',
+  },
+  dealsTextCol: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  dealsLivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: RADIUS.round,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.4)',
+    marginBottom: 10,
   },
-  goldenTagText: {
-    color: '#FBBF24',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  goldenDealLivePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: RADIUS.round,
-  },
-  livePulseDot: {
+  dealsLiveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 4,
+    backgroundColor: '#4ADE80',
+    marginRight: 5,
   },
-  goldenLiveText: {
-    color: '#34D399',
-    fontSize: 9,
+  dealsLiveText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
-  goldenDealsBody: {
-    marginBottom: 12,
-  },
-  goldenDealsHeadline: {
-    fontSize: 18,
+  dealsHeadline: {
+    fontSize: 22,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
-  goldenDealsDesc: {
-    fontSize: 12,
-    color: '#D1FAE5',
+  dealsDesc: {
+    fontSize: 12.5,
+    color: 'rgba(255, 255, 255, 0.85)',
     marginTop: 4,
-    lineHeight: 17,
+    lineHeight: 18,
   },
-  goldenDealsFooter: {
+  dealsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  goldenExploreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
     borderRadius: RADIUS.round,
+    marginTop: 14,
   },
-  goldenExploreBtnText: {
-    color: '#062C22',
-    fontSize: 12,
-    fontWeight: '900',
+  dealsBtnText: {
+    color: '#0F766E',
+    fontSize: 12.5,
+    fontWeight: '800',
     letterSpacing: 0.2,
+  },
+  dealsIconWrap: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sportsSection: {
     marginTop: 22,

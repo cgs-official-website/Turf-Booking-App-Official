@@ -49,12 +49,31 @@ const formatScheduleText = (offer) => {
   return 'Limited Time Deal';
 };
 
+// "14:00" -> "2 PM", "09:30" -> "9:30 AM"
+const to12hText = (t) => {
+  const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return String(t || '');
+  const h24 = Number(m[1]) % 24;
+  const min = m[2];
+  const ap = h24 >= 12 ? 'PM' : 'AM';
+  const h = h24 % 12 || 12;
+  return min === '00' ? `${h} ${ap}` : `${h}:${min} ${ap}`;
+};
+
+const formatSlotRange12h = (slot) => {
+  const [a, b] = String(slot).split('-');
+  return b ? `${to12hText(a)} – ${to12hText(b)}` : to12hText(a);
+};
+
 const formatEligibleSlotsText = (offer) => {
   if (offer.eligibleSlotLabel) return offer.eligibleSlotLabel;
   const scope = String(offer.scope || 'date_range').toLowerCase();
   if (scope === 'slot') {
     const slots = Array.isArray(offer.applicableSlots) ? offer.applicableSlots : [];
-    return slots.length > 0 ? `Slots: ${slots.slice(0, 3).join(', ')}${slots.length > 3 ? '...' : ''}` : 'Specific Slots';
+    const sorted = [...slots].sort();
+    return sorted.length > 0
+      ? `Slots: ${sorted.slice(0, 3).map(formatSlotRange12h).join(', ')}${sorted.length > 3 ? '...' : ''}`
+      : 'Specific Slots';
   }
   if (scope === 'day') {
     return 'All Slots Today';
@@ -168,13 +187,13 @@ export default function OffersScreen({ navigation }) {
   };
 
   const handleViewTurf = (offer) => {
-    if (!offer.turf) return;
+    const turfId = offer.turfId || offer.turf?.id || offer.turf?._id;
+    if (!turfId) return;
     navigation.navigate('TurfDetail', {
-      turf: {
-        ...offer.turf,
-        id: offer.turfId,
-        _id: offer.turfId,
-      },
+      id: turfId,
+      turf: offer.turf
+        ? { ...offer.turf, id: turfId, _id: turfId }
+        : undefined,
     });
   };
 
@@ -308,8 +327,8 @@ export default function OffersScreen({ navigation }) {
                     <View style={styles.fallbackGoldenBanner}>
                       <View style={styles.fallbackTopRow}>
                         <View style={styles.fallbackTagBadge}>
-                          <Ionicons name="sparkles" size={11} color="#FBBF24" style={{ marginRight: 4 }} />
-                          <Text style={styles.fallbackTagText}>GOLDEN TURF DEAL</Text>
+                          <Ionicons name="pricetag" size={11} color="#FFFFFF" style={{ marginRight: 5 }} />
+                          <Text style={styles.fallbackTagText}>TURF DEAL</Text>
                         </View>
                         <View style={styles.fallbackDiscountPill}>
                           <Text style={styles.fallbackDiscountText}>{item.discountLabel}</Text>
@@ -548,9 +567,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   fallbackGoldenBanner: {
-    backgroundColor: '#062C22',
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#D4AF37',
+    backgroundColor: '#0F766E',
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -563,27 +580,25 @@ const styles = StyleSheet.create({
   fallbackTagBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(251, 191, 36, 0.18)',
-    paddingHorizontal: 9,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: RADIUS.round,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.4)',
   },
   fallbackTagText: {
-    color: '#FBBF24',
+    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
   fallbackDiscountPill: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: RADIUS.round,
   },
   fallbackDiscountText: {
-    color: '#062C22',
+    color: '#0F766E',
     fontSize: 12,
     fontWeight: '900',
   },

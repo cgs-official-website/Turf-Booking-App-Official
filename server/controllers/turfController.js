@@ -3,6 +3,7 @@ const bookingService = require('../services/bookingService');
 const cacheService = require('../services/cacheService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getChunkPrice, getHourlyRate, resolveBestOffer } = require('../utils/pricing');
+const { formatSlotsLabel } = require('../utils/slotLabel');
 
 /**
  * Standardize turf entity shape across UserApp, VendorApp, and AdminPanel
@@ -79,7 +80,8 @@ function formatTurf(t) {
     const scope = String(top.scope || 'date_range').toLowerCase();
     if (scope === 'slot') {
       const slots = Array.isArray(top.applicableSlots) ? top.applicableSlots : [];
-      eligibleSlotLabel = slots.length > 0 ? `Slots: ${slots.slice(0, 2).join(', ')}${slots.length > 2 ? '...' : ''}` : 'Specific Slots';
+      const slotText = formatSlotsLabel(slots, 2);
+      eligibleSlotLabel = slotText ? `Slots: ${slotText}` : 'Specific Slots';
     } else if (scope === 'day') {
       eligibleSlotLabel = 'All Slots Today';
     } else if (scope === 'weekdays') {
