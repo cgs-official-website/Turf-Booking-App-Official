@@ -33,6 +33,9 @@ router.delete('/turfs/:turfId', adminController.deleteTurfAdmin);
 // Platform Bookings, Matches & Reviews Monitoring
 router.get('/bookings', adminController.getAllBookings);
 router.get('/matches', adminController.getAllMatches);
+router.post('/matches', adminController.createAdminMatch);
+router.patch('/matches/:id', adminController.updateAdminMatch);
+router.delete('/matches/:id', adminController.deleteAdminMatch);
 router.get('/reviews', adminController.getAllReviews);
 
 // Issue Reports & Support

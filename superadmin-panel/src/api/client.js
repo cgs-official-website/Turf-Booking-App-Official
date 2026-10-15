@@ -147,6 +147,26 @@ class AdminApiClient {
     return this.request(`/admin/matches${qs ? `?${qs}` : ''}`);
   }
 
+  createAdminMatch(data) {
+    return this.request('/admin/matches', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminMatch(id, data) {
+    return this.request(`/admin/matches/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteAdminMatch(id) {
+    return this.request(`/admin/matches/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   getAllReports(status, cursor) {
     const params = new URLSearchParams();
     if (status) params.set('status', status);

@@ -28,49 +28,29 @@ export const Sidebar = ({
 }) => {
   const { admin, logout } = useAuth();
 
-  const sections = [
+  const navItems = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'bookings', label: 'Live Bookings', icon: CalendarCheck },
+    { id: 'kyc', label: 'KYC & Approvals', icon: ShieldCheck, badge: pendingKycCount },
+    { id: 'turfs', label: 'All Turfs', icon: Building2 },
+    { id: 'vendors', label: 'Turf Partners', icon: UserCheck },
+    { id: 'subscriptions', label: 'Partner Plans', icon: Trophy },
+    { id: 'reviews', label: 'Turf Reviews', icon: Star },
+    { id: 'users', label: 'Players Directory', icon: Users },
+    { id: 'matches', label: 'Matches & Scores', icon: Trophy },
     {
-      title: 'MAIN',
-      items: [
-        { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-        { id: 'bookings', label: 'Live Bookings', icon: CalendarCheck },
-      ],
+      id: 'inquiries',
+      label: 'Inquiries & Leads',
+      icon: Inbox,
+      badge: pendingInquiriesCount,
+      badgeColor: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
     },
     {
-      title: 'PARTNERS & FACILITIES',
-      items: [
-        { id: 'kyc', label: 'KYC & Approvals', icon: ShieldCheck, badge: pendingKycCount },
-        { id: 'turfs', label: 'All Turfs', icon: Building2 },
-        { id: 'vendors', label: 'Turf Partners', icon: UserCheck },
-        { id: 'subscriptions', label: 'Partner Plans', icon: Trophy },
-      ],
-    },
-    {
-      title: 'COMMUNITY & FEEDBACK',
-      items: [
-        { id: 'reviews', label: 'Turf Reviews', icon: Star },
-        { id: 'users', label: 'Players Directory', icon: Users },
-        { id: 'matches', label: 'Matches & Scores', icon: Trophy },
-      ],
-    },
-    {
-      title: 'SUPPORT & LEADS',
-      items: [
-        {
-          id: 'inquiries',
-          label: 'Inquiries & Leads',
-          icon: Inbox,
-          badge: pendingInquiriesCount,
-          badgeColor: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
-        },
-        {
-          id: 'reports',
-          label: 'Issue Reports',
-          icon: AlertTriangle,
-          badge: openReportsCount,
-          badgeColor: 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
-        },
-      ],
+      id: 'reports',
+      label: 'Issue Reports',
+      icon: AlertTriangle,
+      badge: openReportsCount,
+      badgeColor: 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
     },
   ];
 
@@ -127,59 +107,50 @@ export const Sidebar = ({
           </button>
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto">
-          {sections.map((section, sIdx) => (
-            <div key={sIdx} className="space-y-1">
-              <p className="px-3 text-[10px] font-extrabold tracking-widest text-slate-400 dark:text-slate-500 uppercase">
-                {section.title}
-              </p>
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleTabClick(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group cursor-pointer ${
-                        isActive
-                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/25 font-bold scale-[1.01]'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:pl-3.5'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2.5">
-                        <div
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                            isActive
-                              ? 'bg-white/20 text-white'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
-                          }`}
-                        >
-                          <Icon size={14} className={isActive ? 'text-white' : ''} />
-                        </div>
-                        <span className="tracking-tight">{item.label}</span>
-                      </div>
+        {/* Navigation Items */}
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleTabClick(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group cursor-pointer ${
+                  isActive
+                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/25 font-bold scale-[1.01]'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:pl-3.5'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
+                    }`}
+                  >
+                    <Icon size={14} className={isActive ? 'text-white' : ''} />
+                  </div>
+                  <span className="tracking-tight">{item.label}</span>
+                </div>
 
-                      {item.badge > 0 ? (
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shadow-2xs ${
-                            isActive
-                              ? 'bg-white text-emerald-700'
-                              : item.badgeColor || 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      ) : isActive ? (
-                        <ChevronRight size={13} className="text-white/70" />
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                {item.badge > 0 ? (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shadow-2xs ${
+                      isActive
+                        ? 'bg-white text-emerald-700'
+                        : item.badgeColor || 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                ) : isActive ? (
+                  <ChevronRight size={13} className="text-white/70" />
+                ) : null}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Admin Profile & Logout Footer */}

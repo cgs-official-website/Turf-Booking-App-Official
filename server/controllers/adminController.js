@@ -356,14 +356,14 @@ const adminController = {
 
   /**
    * GET /api/v1/admin/matches
-   * Monitor all community matches & live scorecards
+   * Monitor all community matches & live scorecards with enriched player details
    */
   async getAllMatches(req, res) {
-    const { status, limit = 50 } = req.query;
+    const { status, limit = 100 } = req.query;
 
     try {
       const where = {};
-      if (status) where.status = status;
+      if (status && status !== 'all') where.status = status;
 
       const matches = await prisma.match.findMany({
         where,
@@ -372,10 +372,250 @@ const adminController = {
         take: Number(limit),
       });
 
-      return sendPaginated(res, matches, null, { count: matches.length });
+      // Gather all player IDs to fetch registered user profiles
+      const allUserIds = new Set();
+      matches.forEach((m) => {
+        if (m.createdBy) allUserIds.add(m.createdBy);
+        (m.players || []).forEach((p) => {
+          const uid = typeof p === 'string' ? p : p.userId;
+          if (uid) allUserIds.add(uid);
+        });
+      });
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: Array.from(allUserIds) } },
+        select: { id: true, name: true, phone: true },
+      });
+
+      const userMap = {};
+      users.forEach((u) => {
+        userMap[u.id] = u.name;
+      });
+
+      const formatted = matches.map((m) => {
+        const playerIds = (m.players || []).map((p) => (typeof p === 'string' ? p : p.userId));
+        const scorecard = m.scorecard && typeof m.scorecard === 'object' ? m.scorecard : {};
+        const playerNames = {};
+
+        playerIds.forEach((uid) => {
+          if (userMap[uid]) playerNames[uid] = userMap[uid];
+        });
+
+        const teamsObj = m.teams || scorecard.teams || {};
+        ['A', 'B', 'teamA', 'teamB'].forEach((key) => {
+          const t = teamsObj[key];
+          if (t && Array.isArray(t.players)) {
+            t.players.forEach((p) => {
+              if (p && typeof p === 'object' && (p.id || p.userId) && p.name) {
+                playerNames[p.id || p.userId] = p.name;
+              }
+            });
+          }
+        });
+
+        if (scorecard.playerNames) {
+          Object.assign(playerNames, scorecard.playerNames);
+        }
+
+        if (m.createdBy) {
+          playerNames[m.createdBy] = playerNames[m.createdBy] || m.creatorName || 'Host';
+        }
+
+        const innings = Array.isArray(m.innings) && m.innings.length > 0
+          ? m.innings
+          : (Array.isArray(scorecard.innings) ? scorecard.innings : []);
+
+        let currentInningsIndex = 0;
+        if (m.currentInningsIndex !== undefined && m.currentInningsIndex !== null) {
+          currentInningsIndex = Number(m.currentInningsIndex);
+        } else if (scorecard.currentInning !== undefined && scorecard.currentInning !== null) {
+          currentInningsIndex = Number(scorecard.currentInning);
+        } else if (innings.length > 1) {
+          currentInningsIndex = 1;
+        }
+
+        const resultText = m.resultText || m.result || scorecard.resultText || scorecard.result || '';
+        const overs = m.overs || scorecard.overs || 6;
+        const toss = m.toss || scorecard.toss || null;
+
+        return {
+          ...m,
+          players: playerIds,
+          playerNames: { ...playerNames, ...(m.playerNames || {}) },
+          scorecard,
+          innings,
+          currentInningsIndex,
+          resultText,
+          result: resultText,
+          overs,
+          toss: toss || m.toss,
+        };
+      });
+
+      return sendPaginated(res, formatted, null, { count: formatted.length });
     } catch (err) {
       console.error('getAllMatches error:', err);
       return sendError(res, 'Failed to fetch matches', 500, 'FETCH_FAILED');
+    }
+  },
+
+  /**
+   * POST /api/v1/admin/matches
+   * Super Admin creates a tournament / official match
+   */
+  async createAdminMatch(req, res) {
+    try {
+      const crypto = require('crypto');
+      const {
+        sport = 'Cricket',
+        place = 'Turf Arena',
+        turfId = null,
+        matchDate,
+        matchTime,
+        teamAName = 'Team A',
+        teamBName = 'Team B',
+        overs = 6,
+        status = 'created',
+        playWithStrangers = false,
+      } = req.body;
+
+      const joinCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+      const matchId = `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      const teams = {
+        A: { name: teamAName, playerIds: [], players: [] },
+        B: { name: teamBName, playerIds: [], players: [] },
+      };
+
+      const scorecard = {
+        innings: [
+          { team: teamAName, runs: 0, wickets: 0, overs: '0.0', balls: [] },
+          { team: teamBName, runs: 0, wickets: 0, overs: '0.0', balls: [] },
+        ],
+        currentInning: 0,
+        overs: Number(overs) || 6,
+        striker: '',
+        nonStriker: '',
+        bowler: '',
+      };
+
+      const adminUser = req.user?.uid || 'superadmin';
+
+      let validTurfId = null;
+      if (turfId) {
+        const existingTurf = await prisma.turf.findUnique({ where: { id: turfId }, select: { id: true } });
+        if (existingTurf) validTurfId = existingTurf.id;
+      }
+
+      const match = await prisma.match.create({
+        data: {
+          id: matchId,
+          createdBy: adminUser,
+          creatorName: 'Super Admin',
+          joinCode,
+          place,
+          sport,
+          matchDate: String(matchDate || new Date().toISOString().split('T')[0]),
+          matchTime: String(matchTime || '18:00'),
+          playWithStrangers: Boolean(playWithStrangers),
+          turfId: validTurfId,
+          teams,
+          scorecard,
+          status: ['created', 'live', 'completed'].includes(status) ? status : 'created',
+        },
+        include: { turf: true, players: true },
+      });
+
+      return sendSuccess(res, { match }, 201);
+    } catch (err) {
+      console.error('createAdminMatch error:', err);
+      return sendError(res, 'Failed to create match', 500, 'CREATE_FAILED');
+    }
+  },
+
+  /**
+   * PATCH /api/v1/admin/matches/:id
+   * Super Admin commands and updates match status, score, or details
+   */
+  async updateAdminMatch(req, res) {
+    const { id } = req.params;
+    try {
+      const existing = await prisma.match.findUnique({
+        where: { id },
+        include: { players: true, turf: true },
+      });
+
+      if (!existing) {
+        return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+      }
+
+      const updatePayload = {
+        updatedAt: new Date(),
+      };
+
+      if (req.body.status && ['created', 'live', 'completed'].includes(req.body.status)) {
+        updatePayload.status = req.body.status;
+      }
+
+      if (req.body.scorecard !== undefined) {
+        updatePayload.scorecard = req.body.scorecard;
+      }
+
+      if (req.body.teams !== undefined) {
+        updatePayload.teams = req.body.teams;
+      }
+
+      if (req.body.toss !== undefined) {
+        updatePayload.toss = req.body.toss;
+      }
+
+      if (req.body.place !== undefined) {
+        updatePayload.place = req.body.place;
+      }
+
+      if (req.body.sport !== undefined) {
+        updatePayload.sport = req.body.sport;
+      }
+
+      if (req.body.matchDate !== undefined) {
+        updatePayload.matchDate = String(req.body.matchDate);
+      }
+
+      if (req.body.matchTime !== undefined) {
+        updatePayload.matchTime = String(req.body.matchTime);
+      }
+
+      const updated = await prisma.match.update({
+        where: { id },
+        data: updatePayload,
+        include: { players: true, turf: true },
+      });
+
+      return sendSuccess(res, { match: updated });
+    } catch (err) {
+      console.error('updateAdminMatch error:', err);
+      return sendError(res, 'Failed to update match', 500, 'UPDATE_FAILED');
+    }
+  },
+
+  /**
+   * DELETE /api/v1/admin/matches/:id
+   * Super Admin disbands or deletes match
+   */
+  async deleteAdminMatch(req, res) {
+    const { id } = req.params;
+    try {
+      const existing = await prisma.match.findUnique({ where: { id } });
+      if (!existing) {
+        return sendError(res, 'Match not found', 404, 'NOT_FOUND');
+      }
+
+      await prisma.match.delete({ where: { id } });
+
+      return sendSuccess(res, { message: 'Match deleted successfully', matchId: id });
+    } catch (err) {
+      console.error('deleteAdminMatch error:', err);
+      return sendError(res, 'Failed to delete match', 500, 'DELETE_FAILED');
     }
   },
 

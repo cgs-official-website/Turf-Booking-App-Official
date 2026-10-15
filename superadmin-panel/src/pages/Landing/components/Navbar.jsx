@@ -51,8 +51,6 @@ export const Navbar = ({ onNavigateAdmin, onExploreTurfs, onBookNow }) => {
               <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wider uppercase">
                 Sports Ecosystem
               </span>
-              <span className="text-[9px] text-slate-300 dark:text-slate-600">•</span>
-              <span className="text-[9px] font-medium text-slate-400">v1.0</span>
             </div>
           </div>
         </div>
