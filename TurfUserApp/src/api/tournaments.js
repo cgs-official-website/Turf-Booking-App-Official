@@ -52,8 +52,33 @@ export const cancelTournamentApi = (id) => {
 };
 
 /**
+ * Update tournament teams and player rosters
+ */
+export const updateTournamentTeamsApi = (id, teams) => {
+  return client.put(`/tournaments/${id}/teams`, { teams });
+};
+
+/**
  * Resolve public shared tournament by its shareable identifier
  */
 export const getPublicTournamentByShareIdApi = (shareIdentifier) => {
   return client.get(`/tournaments/share/${shareIdentifier}`);
 };
+
+<<<<<<< HEAD
+/**
+ * Register a team for a tournament
+ */
+export const registerTournamentTeamApi = (tournamentId, data) => {
+  return client.post(`/tournaments/${tournamentId}/register`, data);
+};
+
+/**
+ * Fetch current user's registration for a tournament
+ */
+export const getMyTournamentRegistrationApi = (tournamentId) => {
+  return client.get(`/tournaments/${tournamentId}/my-registration`);
+};
+
+=======
+>>>>>>> 4d1ada6 (Describe your changes)

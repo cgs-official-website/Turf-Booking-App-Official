@@ -14,8 +14,15 @@ const verifySessionToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret_change_in_production');
+    const userId = decoded.id || decoded.uid || decoded.userId;
     req.user = {
-      uid: decoded.uid,
+<<<<<<< HEAD
+      uid: decoded.uid || decoded.id,
+      id: decoded.uid || decoded.id,
+=======
+      id: userId,
+      uid: userId,
+>>>>>>> 4d1ada6 (Describe your changes)
       role: decoded.role || 'user',
       phone: decoded.phone,
       email: decoded.email,

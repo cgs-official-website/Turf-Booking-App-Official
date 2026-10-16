@@ -9,6 +9,7 @@ router.get('/available', optionalAuth, tournamentController.getAvailableTourname
 router.get('/my', verifySessionToken, tournamentController.getMyTournaments);
 router.post('/', verifySessionToken, tournamentController.createUserTournament);
 router.put('/:id', verifySessionToken, tournamentController.updateTournament);
+router.put('/:id/teams', verifySessionToken, tournamentController.updateTournamentTeams);
 router.post('/:id/publish', verifySessionToken, tournamentController.publishTournament);
 router.patch('/:id/publish', verifySessionToken, tournamentController.publishTournament);
 router.post('/:id/cancel', verifySessionToken, tournamentController.cancelTournament);
@@ -19,5 +20,9 @@ router.get('/share/:shareIdentifier', tournamentController.getPublicTournamentBy
 
 // Individual tournament detail (Public if published, creator-only if draft)
 router.get('/:id', optionalAuth, tournamentController.getTournamentById);
+
+// Team Registration Endpoints (UserApp)
+router.post('/:id/register', verifySessionToken, tournamentController.registerTeam);
+router.get('/:id/my-registration', verifySessionToken, tournamentController.getMyRegistration);
 
 module.exports = router;

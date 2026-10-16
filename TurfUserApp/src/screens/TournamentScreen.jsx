@@ -100,15 +100,15 @@ export default function TournamentScreen({ navigation }) {
 
     return (
       <View style={[styles.emptyContainer, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
-        <View style={[styles.emptyIconCircle, { backgroundColor: C.primaryLight }]}>
-          <Feather name="award" size={32} color={C.primary} />
+        <View style={[styles.emptyIconCircle, { backgroundColor: '#CCFBF1' }]}>
+          <Feather name="award" size={32} color="#0F766E" />
         </View>
         <Text style={[styles.emptyTitle, { color: C.text }]}>No Turf Tournaments Right Now</Text>
         <Text style={[styles.emptySubtitle, { color: C.subtext }]}>
           Turf owners publish exciting leagues and cups here. Check back soon or create your own community tournament!
         </Text>
         <TouchableOpacity
-          style={[styles.createCtaBtn, { backgroundColor: C.primary }]}
+          style={[styles.createCtaBtn, { backgroundColor: '#0F766E' }]}
           onPress={() => navigation.navigate('CreateTournament')}
           activeOpacity={0.85}
         >
@@ -123,15 +123,15 @@ export default function TournamentScreen({ navigation }) {
     if (!token) {
       return (
         <View style={[styles.emptyContainer, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
-          <View style={[styles.emptyIconCircle, { backgroundColor: '#EDE9FE' }]}>
-            <Feather name="lock" size={30} color="#8B5CF6" />
+          <View style={[styles.emptyIconCircle, { backgroundColor: '#CCFBF1' }]}>
+            <Feather name="lock" size={30} color="#0F766E" />
           </View>
           <Text style={[styles.emptyTitle, { color: C.text }]}>Log In to View Your Tournaments</Text>
           <Text style={[styles.emptySubtitle, { color: C.subtext }]}>
             Sign in to create, publish, and manage your community sports tournaments.
           </Text>
           <TouchableOpacity
-            style={[styles.createCtaBtn, { backgroundColor: '#8B5CF6' }]}
+            style={[styles.createCtaBtn, { backgroundColor: '#0F766E' }]}
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.85}
           >
@@ -144,7 +144,7 @@ export default function TournamentScreen({ navigation }) {
     if (loadingMy) {
       return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#0F766E" />
           <Text style={[styles.loadingText, { color: C.subtext }]}>Loading your tournaments...</Text>
         </View>
       );
@@ -152,15 +152,15 @@ export default function TournamentScreen({ navigation }) {
 
     return (
       <View style={[styles.emptyContainer, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
-        <View style={[styles.emptyIconCircle, { backgroundColor: '#EDE9FE' }]}>
-          <Ionicons name="trophy-outline" size={32} color="#8B5CF6" />
+        <View style={[styles.emptyIconCircle, { backgroundColor: '#CCFBF1' }]}>
+          <Ionicons name="trophy-outline" size={32} color="#0F766E" />
         </View>
         <Text style={[styles.emptyTitle, { color: C.text }]}>No Tournaments Created Yet</Text>
         <Text style={[styles.emptySubtitle, { color: C.subtext }]}>
           Host cricket matches, football shootouts, or badminton leagues with your teammates and friends!
         </Text>
         <TouchableOpacity
-          style={[styles.createCtaBtn, { backgroundColor: '#8B5CF6' }]}
+          style={[styles.createCtaBtn, { backgroundColor: '#0F766E' }]}
           onPress={() => navigation.navigate('CreateTournament')}
           activeOpacity={0.85}
         >
@@ -193,7 +193,7 @@ export default function TournamentScreen({ navigation }) {
         </View>
 
         <TouchableOpacity
-          style={[styles.headerCreateBtn, { backgroundColor: C.primary }]}
+          style={[styles.headerCreateBtn, { backgroundColor: '#0F766E' }]}
           onPress={() => navigation.navigate('CreateTournament')}
           activeOpacity={0.8}
         >
@@ -209,7 +209,7 @@ export default function TournamentScreen({ navigation }) {
             styles.tabButton,
             activeTab === 'available' && [
               styles.tabButtonActive,
-              { backgroundColor: C.card, borderColor: C.border },
+              { backgroundColor: C.card, borderColor: '#0F766E' },
               SHADOW.subtle,
             ],
           ]}
@@ -219,13 +219,13 @@ export default function TournamentScreen({ navigation }) {
           <Feather
             name="compass"
             size={14}
-            color={activeTab === 'available' ? C.primary : C.subtext}
+            color={activeTab === 'available' ? '#0F766E' : C.subtext}
             style={{ marginRight: 6 }}
           />
           <Text
             style={[
               styles.tabText,
-              { color: activeTab === 'available' ? C.text : C.subtext },
+              { color: activeTab === 'available' ? '#0F766E' : C.subtext },
               activeTab === 'available' && styles.tabTextActive,
             ]}
           >
@@ -238,7 +238,7 @@ export default function TournamentScreen({ navigation }) {
             styles.tabButton,
             activeTab === 'my' && [
               styles.tabButtonActive,
-              { backgroundColor: C.card, borderColor: C.border },
+              { backgroundColor: C.card, borderColor: '#0F766E' },
               SHADOW.subtle,
             ],
           ]}
@@ -248,13 +248,13 @@ export default function TournamentScreen({ navigation }) {
           <Feather
             name="user"
             size={14}
-            color={activeTab === 'my' ? '#8B5CF6' : C.subtext}
+            color={activeTab === 'my' ? '#0F766E' : C.subtext}
             style={{ marginRight: 6 }}
           />
           <Text
             style={[
               styles.tabText,
-              { color: activeTab === 'my' ? C.text : C.subtext },
+              { color: activeTab === 'my' ? '#0F766E' : C.subtext },
               activeTab === 'my' && styles.tabTextActive,
             ]}
           >
@@ -289,7 +289,7 @@ export default function TournamentScreen({ navigation }) {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#8B5CF6']} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
           }
           ListEmptyComponent={renderMyEmpty}
           renderItem={({ item }) => (
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: RADIUS.full,
+    borderRadius: RADIUS.md,
   },
   headerCreateBtnText: {
     color: '#FFFFFF',

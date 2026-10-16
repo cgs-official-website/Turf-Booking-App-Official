@@ -37,20 +37,31 @@ const isWeekendDate = (dateStr) => {
     return day === 0 || day === 6;
 };
 
-/** Hourly rate that applies to a slot starting at `startTime` on `dateStr`. */
+/**
+ * Hourly rate that applies to a slot starting at `startTime` on `dateStr`.
+ * Selects exactly one of four independent configured rates:
+ * 1. Weekday Price — Before 6 PM (Monday–Friday before 6 PM)
+ * 2. Weekday Evening Price — After 6 PM (Monday–Friday after 6 PM)
+ * 3. Weekend Price — Before 6 PM (Saturday–Sunday before 6 PM)
+ * 4. Weekend Evening Price — After 6 PM (Saturday–Sunday after 6 PM)
+ * 
+ * Weekend evening is NEVER calculated additively; it is its own configured price.
+ */
 function getHourlyRate(turf, dateStr, startTime) {
     const p = getConfig(turf).pricing || {};
-    const base = positive(turf?.pricePerHour ?? turf?.price) ?? positive(p.base) ?? 500;
+    const weekdayBefore6 = positive(p.base) ?? positive(turf?.pricePerHour ?? turf?.price) ?? 500;
+    const weekdayAfter6  = positive(p.evening) ?? weekdayBefore6;
+    const weekendBefore6 = positive(p.weekend) ?? weekdayBefore6;
+    const weekendAfter6  = positive(p.weekendEvening) ?? weekendBefore6;
+
     const evening = toMins(startTime) >= EVENING_START_MINS;
     const weekend = isWeekendDate(dateStr);
 
-    if (weekend && evening) {
-        const higher = Math.max(positive(p.weekend) || 0, positive(p.evening) || 0);
-        return positive(p.weekendEvening) ?? (higher > 0 ? higher : base);
+    if (weekend) {
+        return evening ? weekendAfter6 : weekendBefore6;
+    } else {
+        return evening ? weekdayAfter6 : weekdayBefore6;
     }
-    if (weekend) return positive(p.weekend) ?? base;
-    if (evening) return positive(p.evening) ?? base;
-    return base;
 }
 
 /**

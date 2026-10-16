@@ -81,4 +81,11 @@ router.put('/tournaments/:id', tournamentController.updateTournament);
 router.post('/tournaments/:id/publish', tournamentController.publishTournament);
 router.patch('/tournaments/:id/publish', tournamentController.publishTournament);
 
+// Vendor Tournament Registrations (Phase 2)
+router.get('/tournaments/:id/registrations', tournamentController.getTournamentRegistrations);
+router.post('/tournaments/:id/registrations/:regId/accept', tournamentController.acceptRegistration);
+router.patch('/tournaments/:id/registrations/:regId/accept', tournamentController.acceptRegistration);
+router.post('/tournaments/:id/registrations/:regId/reject', tournamentController.rejectRegistration);
+router.patch('/tournaments/:id/registrations/:regId/reject', tournamentController.rejectRegistration);
+
 module.exports = router;

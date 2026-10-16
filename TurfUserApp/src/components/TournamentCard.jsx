@@ -34,19 +34,53 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
   const isDraft = tournament.status === 'draft';
   const isCancelled = tournament.status === 'cancelled';
 
+  const totalTeams = tournament.numberOfTeams || tournament.totalTeams || 16;
+  const acceptedTeamsCount = tournament.acceptedTeamsCount !== undefined ? tournament.acceptedTeamsCount : 0;
+  const remainingSlots = tournament.remainingSlots !== undefined
+    ? tournament.remainingSlots
+    : Math.max(0, totalTeams - acceptedTeamsCount);
+
+  const lifecycleStatus = tournament.lifecycleStatus || (
+    isCancelled ? 'cancelled' :
+    remainingSlots === 0 ? 'full' :
+    isPublished ? 'published' : 'draft'
+  );
+
+  let statusBadgeText = 'PUBLISHED';
+  let statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
+
+  if (lifecycleStatus === 'cancelled') {
+    statusBadgeText = 'CANCELLED';
+    statusBadgeBg = 'rgba(239, 68, 68, 0.95)';
+  } else if (lifecycleStatus === 'completed') {
+    statusBadgeText = 'COMPLETED';
+    statusBadgeBg = 'rgba(100, 116, 139, 0.95)';
+  } else if (lifecycleStatus === 'ongoing') {
+    statusBadgeText = 'ONGOING';
+    statusBadgeBg = 'rgba(2, 132, 199, 0.95)';
+  } else if (lifecycleStatus === 'full') {
+    statusBadgeText = `FULL • ${acceptedTeamsCount}/${totalTeams}`;
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  } else if (lifecycleStatus === 'published') {
+    statusBadgeText = remainingSlots > 0 ? `OPEN • ${remainingSlots} SLOTS` : 'REGISTRATION OPEN';
+    statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
+  } else {
+    statusBadgeText = 'DRAFT';
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  }
+
   const turfImage =
     tournament.bannerUrl ||
     tournament.turf?.images?.[0] ||
     DEFAULT_SPORT_IMAGES[tournament.sport] ||
     'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800';
 
-  const hostDisplay = isCommunity
-    ? (tournament.creatorName || 'Community Member')
-    : (tournament.turf?.name || tournament.turfName || 'Host Arena');
-
-  const locationDisplay = isCommunity
-    ? 'Community Hosted'
-    : (tournament.turf?.city || tournament.turf?.location?.city || 'Verified Turf');
+  const hostTurfName = tournament.turf?.name || tournament.turfName || 'Selected Turf';
+  const turfLocation =
+    tournament.turf?.city ||
+    tournament.turf?.location?.city ||
+    tournament.turf?.address ||
+    'Host Venue';
 
   const handleShare = async (e) => {
     e?.stopPropagation?.();
@@ -58,7 +92,7 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
       const shareUrl = tournament.shareableUrl || `https://turfbookingapp.com/tournament/${tournament.shareableIdentifier || tournament.id}`;
       await Share.share({
         title: tournament.name,
-        message: `🏆 Check out the "${tournament.name}" (${tournament.sport}) tournament on Namma Ooru Turf!\n\n📅 Dates: ${tournament.startDate} to ${tournament.endDate}\n👥 Teams: ${tournament.numberOfTeams} (${tournament.playersPerTeam} players/team)${isCricket && tournament.oversPerTeam ? `\n🏏 Overs: ${tournament.oversPerTeam}` : ''}\n\nView details & follow updates:\n${shareUrl}`,
+        message: `🏆 Check out "${tournament.name}" (${tournament.sport}) hosted at ${hostTurfName}!\n\n📅 Dates: ${tournament.startDate} to ${tournament.endDate}\n👥 Teams: ${tournament.numberOfTeams} (${tournament.playersPerTeam} players/team)${isCricket && tournament.oversPerTeam ? `\n🏏 Overs: ${tournament.oversPerTeam}` : ''}\n\nView details & follow updates:\n${shareUrl}`,
       });
     } catch (_) { }
   };
@@ -87,7 +121,7 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
             styles.sourceBadge,
             {
               backgroundColor: isCommunity
-                ? 'rgba(109, 40, 217, 0.92)'
+                ? 'rgba(15, 118, 110, 0.92)'
                 : 'rgba(15, 118, 110, 0.92)',
             },
           ]}
@@ -99,7 +133,7 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
             style={{ marginRight: 4 }}
           />
           <Text style={styles.sourceBadgeText}>
-            {isCommunity ? 'COMMUNITY' : 'TURF HOSTED'}
+            {isCommunity ? 'USER CREATED' : 'TURF HOSTED'}
           </Text>
         </View>
 
@@ -108,18 +142,12 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
           style={[
             styles.statusBadge,
             {
-              backgroundColor: isPublished
-                ? 'rgba(16, 185, 129, 0.95)'
-                : isDraft
-                ? 'rgba(245, 158, 11, 0.95)'
-                : isCancelled
-                ? 'rgba(239, 68, 68, 0.95)'
-                : 'rgba(100, 116, 139, 0.95)',
+              backgroundColor: statusBadgeBg,
             },
           ]}
         >
           <Text style={styles.statusBadgeText}>
-            {tournament.status ? tournament.status.toUpperCase() : 'PUBLISHED'}
+            {statusBadgeText}
           </Text>
         </View>
 
@@ -142,25 +170,34 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
           {tournament.name}
         </Text>
 
-        {/* Host & Location */}
+        {/* Host Turf & Location */}
         <View style={styles.hostRow}>
           <Feather
-            name={isCommunity ? 'user' : 'map-pin'}
+            name="map-pin"
             size={13}
-            color={isCommunity ? '#8B5CF6' : C.primary}
+            color={C.primary}
             style={{ marginRight: 5 }}
           />
-          <Text style={[styles.hostText, { color: C.subtext }]} numberOfLines={1}>
-            {hostDisplay} • <Text style={{ color: C.caption }}>{locationDisplay}</Text>
+          <Text style={[styles.hostText, { color: C.text }]} numberOfLines={1}>
+            {hostTurfName} • <Text style={{ color: C.subtext }}>{turfLocation}</Text>
           </Text>
         </View>
+
+        {isCommunity && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Feather name="user" size={11} color="#0F766E" style={{ marginRight: 4 }} />
+            <Text style={{ fontSize: 11, color: C.subtext }} numberOfLines={1}>
+              Created by <Text style={{ fontWeight: '700', color: C.text }}>{tournament.creatorName || 'Community Member'}</Text>
+            </Text>
+          </View>
+        )}
 
         {/* Schedule & Rules Meta Grid */}
         <View style={[styles.metaGrid, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
           <View style={styles.metaItem}>
             <Feather name="calendar" size={12} color={C.primary} style={{ marginRight: 4 }} />
             <Text style={[styles.metaValue, { color: C.text }]} numberOfLines={1}>
-              {tournament.startDate}
+              {tournament.startDate} to {tournament.endDate}
             </Text>
           </View>
           <View style={[styles.metaDivider, { backgroundColor: C.border }]} />
@@ -192,7 +229,7 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
         {/* Action Row */}
         <View style={styles.footerRow}>
           <TouchableOpacity
-            style={[styles.viewDetailsBtn, { backgroundColor: isCommunity ? '#8B5CF6' : C.primary }]}
+            style={[styles.viewDetailsBtn, { backgroundColor: '#0F766E' }]}
             onPress={onPress}
             activeOpacity={0.8}
           >

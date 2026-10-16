@@ -10,12 +10,20 @@ import {
   ActivityIndicator,
   RefreshControl,
   Clipboard,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
-import { getTournamentByIdApi, publishTournamentApi } from '../api/tournaments';
+import {
+  getTournamentByIdApi,
+  publishTournamentApi,
+  getTournamentRegistrationsApi,
+  acceptRegistrationApi,
+  rejectRegistrationApi,
+} from '../api/tournaments';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
@@ -39,9 +47,15 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const { colors, isDark } = useTheme();
 
   const [tournament, setTournament] = useState(null);
+  const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [processingRegId, setProcessingRegId] = useState(null);
+  const [expandedRegs, setExpandedRegs] = useState(new Set());
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedRegForReject, setSelectedRegForReject] = useState(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -59,7 +73,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
         fontWeight: '700',
       },
       headerRight: () =>
-        tournament ? (
+        tournament && (tournament.canEdit || tournament.creatorType !== 'USER') ? (
           <TouchableOpacity
             style={styles.headerEditBtn}
             onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
@@ -74,11 +88,16 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const loadDetails = useCallback(async () => {
     if (!tournamentId) return;
     try {
-      const res = await getTournamentByIdApi(tournamentId);
-      const data = res?.data?.tournament || res?.tournament;
+      const [tournRes, regsRes] = await Promise.all([
+        getTournamentByIdApi(tournamentId),
+        getTournamentRegistrationsApi(tournamentId).catch(() => null),
+      ]);
+      const data = tournRes?.data?.tournament || tournRes?.tournament;
       if (data) {
         setTournament(data);
       }
+      const regs = regsRes?.data?.registrations || regsRes?.registrations || data?.registrations || [];
+      setRegistrations(regs);
     } catch (err) {
       console.error('Failed to fetch tournament detail:', err);
     } finally {
@@ -96,6 +115,88 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const onRefresh = () => {
     setRefreshing(true);
     loadDetails();
+  };
+
+  const toggleExpand = (regId) => {
+    setExpandedRegs((prev) => {
+      const next = new Set(prev);
+      if (next.has(regId)) next.delete(regId);
+      else next.add(regId);
+      return next;
+    });
+  };
+
+  const handleAcceptTeam = (reg) => {
+    const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
+    const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+    const slotsLeft = Math.max(0, totalTeams - acceptedCount);
+
+    if (slotsLeft <= 0) {
+      Alert.alert('Tournament Full', 'All tournament slots have been filled. You cannot accept more teams.');
+      return;
+    }
+
+    Alert.alert(
+      'Accept Team Application',
+      `Accept "${reg.teamName}" into "${tournament.name}"?\n\nThis will consume 1 slot (${slotsLeft} remaining).`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Accept Team',
+          style: 'default',
+          onPress: async () => {
+            setProcessingRegId(reg.id);
+            try {
+              const res = await acceptRegistrationApi(tournament.id, reg.id);
+              // Update local registrations list atomically
+              setRegistrations((prev) =>
+                prev.map((r) => (r.id === reg.id ? { ...r, status: 'accepted', rejectionReason: null } : r))
+              );
+              // Update tournament state
+              setTournament((prev) => ({
+                ...prev,
+                acceptedTeamsCount: (prev?.acceptedTeamsCount || acceptedCount) + 1,
+                remainingSlots: Math.max(0, slotsLeft - 1),
+              }));
+              Alert.alert('Team Accepted! 🎉', `"${reg.teamName}" is now officially registered for this tournament.`);
+            } catch (err) {
+              const msg = err.response?.data?.message || err.message || 'Failed to accept team application.';
+              Alert.alert('Accept Failed', msg);
+            } finally {
+              setProcessingRegId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenReject = (reg) => {
+    setSelectedRegForReject(reg);
+    setRejectionReasonInput('');
+    setRejectModalVisible(true);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!selectedRegForReject) return;
+    const regId = selectedRegForReject.id;
+    const reason = rejectionReasonInput.trim() || 'Application declined by organizer';
+
+    setProcessingRegId(regId);
+    setRejectModalVisible(false);
+    try {
+      await rejectRegistrationApi(tournament.id, regId, reason);
+      setRegistrations((prev) =>
+        prev.map((r) => (r.id === regId ? { ...r, status: 'rejected', rejectionReason: reason } : r))
+      );
+      Alert.alert('Application Rejected', `"${selectedRegForReject.teamName}" has been rejected.`);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to reject team application.';
+      Alert.alert('Reject Failed', msg);
+    } finally {
+      setProcessingRegId(null);
+      setSelectedRegForReject(null);
+    }
   };
 
   const handlePublish = async () => {
@@ -200,8 +301,17 @@ const TournamentDetailScreen = ({ route, navigation }) => {
 
   const isPublished = tournament.status === 'published';
   const isCricket = (tournament.sport || '').toLowerCase().includes('cricket');
+  const isUserCreated = tournament.creatorType === 'USER' || tournament.source === 'USER CREATED';
   const turfName = tournament.turfName || tournament.turf?.name || 'Partner Facility';
   const turfCity = tournament.turf?.city || tournament.turf?.address || 'Tamil Nadu';
+  const maxPlayers = tournament.playersPerTeam || 11;
+  const teamsList = Array.isArray(tournament.teams) && tournament.teams.length > 0
+    ? tournament.teams
+    : Array.from({ length: tournament.numberOfTeams || 2 }, (_, idx) => ({
+        id: `team_${idx + 1}`,
+        name: `Team ${idx + 1}`,
+        players: [],
+      }));
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -220,11 +330,35 @@ const TournamentDetailScreen = ({ route, navigation }) => {
         {/* Status Header Hero */}
         <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <View style={styles.heroTopRow}>
-            <View style={[styles.sportTag, { backgroundColor: colors.primaryLight }]}>
-              <Feather name="award" size={13} color={colors.primary} />
-              <Text style={[styles.sportTagText, { color: colors.primary }]}>
-                {tournament.sport ? tournament.sport.toUpperCase() : 'TOURNAMENT'}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/* Source Badge */}
+              <View
+                style={[
+                  styles.sourceTag,
+                  {
+                    backgroundColor: isUserCreated
+                      ? (isDark ? 'rgba(124, 58, 237, 0.25)' : '#EDE9FE')
+                      : (isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7'),
+                    borderColor: isUserCreated ? '#A78BFA' : '#86EFAC',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sourceTagText,
+                    { color: isUserCreated ? '#7C3AED' : '#0F766E' },
+                  ]}
+                >
+                  {isUserCreated ? 'USER CREATED' : 'TURF HOSTED'}
+                </Text>
+              </View>
+
+              <View style={[styles.sportTag, { backgroundColor: colors.primaryLight }]}>
+                <Feather name="award" size={13} color={colors.primary} />
+                <Text style={[styles.sportTagText, { color: colors.primary }]}>
+                  {tournament.sport ? tournament.sport.toUpperCase() : 'TOURNAMENT'}
+                </Text>
+              </View>
             </View>
 
             <View
@@ -260,6 +394,29 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
 
           <Text style={[styles.tournamentTitle, { color: colors.text }]}>{tournament.name}</Text>
+
+          {/* User Creator Info Note if Community Tournament */}
+          {isUserCreated && (
+            <View
+              style={[
+                styles.creatorBannerBox,
+                {
+                  backgroundColor: isDark ? 'rgba(124, 58, 237, 0.12)' : '#F5F3FF',
+                  borderColor: isDark ? 'rgba(124, 58, 237, 0.3)' : '#DDD6FE',
+                },
+              ]}
+            >
+              <Feather name="info" size={15} color="#7C3AED" style={{ marginRight: 8, marginTop: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.creatorBannerTitle, { color: isDark ? '#DDD6FE' : '#6D28D9' }]}>
+                  User-Created Community Tournament
+                </Text>
+                <Text style={[styles.creatorBannerSub, { color: isDark ? '#A78BFA' : '#5B21B6' }]}>
+                  Organized by {tournament.creatorName || tournament.creator || 'Community Athlete'}. This tournament is conducted at your turf venue.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Turf Host Card */}
           <View
@@ -419,18 +576,380 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+<<<<<<< HEAD
+        {/* ── Team Registrations Section (Part 3) ── */}
+        <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+          <View style={styles.regSectionHeaderRow}>
+            <View>
+              <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Team Registrations</Text>
+              <Text style={[styles.regSectionSubtitle, { color: colors.textSecondary }]}>
+                {registrations.length} team applications submitted
+              </Text>
+            </View>
+
+            {/* Capacity pill */}
+            {(() => {
+              const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
+              const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+              const slotsLeft = Math.max(0, totalTeams - acceptedCount);
+              return (
+                <View
+                  style={[
+                    styles.capacityBadge,
+                    {
+                      backgroundColor:
+                        slotsLeft === 0
+                          ? isDark
+                            ? 'rgba(239, 68, 68, 0.15)'
+                            : '#FEE2E2'
+                          : isDark
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : '#DCFCE7',
+                      borderColor: slotsLeft === 0 ? '#EF4444' : '#10B981',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.capacityBadgeText,
+                      { color: slotsLeft === 0 ? '#DC2626' : '#10B981' },
+                    ]}
+                  >
+                    {slotsLeft === 0 ? 'FULL' : `${slotsLeft} SLOTS LEFT`}
+                  </Text>
+                </View>
+              );
+            })()}
+          </View>
+
+          {/* Accepted Teams Count / Total Teams & Remaining Slots Bar */}
+          {(() => {
+            const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
+            const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+            const slotsLeft = Math.max(0, totalTeams - acceptedCount);
+            return (
+              <View
+                style={[
+                  styles.capacitySummaryBox,
+                  { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8FAFC', borderColor: colors.border },
+                ]}
+              >
+                <View style={styles.capacityMetric}>
+                  <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>ACCEPTED TEAMS</Text>
+                  <Text style={[styles.capacityMetricVal, { color: colors.text }]}>
+                    {acceptedCount} / {totalTeams}
+                  </Text>
+                </View>
+                <View style={[styles.capacityMetricDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.capacityMetric}>
+                  <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>REMAINING SLOTS</Text>
+                  <Text
+                    style={[
+                      styles.capacityMetricVal,
+                      { color: slotsLeft > 0 ? colors.primary : '#EF4444' },
+                    ]}
+                  >
+                    {slotsLeft}
+                  </Text>
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* Registrations List */}
+          {registrations.length === 0 ? (
+            <View style={styles.emptyRegsBox}>
+              <Feather name="users" size={28} color={colors.textSecondary} style={{ opacity: 0.5, marginBottom: 8 }} />
+              <Text style={[styles.emptyRegsTitle, { color: colors.text }]}>No Applications Yet</Text>
+              <Text style={[styles.emptyRegsSub, { color: colors.textSecondary }]}>
+                When teams submit their applications through the tournament share link, they will appear here for your review and approval.
+              </Text>
+            </View>
+          ) : (
+            <View style={{ marginTop: 8 }}>
+              {(() => {
+                const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
+                const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+                const slotsLeft = Math.max(0, totalTeams - acceptedCount);
+
+                return registrations.map((reg) => {
+                  const isExpanded = expandedRegs.has(reg.id);
+                  const isPending = reg.status === 'pending';
+                  const isAccepted = reg.status === 'accepted';
+                  const isRejected = reg.status === 'rejected';
+                  const isBusy = processingRegId === reg.id;
+                  const regPlayers = Array.isArray(reg.players) ? reg.players : [];
+
+                  return (
+                    <View
+                      key={reg.id}
+                      style={[
+                        styles.regCard,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF',
+                          borderColor: colors.border,
+                        },
+                        SHADOWS.sm,
+                      ]}
+                    >
+                      {/* Top Row: Team Name & Status Badge */}
+                      <View style={styles.regCardTopRow}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text style={[styles.regTeamName, { color: colors.text }]} numberOfLines={1}>
+                            {reg.teamName}
+                          </Text>
+                          <Text style={[styles.regCaptainLine, { color: colors.textSecondary }]}>
+                            Captain: <Text style={{ color: colors.text, fontWeight: '700' }}>{reg.captainName}</Text>
+                          </Text>
+                        </View>
+
+                        {/* Status Badge */}
+                        <View
+                          style={[
+                            styles.regStatusBadge,
+                            {
+                              backgroundColor: isAccepted
+                                ? isDark
+                                  ? 'rgba(16, 185, 129, 0.15)'
+                                  : '#DCFCE7'
+                                : isRejected
+                                ? isDark
+                                  ? 'rgba(239, 68, 68, 0.15)'
+                                  : '#FEE2E2'
+                                : isDark
+                                ? 'rgba(245, 158, 11, 0.15)'
+                                : '#FEF3C7',
+                              borderColor: isAccepted
+                                ? '#10B981'
+                                : isRejected
+                                ? '#EF4444'
+                                : '#F59E0B',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.regStatusBadgeText,
+                              {
+                                color: isAccepted
+                                  ? '#10B981'
+                                  : isRejected
+                                  ? '#DC2626'
+                                  : '#D97706',
+                              },
+                            ]}
+                          >
+                            {isAccepted ? 'Accepted' : isRejected ? 'Rejected' : 'Pending'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Meta info row */}
+                      <View style={styles.regMetaRow}>
+                        <View style={styles.regMetaItem}>
+                          <Feather name="phone" size={12} color={colors.primary} />
+                          <Text style={[styles.regMetaText, { color: colors.textSecondary }]}>{reg.captainPhone}</Text>
+                        </View>
+
+                        <View style={styles.regMetaItem}>
+                          <Feather name="users" size={12} color={colors.textSecondary} />
+                          <Text style={[styles.regMetaText, { color: colors.textSecondary }]}>
+                            {regPlayers.length || tournament.playersPerTeam} Players
+                          </Text>
+                        </View>
+
+                        <View style={styles.regMetaItem}>
+                          <Feather name="calendar" size={12} color={colors.textSecondary} />
+                          <Text style={[styles.regMetaText, { color: colors.textSecondary }]}>
+                            {formatDate(reg.createdAt)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Rejection Reason Notice if Rejected */}
+                      {isRejected && Boolean(reg.rejectionReason) && (
+                        <View
+                          style={[
+                            styles.rejectionNoticeBox,
+                            { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2', borderColor: '#FECACA' },
+                          ]}
+                        >
+                          <Text style={styles.rejectionNoticeLabel}>Rejection Reason:</Text>
+                          <Text style={styles.rejectionNoticeValue}>{reg.rejectionReason}</Text>
+                        </View>
+                      )}
+
+                      {/* Toggle Players Roster Button */}
+                      {regPlayers.length > 0 && (
+                        <TouchableOpacity
+                          style={styles.toggleRosterBtn}
+                          onPress={() => toggleExpand(reg.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.toggleRosterText, { color: colors.primary }]}>
+                            {isExpanded ? 'Hide Players Roster' : `View ${regPlayers.length} Players`}
+                          </Text>
+                          <Feather
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={14}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Expanded Players List */}
+                      {isExpanded && regPlayers.length > 0 && (
+                        <View style={[styles.rosterList, { borderColor: colors.border }]}>
+                          {regPlayers.map((p, pIdx) => (
+                            <View
+                              key={`p-${p.index || pIdx}`}
+                              style={[styles.rosterRow, { borderBottomColor: colors.border }]}
+                            >
+                              <View style={[styles.rosterNum, { backgroundColor: colors.primaryLight }]}>
+                                <Text style={[styles.rosterNumText, { color: colors.primary }]}>#{p.index || pIdx + 1}</Text>
+                              </View>
+                              <Text style={[styles.rosterName, { color: colors.text }]}>{p.name}</Text>
+                              <Text style={[styles.rosterPhone, { color: colors.textSecondary }]}>{p.phone}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Pending Action Buttons: Accept / Reject */}
+                      {isPending && (
+                        <View style={styles.regActionRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.acceptRegBtn,
+                              { backgroundColor: slotsLeft > 0 ? '#10B981' : '#94A3B8' },
+                            ]}
+                            onPress={() => handleAcceptTeam(reg)}
+                            disabled={isBusy || slotsLeft <= 0}
+                            activeOpacity={0.85}
+                          >
+                            {isBusy ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <>
+                                <Feather name="check" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                                <Text style={styles.acceptRegBtnText}>Accept Team</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.rejectRegBtn, { borderColor: '#EF4444' }]}
+                            onPress={() => handleOpenReject(reg)}
+                            disabled={isBusy}
+                            activeOpacity={0.8}
+                          >
+                            <Feather name="x" size={14} color="#EF4444" style={{ marginRight: 4 }} />
+                            <Text style={styles.rejectRegBtnText}>Reject</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  );
+                });
+              })()}
+            </View>
+          )}
+=======
+        {/* Teams & Squad Rosters Card */}
+        <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+          <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Teams & Squad Rosters</Text>
+          <Text style={[styles.shareSub, { color: colors.textSecondary }]}>
+            Configured squads ({tournament.numberOfTeams} teams • max {maxPlayers} players/team):
+          </Text>
+
+          {teamsList.map((team, idx) => {
+            const players = Array.isArray(team.players) ? team.players : [];
+            const isFull = players.length >= maxPlayers;
+            return (
+              <View
+                key={team.id || idx}
+                style={[
+                  styles.teamCard,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.teamHeader}>
+                  <Text style={[styles.teamNameText, { color: colors.text }]}>{team.name}</Text>
+                  <View
+                    style={[
+                      styles.capacityPill,
+                      {
+                        backgroundColor: isFull
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : isDark
+                          ? 'rgba(255,255,255,0.06)'
+                          : '#F1F5F9',
+                        borderColor: isFull ? '#10B981' : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.capacityPillText,
+                        { color: isFull ? '#10B981' : colors.textSecondary },
+                      ]}
+                    >
+                      {players.length} / {maxPlayers} Players
+                    </Text>
+                  </View>
+                </View>
+
+                {players.length > 0 ? (
+                  <View style={{ marginTop: 6, gap: 5 }}>
+                    {players.map((p, pIdx) => (
+                      <View
+                        key={p.id || pIdx}
+                        style={[
+                          styles.playerItemRow,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <Feather name="user" size={12} color={colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={[styles.playerNameText, { color: colors.text }]}>{p.name}</Text>
+                        {p.phone ? (
+                          <Text style={{ fontSize: 10, color: colors.textSecondary, marginLeft: 'auto' }}>
+                            {p.phone}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.textSecondary, marginTop: 4 }}>
+                    No players registered in this squad yet.
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+>>>>>>> 4d1ada6 (Describe your changes)
+        </View>
+
         {/* Bottom Actions */}
         <View style={styles.bottomActions}>
-          <TouchableOpacity
-            style={[styles.editBtn, { borderColor: colors.primary }]}
-            onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
-            activeOpacity={0.8}
-          >
-            <Feather name="edit" size={16} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Details</Text>
-          </TouchableOpacity>
+          {!isUserCreated && (tournament.canEdit !== false) && (
+            <TouchableOpacity
+              style={[styles.editBtn, { borderColor: colors.primary }]}
+              onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
+              activeOpacity={0.8}
+            >
+              <Feather name="edit" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Details</Text>
+            </TouchableOpacity>
+          )}
 
-          {!isPublished ? (
+          {!isPublished && !isUserCreated ? (
             <TouchableOpacity
               style={[styles.publishActionBtn, { backgroundColor: colors.primary }]}
               onPress={handlePublish}
@@ -458,6 +977,54 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           )}
         </View>
       </ScrollView>
+
+      {/* Rejection Reason Modal */}
+      <Modal
+        visible={rejectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Reject Application</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+              Optionally provide a reason for rejecting "{selectedRegForReject?.teamName}". The team captain will see this reason in their app.
+            </Text>
+
+            <TextInput
+              style={[
+                styles.modalTextInput,
+                { backgroundColor: colors.inputBg || (isDark ? '#0F172A' : '#F8FAFC'), borderColor: colors.border, color: colors.text },
+              ]}
+              placeholder="e.g. Squad requirements not met, or slot conflict"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+              value={rejectionReasonInput}
+              onChangeText={setRejectionReasonInput}
+            />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: colors.border }]}
+                onPress={() => setRejectModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: '#EF4444' }]}
+                onPress={handleConfirmReject}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalConfirmText}>Reject Team</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -723,6 +1290,337 @@ const styles = StyleSheet.create({
     fontSize: SIZES.sm + 1,
     fontWeight: '700',
   },
+<<<<<<< HEAD
+
+  // ── Team Registrations Styles ──
+  regSectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  regSectionSubtitle: {
+    fontSize: SIZES.xs,
+    marginTop: 2,
+  },
+  capacityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  capacityBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  capacitySummaryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  capacityMetric: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  capacityMetricLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  capacityMetricVal: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  capacityMetricDivider: {
+    width: 1,
+    height: 28,
+  },
+  emptyRegsBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  emptyRegsTitle: {
+    fontSize: SIZES.sm + 1,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  emptyRegsSub: {
+    fontSize: SIZES.xs,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  regCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
+  },
+  regCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  regTeamName: {
+    fontSize: SIZES.sm + 1,
+    fontWeight: '800',
+  },
+  regCaptainLine: {
+    fontSize: SIZES.xs,
+    marginTop: 2,
+  },
+  regStatusBadge: {
+    paddingHorizontal: 8,
+=======
+  sourceTag: {
+    paddingHorizontal: 7,
+>>>>>>> 4d1ada6 (Describe your changes)
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+<<<<<<< HEAD
+  regStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  regMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(150,150,150,0.2)',
+  },
+  regMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  regMetaText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  rejectionNoticeBox: {
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  rejectionNoticeLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  rejectionNoticeValue: {
+    fontSize: 11,
+    color: '#B91C1C',
+    marginTop: 1,
+  },
+  toggleRosterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  toggleRosterText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  rosterList: {
+    marginTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 6,
+  },
+  rosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rosterNum: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  rosterNumText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  rosterName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  rosterPhone: {
+    fontSize: 11,
+  },
+  regActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+  },
+  acceptRegBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  acceptRegBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rejectRegBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  rejectRegBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+  },
+  modalTitle: {
+    fontSize: SIZES.base,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  modalSub: {
+    fontSize: SIZES.xs,
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  modalTextInput: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    fontSize: SIZES.xs + 1,
+    textAlignVertical: 'top',
+    minHeight: 65,
+    marginBottom: 14,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  modalCancelText: {
+    fontSize: SIZES.xs + 1,
+    fontWeight: '700',
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  modalConfirmText: {
+    color: '#FFFFFF',
+    fontSize: SIZES.xs + 1,
+    fontWeight: '700',
+  },
+=======
+  sourceTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  creatorBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  creatorBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  creatorBannerSub: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  teamCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  teamHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamNameText: {
+    fontSize: SIZES.sm + 1,
+    fontWeight: '700',
+  },
+  capacityPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  capacityPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  playerItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  playerNameText: {
+    fontSize: SIZES.xs + 1,
+    fontWeight: '600',
+  },
+>>>>>>> 4d1ada6 (Describe your changes)
 });
 
 export default TournamentDetailScreen;
