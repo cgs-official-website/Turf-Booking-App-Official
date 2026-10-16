@@ -224,16 +224,17 @@ const TurfProfileScreen = ({ navigation, route }) => {
   };
 
   const handleSavePricing = async () => {
-    // Base price is REQUIRED and must be greater than 0
+    // Weekday Price — Before 6 PM is REQUIRED and must be greater than 0
     const base = Number(String(basePrice).trim());
     if (!String(basePrice).trim() || !Number.isFinite(base) || base <= 0) {
-      Alert.alert('Base Price Required', 'Please enter the base price (regular hours). It must be greater than 0.');
+      Alert.alert('Base Price Required', 'Please enter the Weekday Price — Before 6 PM. It must be greater than 0.');
       return;
     }
-    // Evening / weekend are OPTIONAL: blank = not set (turf uses the base price instead)
+    // Weekday evening, weekend, and weekend evening are OPTIONAL
     const optional = [
-      ['Evening price', eveningPrice],
+      ['Weekday Evening price', eveningPrice],
       ['Weekend price', weekendPrice],
+      ['Weekend Evening price', weekendEveningPrice],
     ];
     for (const [label, value] of optional) {
       const t = String(value).trim();
@@ -253,6 +254,7 @@ const TurfProfileScreen = ({ navigation, route }) => {
         basePrice: base,
         eveningPrice: optionalValue(eveningPrice),
         weekendPrice: optionalValue(weekendPrice),
+        weekendEveningPrice: optionalValue(weekendEveningPrice),
       })).unwrap();
       Alert.alert('Success', 'Pricing structure saved.');
       setActiveTab(3);
@@ -502,23 +504,84 @@ const TurfProfileScreen = ({ navigation, route }) => {
         {activeTab === 2 && (
           <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>Hourly Rates (₹)</Text>
+            <Text style={[styles.helperText, { color: colors.textSecondary, marginBottom: 14 }]}>
+              Configure four independent rates for weekday and weekend time slots. Each price is independently applied with no additive calculation.
+            </Text>
 
-            <Text style={[styles.label, { color: colors.text }]}>Base Price (Regular Hours) <Text style={{ color: '#DC2626' }}>*</Text></Text>
+            {/* 1. Weekday Price — Before 6 PM */}
+            <Text style={[styles.label, { color: colors.text }]}>
+              1. Weekday Price — Before 6 PM <Text style={{ color: '#DC2626' }}>*</Text>
+            </Text>
+            <Text style={[styles.helperText, { color: colors.textSecondary, marginBottom: 6 }]}>
+              Applies Monday–Friday before 6:00 PM (e.g. ₹200)
+            </Text>
             <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Text style={styles.rupeeSign}>₹</Text>
-              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={basePrice} onChangeText={setBasePrice} keyboardType="numeric" placeholder="Required" placeholderTextColor={colors.textSecondary} />
+              <TextInput
+                style={[styles.priceTextInput, { color: colors.text }]}
+                value={basePrice}
+                onChangeText={setBasePrice}
+                keyboardType="numeric"
+                placeholder="e.g. 200 (Required)"
+                placeholderTextColor={colors.textSecondary}
+              />
             </View>
 
-            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Evening Price (After 6 PM) <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text></Text>
+            {/* 2. Weekday Evening Price — After 6 PM */}
+            <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+              2. Weekday Evening Price — After 6 PM <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text>
+            </Text>
+            <Text style={[styles.helperText, { color: colors.textSecondary, marginBottom: 6 }]}>
+              Applies Monday–Friday after 6:00 PM (e.g. ₹500)
+            </Text>
             <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Text style={styles.rupeeSign}>₹</Text>
-              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={eveningPrice} onChangeText={setEveningPrice} keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
+              <TextInput
+                style={[styles.priceTextInput, { color: colors.text }]}
+                value={eveningPrice}
+                onChangeText={setEveningPrice}
+                keyboardType="numeric"
+                placeholder="e.g. 500 (falls back to weekday price)"
+                placeholderTextColor={colors.textSecondary}
+              />
             </View>
 
-            <Text style={[styles.label, { color: colors.text, marginTop: 12 }]}>Weekend Price <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text></Text>
+            {/* 3. Weekend Price — Before 6 PM */}
+            <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+              3. Weekend Price — Before 6 PM <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text>
+            </Text>
+            <Text style={[styles.helperText, { color: colors.textSecondary, marginBottom: 6 }]}>
+              Applies Saturday–Sunday before 6:00 PM (e.g. ₹1000)
+            </Text>
             <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Text style={styles.rupeeSign}>₹</Text>
-              <TextInput style={[styles.priceTextInput, { color: colors.text }]} value={weekendPrice} onChangeText={setWeekendPrice} keyboardType="numeric" placeholderTextColor={colors.textSecondary} />
+              <TextInput
+                style={[styles.priceTextInput, { color: colors.text }]}
+                value={weekendPrice}
+                onChangeText={setWeekendPrice}
+                keyboardType="numeric"
+                placeholder="e.g. 1000 (falls back to weekday price)"
+                placeholderTextColor={colors.textSecondary}
+              />
+            </View>
+
+            {/* 4. Weekend Evening Price — After 6 PM */}
+            <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>
+              4. Weekend Evening Price — After 6 PM <Text style={{ color: colors.textSecondary, fontWeight: '400' }}>- Optional</Text>
+            </Text>
+            <Text style={[styles.helperText, { color: colors.textSecondary, marginBottom: 6 }]}>
+              Applies Saturday–Sunday after 6:00 PM (e.g. ₹1400 — independent price)
+            </Text>
+            <View style={[styles.priceInputWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={styles.rupeeSign}>₹</Text>
+              <TextInput
+                style={[styles.priceTextInput, { color: colors.text }]}
+                value={weekendEveningPrice}
+                onChangeText={setWeekendEveningPrice}
+                keyboardType="numeric"
+                placeholder="e.g. 1400 (independent price, not additive)"
+                placeholderTextColor={colors.textSecondary}
+              />
             </View>
 
             <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={handleSavePricing} disabled={saving} activeOpacity={0.85}>
@@ -797,6 +860,10 @@ const getStyles = (colors) => StyleSheet.create({
     fontSize: SIZES.xs,
     fontWeight: '700',
     marginBottom: 6,
+  },
+  helperText: {
+    fontSize: SIZES.xs - 1,
+    lineHeight: 16,
   },
   input: {
     borderRadius: SIZES.radius,

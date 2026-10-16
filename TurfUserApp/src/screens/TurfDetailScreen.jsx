@@ -379,13 +379,12 @@ export default function TurfDetailScreen({ route, navigation }) {
                 },
                 SHADOW.subtle,
               ]}
-              onPress={() => {
-                const trn = turf.activeTournament;
-                Alert.alert(
-                  trn.name,
-                  `🏆 Sport: ${trn.sport}\n📅 Dates: ${trn.startDate} to ${trn.endDate}\n👥 Teams: ${trn.numberOfTeams} (${trn.playersPerTeam} players/team)${trn.oversPerTeam ? `\n🏏 Overs: ${trn.oversPerTeam}` : ''}\n\nHost Venue: ${turf.name}\n\nShare link:\n${trn.shareableUrl}`
-                );
-              }}
+              onPress={() =>
+                navigation.navigate('TournamentDetail', {
+                  tournamentId: turf.activeTournament.id,
+                  tournament: turf.activeTournament,
+                })
+              }
               activeOpacity={0.85}
             >
               <View style={styles.tournamentBannerLeft}>

@@ -34,6 +34,41 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
   const isDraft = tournament.status === 'draft';
   const isCancelled = tournament.status === 'cancelled';
 
+  const totalTeams = tournament.numberOfTeams || tournament.totalTeams || 16;
+  const acceptedTeamsCount = tournament.acceptedTeamsCount !== undefined ? tournament.acceptedTeamsCount : 0;
+  const remainingSlots = tournament.remainingSlots !== undefined
+    ? tournament.remainingSlots
+    : Math.max(0, totalTeams - acceptedTeamsCount);
+
+  const lifecycleStatus = tournament.lifecycleStatus || (
+    isCancelled ? 'cancelled' :
+    remainingSlots === 0 ? 'full' :
+    isPublished ? 'published' : 'draft'
+  );
+
+  let statusBadgeText = 'PUBLISHED';
+  let statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
+
+  if (lifecycleStatus === 'cancelled') {
+    statusBadgeText = 'CANCELLED';
+    statusBadgeBg = 'rgba(239, 68, 68, 0.95)';
+  } else if (lifecycleStatus === 'completed') {
+    statusBadgeText = 'COMPLETED';
+    statusBadgeBg = 'rgba(100, 116, 139, 0.95)';
+  } else if (lifecycleStatus === 'ongoing') {
+    statusBadgeText = 'ONGOING';
+    statusBadgeBg = 'rgba(2, 132, 199, 0.95)';
+  } else if (lifecycleStatus === 'full') {
+    statusBadgeText = `FULL • ${acceptedTeamsCount}/${totalTeams}`;
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  } else if (lifecycleStatus === 'published') {
+    statusBadgeText = remainingSlots > 0 ? `OPEN • ${remainingSlots} SLOTS` : 'REGISTRATION OPEN';
+    statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
+  } else {
+    statusBadgeText = 'DRAFT';
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  }
+
   const turfImage =
     tournament.bannerUrl ||
     tournament.turf?.images?.[0] ||
@@ -108,18 +143,12 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
           style={[
             styles.statusBadge,
             {
-              backgroundColor: isPublished
-                ? 'rgba(16, 185, 129, 0.95)'
-                : isDraft
-                ? 'rgba(245, 158, 11, 0.95)'
-                : isCancelled
-                ? 'rgba(239, 68, 68, 0.95)'
-                : 'rgba(100, 116, 139, 0.95)',
+              backgroundColor: statusBadgeBg,
             },
           ]}
         >
           <Text style={styles.statusBadgeText}>
-            {tournament.status ? tournament.status.toUpperCase() : 'PUBLISHED'}
+            {statusBadgeText}
           </Text>
         </View>
 

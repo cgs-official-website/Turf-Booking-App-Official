@@ -15,7 +15,8 @@ const verifySessionToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret_change_in_production');
     req.user = {
-      uid: decoded.uid,
+      uid: decoded.uid || decoded.id,
+      id: decoded.uid || decoded.id,
       role: decoded.role || 'user',
       phone: decoded.phone,
       email: decoded.email,

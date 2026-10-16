@@ -43,3 +43,30 @@ export const publishTournamentApi = (tournamentId) => {
     method: 'POST',
   });
 };
+
+/**
+ * Fetch all registrations for a tournament (VendorApp)
+ */
+export const getTournamentRegistrationsApi = (tournamentId) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/registrations`);
+};
+
+/**
+ * Accept a team registration (atomic slot verification)
+ */
+export const acceptRegistrationApi = (tournamentId, registrationId) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/registrations/${registrationId}/accept`, {
+    method: 'POST',
+  });
+};
+
+/**
+ * Reject a team registration with optional reason
+ */
+export const rejectRegistrationApi = (tournamentId, registrationId, reason) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/registrations/${registrationId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+};
+

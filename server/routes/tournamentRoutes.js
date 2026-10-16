@@ -20,4 +20,8 @@ router.get('/share/:shareIdentifier', tournamentController.getPublicTournamentBy
 // Individual tournament detail (Public if published, creator-only if draft)
 router.get('/:id', optionalAuth, tournamentController.getTournamentById);
 
+// Team Registration Endpoints (UserApp)
+router.post('/:id/register', verifySessionToken, tournamentController.registerTeam);
+router.get('/:id/my-registration', verifySessionToken, tournamentController.getMyRegistration);
+
 module.exports = router;

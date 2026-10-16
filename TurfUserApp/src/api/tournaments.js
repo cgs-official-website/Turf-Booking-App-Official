@@ -57,3 +57,18 @@ export const cancelTournamentApi = (id) => {
 export const getPublicTournamentByShareIdApi = (shareIdentifier) => {
   return client.get(`/tournaments/share/${shareIdentifier}`);
 };
+
+/**
+ * Register a team for a tournament
+ */
+export const registerTournamentTeamApi = (tournamentId, data) => {
+  return client.post(`/tournaments/${tournamentId}/register`, data);
+};
+
+/**
+ * Fetch current user's registration for a tournament
+ */
+export const getMyTournamentRegistrationApi = (tournamentId) => {
+  return client.get(`/tournaments/${tournamentId}/my-registration`);
+};
+

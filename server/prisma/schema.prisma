@@ -277,6 +277,7 @@ model User {
 
   wishlistItems WishlistItem[]
   tournaments   Tournament[]
+  tournamentRegistrations TournamentRegistration[]
 
   @@map("users")
 }
@@ -584,6 +585,8 @@ model Tournament {
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  registrations            TournamentRegistration[]
+
   @@index([status])
   @@index([sport])
   @@index([turfId])
@@ -611,3 +614,26 @@ model ApiIntegration {
   @@index([status])
   @@map("api_integrations")
 }
+
+model TournamentRegistration {
+  id              String      @id @default(uuid()) @map("id") @db.VarChar(255)
+  tournamentId    String      @map("tournament_id") @db.VarChar(255)
+  tournament      Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  userId          String      @map("user_id") @db.VarChar(255)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamName        String      @map("team_name") @db.VarChar(255)
+  captainName     String      @map("captain_name") @db.VarChar(255)
+  captainPhone    String      @map("captain_phone") @db.VarChar(32)
+  captainEmail    String?     @map("captain_email") @db.VarChar(255)
+  players         Json        @default("[]") @map("players")
+  status          String      @default("pending") @map("status") @db.VarChar(32)
+  rejectionReason String?     @map("rejection_reason") @db.Text
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, status])
+  @@index([userId])
+  @@map("tournament_registrations")
+}
+

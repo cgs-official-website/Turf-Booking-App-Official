@@ -23,6 +23,7 @@ import {
   getTournamentByIdApi,
   publishTournamentApi,
   cancelTournamentApi,
+  getMyTournamentRegistrationApi,
 } from '../api/tournaments';
 
 const DEFAULT_SPORT_IMAGES = {
@@ -101,6 +102,21 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const isPublished = tournament?.status === 'published';
   const isDraft = tournament?.status === 'draft';
   const isCancelled = tournament?.status === 'cancelled';
+
+  const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
+  const acceptedTeamsCount = tournament?.acceptedTeamsCount !== undefined ? Number(tournament.acceptedTeamsCount) : 0;
+  const remainingSlots = tournament?.remainingSlots !== undefined
+    ? Number(tournament.remainingSlots)
+    : Math.max(0, totalTeams - acceptedTeamsCount);
+  const isFull = tournament?.isFull || remainingSlots <= 0;
+
+  const lifecycleStatus = tournament?.lifecycleStatus || (
+    isCancelled ? 'cancelled' :
+    isFull ? 'full' :
+    isPublished ? 'published' : 'draft'
+  );
+
+  const myRegistration = tournament?.myRegistration || null;
 
   const bannerImg =
     tournament?.bannerUrl ||
@@ -297,16 +313,33 @@ export default function TournamentDetailScreen({ route, navigation }) {
               style={[
                 styles.statusBadge,
                 {
-                  backgroundColor: isPublished
-                    ? '#10B981'
-                    : isDraft
-                    ? '#F59E0B'
-                    : '#EF4444',
+                  backgroundColor:
+                    lifecycleStatus === 'published'
+                      ? '#10B981'
+                      : lifecycleStatus === 'full'
+                      ? '#F59E0B'
+                      : lifecycleStatus === 'ongoing'
+                      ? '#0284C7'
+                      : lifecycleStatus === 'completed'
+                      ? '#64748B'
+                      : lifecycleStatus === 'draft'
+                      ? '#F59E0B'
+                      : '#EF4444',
                 },
               ]}
             >
               <Text style={styles.statusBadgeText}>
-                {isPublished ? 'PUBLISHED' : isDraft ? 'DRAFT' : 'CANCELLED'}
+                {lifecycleStatus === 'published'
+                  ? `REGISTRATION OPEN • ${remainingSlots} SLOTS LEFT`
+                  : lifecycleStatus === 'full'
+                  ? `FULL • ${acceptedTeamsCount}/${totalTeams} TEAMS`
+                  : lifecycleStatus === 'ongoing'
+                  ? 'ONGOING'
+                  : lifecycleStatus === 'completed'
+                  ? 'COMPLETED'
+                  : lifecycleStatus === 'draft'
+                  ? 'DRAFT'
+                  : 'CANCELLED'}
               </Text>
             </View>
           </View>
@@ -416,6 +449,223 @@ export default function TournamentDetailScreen({ route, navigation }) {
             </View>
           )}
         </View>
+
+        {/* ── Capacity & Slots Overview (Part 1 & 5) ── */}
+        <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <View style={styles.capacityHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="people" size={18} color={C.primary} style={{ marginRight: 8 }} />
+              <Text style={[styles.sectionHeading, { color: C.text }]}>Tournament Capacity</Text>
+            </View>
+            <View
+              style={[
+                styles.capacityTag,
+                {
+                  backgroundColor:
+                    lifecycleStatus === 'published'
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : lifecycleStatus === 'full'
+                      ? 'rgba(245, 158, 11, 0.12)'
+                      : 'rgba(100, 116, 139, 0.12)',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.capacityTagText,
+                  {
+                    color:
+                      lifecycleStatus === 'published'
+                        ? '#10B981'
+                        : lifecycleStatus === 'full'
+                        ? '#D97706'
+                        : '#64748B',
+                  },
+                ]}
+              >
+                {lifecycleStatus === 'published'
+                  ? `${remainingSlots} SLOTS REMAINING`
+                  : lifecycleStatus === 'full'
+                  ? 'FULL'
+                  : lifecycleStatus.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Stat Numbers */}
+          <View style={styles.capacityNumbersRow}>
+            <View style={styles.capacityNumCol}>
+              <Text style={[styles.capacityNumLabel, { color: C.subtext }]}>Accepted Teams</Text>
+              <Text style={[styles.capacityNumVal, { color: C.text }]}>
+                {acceptedTeamsCount} / {totalTeams}
+              </Text>
+            </View>
+            <View style={[styles.capacityDivider, { backgroundColor: C.border }]} />
+            <View style={styles.capacityNumCol}>
+              <Text style={[styles.capacityNumLabel, { color: C.subtext }]}>Remaining Slots</Text>
+              <Text style={[styles.capacityNumVal, { color: remainingSlots > 0 ? '#10B981' : '#EF4444' }]}>
+                {remainingSlots}
+              </Text>
+            </View>
+          </View>
+
+          {/* Visual Progress Bar */}
+          <View style={[styles.progressBarTrack, { backgroundColor: C.bgSoft }]}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${Math.min(100, Math.round((acceptedTeamsCount / (totalTeams || 1)) * 100))}%`,
+                  backgroundColor: isFull ? '#F59E0B' : C.primary,
+                },
+              ]}
+            />
+          </View>
+
+          {Boolean(tournament.registrationDeadline || tournament.registrationEndDate) && (
+            <View style={styles.deadlineRow}>
+              <Feather name="clock" size={13} color={C.subtext} style={{ marginRight: 6 }} />
+              <Text style={[styles.deadlineText, { color: C.subtext }]}>
+                Registration Deadline: {formatDate(tournament.registrationDeadline || tournament.registrationEndDate)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── User's Team Application Status (Part 4) ── */}
+        {myRegistration && (
+          <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+            <View style={styles.myAppTopRow}>
+              <View>
+                <Text style={[styles.myAppLabel, { color: C.subtext }]}>Your Team</Text>
+                <Text style={[styles.myAppTeamName, { color: C.text }]}>{myRegistration.teamName}</Text>
+              </View>
+
+              <View
+                style={[
+                  styles.myAppStatusBadge,
+                  {
+                    backgroundColor:
+                      myRegistration.status === 'accepted'
+                        ? 'rgba(16, 185, 129, 0.15)'
+                        : myRegistration.status === 'rejected'
+                        ? 'rgba(239, 68, 68, 0.15)'
+                        : 'rgba(245, 158, 11, 0.15)',
+                    borderColor:
+                      myRegistration.status === 'accepted'
+                        ? '#10B981'
+                        : myRegistration.status === 'rejected'
+                        ? '#EF4444'
+                        : '#F59E0B',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.myAppStatusText,
+                    {
+                      color:
+                        myRegistration.status === 'accepted'
+                          ? '#10B981'
+                          : myRegistration.status === 'rejected'
+                          ? '#EF4444'
+                          : '#D97706',
+                    },
+                  ]}
+                >
+                  {myRegistration.status === 'accepted'
+                    ? 'Accepted'
+                    : myRegistration.status === 'rejected'
+                    ? 'Rejected'
+                    : 'Pending Approval'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Official Confirmation Banner */}
+            {myRegistration.status === 'accepted' && (
+              <View style={[styles.noticeCard, { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10B981' }]}>
+                <Ionicons name="checkmark-circle" size={18} color="#10B981" style={{ marginRight: 8 }} />
+                <Text style={[styles.noticeText, { color: '#047857' }]}>
+                  You are officially registered for this tournament.
+                </Text>
+              </View>
+            )}
+
+            {/* Pending Notice */}
+            {myRegistration.status === 'pending' && (
+              <View style={[styles.noticeCard, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: '#F59E0B' }]}>
+                <Feather name="clock" size={16} color="#D97706" style={{ marginRight: 8 }} />
+                <Text style={[styles.noticeText, { color: '#B45309' }]}>
+                  Your application has been submitted and is awaiting turf owner approval.
+                </Text>
+              </View>
+            )}
+
+            {/* Rejection Notice */}
+            {myRegistration.status === 'rejected' && (
+              <View style={[styles.noticeCard, { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: '#EF4444' }]}>
+                <Feather name="alert-triangle" size={16} color="#EF4444" style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.noticeText, { color: '#B91C1C' }]}>
+                    Application Rejected
+                  </Text>
+                  {Boolean(myRegistration.rejectionReason) && (
+                    <Text style={[styles.rejectionReasonDetail, { color: '#7F1D1D' }]}>
+                      Reason: {myRegistration.rejectionReason}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.myAppRosterSummary}>
+              <Text style={[styles.myAppRosterItem, { color: C.subtext }]}>
+                👤 Captain: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{myRegistration.captainName}</Text>
+              </Text>
+              <Text style={[styles.myAppRosterItem, { color: C.subtext }]}>
+                👥 Squad: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{Array.isArray(myRegistration.players) ? myRegistration.players.length : tournament.playersPerTeam} Players</Text>
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Register CTA (Part 1) ── */}
+        {!isOwner && !myRegistration && (
+          <View style={styles.registerCtaWrap}>
+            {lifecycleStatus === 'published' && remainingSlots > 0 ? (
+              <TouchableOpacity
+                style={[styles.registerBigBtn, { backgroundColor: C.primary }, SHADOW.floating]}
+                onPress={() => navigation.navigate('RegisterTeam', { tournament })}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="trophy-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.registerBigBtnText}>Register Your Team</Text>
+              </TouchableOpacity>
+            ) : isFull ? (
+              <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                <Feather name="lock" size={16} color="#EF4444" style={{ marginRight: 8 }} />
+                <Text style={[styles.blockedCtaText, { color: C.text }]}>
+                  Tournament Full ({totalTeams}/{totalTeams} Teams Registered)
+                </Text>
+              </View>
+            ) : lifecycleStatus === 'ongoing' ? (
+              <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                <Feather name="activity" size={16} color="#0284C7" style={{ marginRight: 8 }} />
+                <Text style={[styles.blockedCtaText, { color: '#0284C7' }]}>
+                  Tournament is currently ongoing
+                </Text>
+              </View>
+            ) : lifecycleStatus === 'completed' ? (
+              <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                <Feather name="flag" size={16} color={C.subtext} style={{ marginRight: 8 }} />
+                <Text style={[styles.blockedCtaText, { color: C.subtext }]}>
+                  Tournament completed
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
 
         {/* ── Description ── */}
         {Boolean(tournament.description) && (
@@ -786,5 +1036,150 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // ── Capacity Section ──
+  capacityHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  capacityTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  capacityTagText: {
+    fontSize: 11,
+    fontFamily: FONT.bold,
+  },
+  capacityNumbersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 6,
+  },
+  capacityNumCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  capacityDivider: {
+    width: 1,
+    height: 30,
+  },
+  capacityNumLabel: {
+    fontSize: 11,
+    fontFamily: FONT.regular,
+  },
+  capacityNumVal: {
+    fontSize: 15,
+    fontFamily: FONT.bold,
+    marginTop: 2,
+  },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  deadlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  deadlineText: {
+    fontSize: 12,
+    fontFamily: FONT.regular,
+  },
+
+  // ── User Application Card ──
+  myAppTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  myAppLabel: {
+    fontSize: 11,
+    fontFamily: FONT.regular,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  myAppTeamName: {
+    fontSize: 16,
+    fontFamily: FONT.bold,
+    marginTop: 2,
+  },
+  myAppStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  myAppStatusText: {
+    fontSize: 12,
+    fontFamily: FONT.bold,
+  },
+  noticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  noticeText: {
+    fontSize: 13,
+    fontFamily: FONT.medium,
+    flex: 1,
+  },
+  rejectionReasonDetail: {
+    fontSize: 12,
+    fontFamily: FONT.regular,
+    marginTop: 3,
+  },
+  myAppRosterSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  myAppRosterItem: {
+    fontSize: 12,
+    fontFamily: FONT.regular,
+  },
+
+  // ── Register CTA ──
+  registerCtaWrap: {
+    marginBottom: 16,
+  },
+  registerBigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: 14,
+  },
+  registerBigBtnText: {
+    fontSize: 16,
+    fontFamily: FONT.bold,
+    color: '#FFFFFF',
+  },
+  blockedCtaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  blockedCtaText: {
+    fontSize: 13,
+    fontFamily: FONT.bold,
   },
 });

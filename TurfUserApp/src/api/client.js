@@ -14,15 +14,15 @@ export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Production URL is fallback; local/LAN endpoints are prioritized during development and USB debugging.
-export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
+// Prioritize local / LAN development endpoints during testing, fallback to Railway
+export const BASE_URL = LOCAL_URL;
 
 const CANDIDATE_URLS = [
   LOCAL_URL,
   LAN_URL_CURRENT,
   LOCAL_HOST_URL,
+  EMULATOR_URL,
   RAILWAY_PROD_URL,
-  Platform.OS === 'android' ? EMULATOR_URL : null,
 ].filter(Boolean);
 
 export const getOrigin = () => {
@@ -42,12 +42,7 @@ export const getImageUrl = (path) => {
 class ApiClient {
   constructor() {
     this.activeBaseUrl = BASE_URL;
-    if (IS_DEV) {
-      this.initSavedBaseUrl();
-    } else {
-      // Release build: clear any local URL saved by old test builds
-      AsyncStorage.removeItem('activeBaseUrl').catch(() => { });
-    }
+    this.initSavedBaseUrl();
   }
 
   async initSavedBaseUrl() {
@@ -78,44 +73,51 @@ class ApiClient {
     const { signal: _inheritedSignal, ...cleanOptions } = options;
 
     let lastError = null;
+    let lastResponse = null;
+
     for (let i = 0; i < urlsToTry.length; i++) {
       const baseUrl = urlsToTry[i];
-      try {
-        const controller = new AbortController();
-        const isLocal = /^https?:\/\/(127\.|localhost|10\.|192\.168\.|172\.)/.test(baseUrl);
-        const timeoutMs = isLocal ? 2000 : 25000;
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const controller = new AbortController();
+      const isLocal = /^https?:\/\/(127\.|localhost|10\.|192\.168\.|172\.)/.test(baseUrl);
+      // Give local enough time for remote cloud database queries (15s), Railway 30s
+      const timeoutMs = isLocal ? 15000 : 30000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+      try {
         const res = await fetch(`${baseUrl}${path}`, {
           ...cleanOptions,
           signal: controller.signal,
         });
+        clearTimeout(timeoutId);
+        lastResponse = res;
+
+        // If 404 on this host, another candidate server might have the route (e.g. local vs un-deployed remote)
         if (res && res.status === 404 && i < urlsToTry.length - 1) {
           lastError = new Error(`Route not found on ${baseUrl}`);
           continue;
         }
 
-        // Server responded! Lock in this working base URL
-        if (IS_DEV) {
-          console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
-        }
+        // Server responded!
         if (this.activeBaseUrl !== baseUrl && res.ok) {
           this.activeBaseUrl = baseUrl;
-          if (IS_DEV) {
-            AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
-          }
+          AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
         }
         return res;
       } catch (err) {
+        clearTimeout(timeoutId);
         lastError = err;
       }
+    }
+
+    if (lastResponse) {
+      return lastResponse;
     }
 
     const msg = lastError?.message || '';
     throw new Error(
       msg && !msg.toLowerCase().includes('abort')
         ? msg
-        : 'Cannot reach backend server. Please check your internet connection or verify Railway production server status.'
+        : 'Cannot reach backend server. Please check your network connection or verify server status.'
     );
   }
 
