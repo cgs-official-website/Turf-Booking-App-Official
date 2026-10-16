@@ -111,7 +111,7 @@ const nearbyTurfsController = {
 
           const primaryType = sports[0] || 'Turf';
           const images = Array.isArray(t.images) && t.images.length > 0 ? t.images : [];
-          const mainImage = images[0] || t.logo || DEFAULT_IMAGE;
+          const mainImage = t.logo || images[0] || DEFAULT_IMAGE;
           const price = Number(t.pricePerHour || 0);
 
           nearbyList.push({
@@ -125,6 +125,7 @@ const nearbyTurfsController = {
             pricePerHour: price,
             image: mainImage,
             images,
+            logo: t.logo || '',
             city: t.city || (typeof t.location === 'object' ? t.location?.city : '') || '',
             address: (typeof t.location === 'object' ? t.location?.address : '') || t.city || '',
             ratingAvg: Number(t.reviewsCount === 0 ? 0 : (t.ratingAvg || 0)),

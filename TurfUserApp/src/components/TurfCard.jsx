@@ -64,6 +64,68 @@ function getDisplayDistance(turf, userCoords) {
   return 'Location unavailable';
 }
 
+function isOfferCurrentlyLive(turf) {
+  if (!turf) return false;
+  const offer = turf.activeOffer;
+  if (!offer && !turf.hasOffer) return false;
+
+  if (offer) {
+    if (offer.status && offer.status !== 'active') return false;
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    const startStr = String(offer.startDate || '').slice(0, 10);
+    const endStr = String(offer.endDate || offer.startDate || '').slice(0, 10);
+
+    if (startStr && todayStr < startStr) return false;
+    if (endStr && todayStr > endStr) return false;
+
+    if (offer.scope === 'weekdays' && Array.isArray(offer.weekdays) && offer.weekdays.length > 0) {
+      const dayNum = now.getDay();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayName = dayNames[dayNum];
+      const match = offer.weekdays.some((w) => {
+        if (typeof w === 'number') return w === dayNum;
+        const str = String(w).trim().toLowerCase();
+        return str === todayName || str === String(dayNum);
+      });
+      if (!match) return false;
+    }
+    return true;
+  }
+  return Boolean(turf.hasOffer);
+}
+
+function getEligibleSlotLabel(activeOffer, turf) {
+  if (turf?.eligibleSlotLabel) return turf.eligibleSlotLabel;
+  if (activeOffer?.eligibleSlotLabel) return activeOffer.eligibleSlotLabel;
+  if (!activeOffer) return '';
+  const scope = String(activeOffer.scope || activeOffer.scopeType || 'date_range').toLowerCase();
+  if (scope === 'slot' || scope === 'specific_slot') {
+    const slots = Array.isArray(activeOffer.applicableSlots) && activeOffer.applicableSlots.length > 0
+      ? activeOffer.applicableSlots
+      : (Array.isArray(activeOffer.timeSlots) ? activeOffer.timeSlots : []);
+    if (slots.length > 0) {
+      return `Slots: ${slots.slice(0, 2).join(', ')}${slots.length > 2 ? '...' : ''}`;
+    }
+    return 'Specific Slots';
+  }
+  if (scope === 'day') {
+    return 'All Slots Today';
+  }
+  if (scope === 'weekdays') {
+    const days = Array.isArray(activeOffer.weekdays) ? activeOffer.weekdays : (Array.isArray(activeOffer.selectedDays) ? activeOffer.selectedDays : []);
+    const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
+    const dayNames = days.map((d) => map[d] || d);
+    return dayNames.length > 0 ? `${dayNames.slice(0, 2).join(', ')} Slots` : 'Weekday Slots';
+  }
+  return 'All Day Slots';
+}
+
 export default function TurfCard({
   turf,
   onPress,
@@ -81,7 +143,7 @@ export default function TurfCard({
 
   const turfId = turf.id || turf._id;
   const name = turf.name || 'Turf Arena';
-  const rawImage = turf.images?.[0] || turf.image || turf.photo;
+  const rawImage = turf.logo || turf.images?.[0] || turf.image || turf.photo;
   const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
   const price = turf.pricePerHour || turf.pricing?.baseRate || turf.price || 800;
   const locationText = turf.location?.city || turf.location?.address || turf.address || 'Local Venue';
@@ -89,6 +151,27 @@ export default function TurfCard({
   const count = turf.rating?.count ?? turf.reviewsCount ?? 0;
   const sports = turf.sportTypes || turf.sports || [];
   const distance = getDisplayDistance(turf, userCoords);
+
+  const isValidOffer = isOfferCurrentlyLive(turf);
+  const hasOffer = isValidOffer;
+  const activeOffer = isValidOffer ? (turf.activeOffer || null) : null;
+
+  let offerPrice = null;
+  if (hasOffer) {
+    if (turf.offerPrice) {
+      offerPrice = Number(turf.offerPrice);
+    } else if (activeOffer?.offerPrice) {
+      offerPrice = Number(activeOffer.offerPrice);
+    } else if (activeOffer) {
+      const isPct = activeOffer.discountType === 'percentage';
+      const val = Number(activeOffer.discountValue || 0);
+      offerPrice = isPct ? Math.max(1, Math.round(price * (1 - val / 100))) : Math.max(1, Math.round(val));
+    }
+    if (offerPrice >= price) offerPrice = null;
+  }
+
+  const offerBadgeText = turf.offerDiscount || activeOffer?.discountLabel || 'OFFER';
+  const eligibleSlotLabel = hasOffer ? getEligibleSlotLabel(activeOffer, turf) : '';
 
   if (variant === 'featured') {
     return (
@@ -99,7 +182,8 @@ export default function TurfCard({
           styles.featuredCard,
           {
             backgroundColor: dark ? '#131E2F' : '#FFFFFF',
-            borderColor: dark ? '#223249' : '#E2E8F0',
+            borderColor: hasOffer ? (dark ? '#E11D48' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
+            borderWidth: hasOffer ? 1.5 : 1,
           },
           SHADOW.card,
           style,
@@ -111,9 +195,18 @@ export default function TurfCard({
 
           {/* Top floating badges */}
           <View style={styles.topFloatingRow}>
-            <View style={styles.verifiedBadge}>
-              <Feather name="check-circle" size={12} color="#0F766E" style={{ marginRight: 4 }} />
-              <Text style={styles.verifiedText}>Verified Pitch</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.verifiedBadge}>
+                <Feather name="check-circle" size={12} color="#0F766E" style={{ marginRight: 4 }} />
+                <Text style={styles.verifiedText}>Verified Pitch</Text>
+              </View>
+
+              {hasOffer && (
+                <View style={styles.offerBadgeFloating}>
+                  <Feather name="tag" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
+                  <Text style={styles.offerBadgeFloatingText}>{offerBadgeText}</Text>
+                </View>
+              )}
             </View>
 
             {onToggleFavorite && (
@@ -154,6 +247,15 @@ export default function TurfCard({
             </Text>
           </View>
 
+          {hasOffer && !!eligibleSlotLabel ? (
+            <View style={[styles.eligibleSlotBadge, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.16)' : '#FEF3C7' }]}>
+              <Feather name="clock" size={10} color="#D97706" style={{ marginRight: 4 }} />
+              <Text style={[styles.eligibleSlotText, { color: dark ? '#FBBF24' : '#B45309' }]} numberOfLines={1}>
+                Eligible: {eligibleSlotLabel}
+              </Text>
+            </View>
+          ) : null}
+
           {/* Sports tag & price footer */}
           <View style={styles.footerRow}>
             <View style={styles.sportsRow}>
@@ -165,7 +267,12 @@ export default function TurfCard({
             </View>
 
             <View style={styles.priceRow}>
-              <Text style={[styles.priceNumber, { color: C.primary }]}>₹{price}</Text>
+              {hasOffer && offerPrice && offerPrice < price ? (
+                <Text style={[styles.originalPriceStrikethrough, { color: C.subtext }]}>₹{price}</Text>
+              ) : null}
+              <Text style={[styles.priceNumber, { color: (hasOffer && offerPrice && offerPrice < price) ? '#E11D48' : C.primary }]}>
+                ₹{hasOffer && offerPrice && offerPrice < price ? offerPrice : price}
+              </Text>
               <Text style={[styles.priceUnit, { color: C.subtext }]}>/hr</Text>
             </View>
           </View>
@@ -182,7 +289,8 @@ export default function TurfCard({
         styles.verticalCard,
         {
           backgroundColor: dark ? '#131E2F' : '#FFFFFF',
-          borderColor: dark ? '#223249' : '#E2E8F0',
+          borderColor: hasOffer ? (dark ? 'rgba(225,29,72,0.6)' : '#FDA4AF') : (dark ? '#223249' : '#E2E8F0'),
+          borderWidth: hasOffer ? 1.5 : 1,
         },
         SHADOW.subtle,
         style,
@@ -190,6 +298,14 @@ export default function TurfCard({
     >
       <View style={styles.verticalImageWrap}>
         <Image source={{ uri: imageUri }} style={styles.verticalImage} resizeMode="cover" />
+
+        {hasOffer && (
+          <View style={styles.offerBadgeVertical}>
+            <Feather name="tag" size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
+            <Text style={styles.offerBadgeVerticalText}>{offerBadgeText}</Text>
+          </View>
+        )}
+
         {onToggleFavorite && (
           <TouchableOpacity
             style={styles.favoriteBtnSmall}
@@ -221,6 +337,15 @@ export default function TurfCard({
           </Text>
         </View>
 
+        {hasOffer && !!eligibleSlotLabel ? (
+          <View style={[styles.eligibleSlotBadgeSmall, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.16)' : '#FEF3C7' }]}>
+            <Feather name="clock" size={9} color="#D97706" style={{ marginRight: 3 }} />
+            <Text style={[styles.eligibleSlotTextSmall, { color: dark ? '#FBBF24' : '#B45309' }]} numberOfLines={1}>
+              Eligible: {eligibleSlotLabel}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.verticalFooter}>
           <View style={styles.sportsRow}>
             {(sports.length > 0 ? sports.slice(0, 2) : ['General']).map((s, idx) => (
@@ -231,7 +356,12 @@ export default function TurfCard({
           </View>
 
           <View style={styles.priceRow}>
-            <Text style={[styles.priceNumberSmall, { color: C.primary }]}>₹{price}</Text>
+            {hasOffer && offerPrice && offerPrice < price ? (
+              <Text style={[styles.originalPriceStrikethroughSmall, { color: C.subtext }]}>₹{price}</Text>
+            ) : null}
+            <Text style={[styles.priceNumberSmall, { color: (hasOffer && offerPrice && offerPrice < price) ? '#E11D48' : C.primary }]}>
+              ₹{hasOffer && offerPrice && offerPrice < price ? offerPrice : price}
+            </Text>
             <Text style={[styles.priceUnit, { color: C.subtext }]}>/hr</Text>
           </View>
         </View>
@@ -430,5 +560,31 @@ const styles = StyleSheet.create({
   priceNumberSmall: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  eligibleSlotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  eligibleSlotText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  eligibleSlotBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  eligibleSlotTextSmall: {
+    fontSize: 9.5,
+    fontWeight: '700',
   },
 });

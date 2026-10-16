@@ -38,6 +38,15 @@ router.patch('/matches/:id', adminController.updateAdminMatch);
 router.delete('/matches/:id', adminController.deleteAdminMatch);
 router.get('/reviews', adminController.getAllReviews);
 
+// Tournaments Management (Super Admin Exclusive)
+const tournamentController = require('../controllers/tournamentController');
+router.get('/tournaments', tournamentController.getAllTournaments);
+router.get('/tournaments/:id', tournamentController.getTournamentById);
+router.post('/tournaments', tournamentController.createTournament);
+router.put('/tournaments/:id', tournamentController.updateTournament);
+router.patch('/tournaments/:id/status', tournamentController.updateTournamentStatus);
+router.delete('/tournaments/:id', tournamentController.deleteTournament);
+
 // Issue Reports & Support
 router.get('/reports', adminController.getAllReports);
 router.patch('/reports/:id', adminController.updateReportStatus);
@@ -47,5 +56,13 @@ router.post('/notifications/send-test', adminController.sendTestNotification);
 
 // Bootstrap Custom Admin Claim
 router.post('/set-admin-claim', adminController.setAdminClaim);
+
+// Centralized API Integrations & Usage Monitoring
+const integrationController = require('../controllers/integrationController');
+router.get('/integrations', integrationController.getAllIntegrations);
+router.put('/integrations/:provider', integrationController.updateIntegration);
+router.post('/integrations/:provider/test', integrationController.testIntegration);
+router.get('/integrations/:provider/usage', integrationController.getUsage);
+router.post('/integrations/:provider/refresh-usage', integrationController.getUsage);
 
 module.exports = router;

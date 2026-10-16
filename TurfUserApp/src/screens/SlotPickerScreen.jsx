@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, ActivityIndicator, Alert, Modal,
-  Dimensions, Image,
+  Dimensions, Image, AppState,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -24,8 +25,8 @@ const nextDays = (n) => {
 };
 
 const fmtDate = (d) => {
-  const y   = d.getFullYear();
-  const m   = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
@@ -37,7 +38,7 @@ const to12h = (time24) => {
   if (!time24) return '';
   const [h, m] = time24.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12  = h % 12 || 12;
+  const h12 = h % 12 || 12;
   return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
 };
 
@@ -52,26 +53,45 @@ const minsToTime = (mins) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
 
+const MAX_PLAY_MINS = 180; // a player can book up to 3 hours in one go
+
+const slotLength = (slot) =>
+  timeToMins(slot.end || slot.endTime) - timeToMins(slot.start || slot.startTime);
+
+// 30 -> "30 Minutes", 60 -> "1 Hour", 90 -> "1.5 Hours", 120 -> "2 Hours"
+const formatDuration = (mins) => {
+  if (mins < 60) return `${mins} Minutes`;
+  const h = mins / 60;
+  return `${h} ${h > 1 ? 'Hours' : 'Hour'}`;
+};
+
 export default function SlotPickerScreen({ route, navigation }) {
   const { turf } = route.params;
   const turfId = turf._id || turf.id;
 
   const days = useMemo(() => nextDays(7), []);
 
-  const [selectedDate,  setSelectedDate]  = useState(fmtDate(days[0]));
-  const [slots,         setSlots]         = useState([]);
-  const [selectedSlot,  setSelectedSlot]  = useState(null);
-  const [endSlot,       setEndSlot]       = useState(null);
+  const initialDate = useMemo(() => {
+    const passedDate = route.params?.date;
+    if (passedDate) {
+      const match = days.find((d) => fmtDate(d) === passedDate);
+      if (match) return passedDate;
+    }
+    return fmtDate(days[0]);
+  }, [route.params?.date, days]);
+
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [slots, setSlots] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [endSlot, setEndSlot] = useState(null);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [sport,         setSport]         = useState(route.params?.sport || turf.sports?.[0] || turf.sportTypes?.[0] || 'Football');
-  const [loading,       setLoading]       = useState(true);
+  const [sport, setSport] = useState(route.params?.sport || turf.sports?.[0] || turf.sportTypes?.[0] || 'Football');
+  const [loading, setLoading] = useState(true);
 
   const { C, dark } = useTheme();
 
-  useEffect(() => {
-    setLoading(true);
-    setSelectedSlot(null);
-    setEndSlot(null);
+  const fetchSlots = useCallback((showLoading = true) => {
+    if (showLoading) setLoading(true);
     turfsApi
       .getAvailability(turfId, selectedDate)
       .then((res) => {
@@ -88,8 +108,32 @@ export default function SlotPickerScreen({ route, navigation }) {
         console.warn('Error fetching slots:', err?.message || err);
         setSlots([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
   }, [selectedDate, turfId]);
+
+  useEffect(() => {
+    setSelectedSlot(null);
+    setEndSlot(null);
+    fetchSlots(true);
+  }, [fetchSlots]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSlots(false);
+    }, [fetchSlots])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        fetchSlots(false);
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [fetchSlots]);
 
   const turfPrice = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
 
@@ -127,43 +171,63 @@ export default function SlotPickerScreen({ route, navigation }) {
     return { status: 'available', label: 'Available', color: '#0F766E', isAvail: true };
   };
 
+  // Slot regular price before discount
+  const slotRegularPrice = (slot) => {
+    const rp = Number(slot.regularPrice);
+    if (Number.isFinite(rp) && rp > 0) return rp;
+    const p = Number(slot.price);
+    return Number.isFinite(p) && p > 0 ? p : Math.round((turfPrice * slotLength(slot)) / 60);
+  };
+
+  // Price of one slot. The server already applies offers / evening / weekend / base rates per slot.
+  const slotPrice = (slot) => {
+    const p = Number(slot.price);
+    return Number.isFinite(p) && p > 0 ? p : slotRegularPrice(slot);
+  };
+
+  // Duration choices: walk forward slot-by-slot from the chosen start while the next slot is free.
+  // Works for 60-minute turfs (1h / 2h / 3h) and 30-minute turfs (30m / 1h / 1.5h ... 3h).
   const endSlots = useMemo(() => {
     if (!selectedSlot) return [];
-    const startMin = timeToMins(selectedSlot.start);
     const options = [];
+    let cursor = selectedSlot;
+    let totalMins = 0;
+    let totalPrice = 0;
+    let totalOriginalPrice = 0;
+    let matchedOffer = null;
 
-    // Option 1: 1 Hour Play (Always valid for the selected available slot)
-    options.push({
-      end: minsToTime(startMin + 60),
-      duration: 1,
-    });
+    while (cursor) {
+      const len = slotLength(cursor);
+      if (len <= 0 || totalMins + len > MAX_PLAY_MINS) break;
+      totalMins += len;
+      totalPrice += slotPrice(cursor);
+      totalOriginalPrice += slotRegularPrice(cursor);
+      if (cursor.offer && !matchedOffer) {
+        matchedOffer = cursor.offer;
+      }
 
-    // Check Option 2: 2 Hours Play (Next 1-hour slot must exist and be available)
-    const slot2Start = minsToTime(startMin + 60);
-    const slot2 = slots.find((s) => (s.start || s.startTime) === slot2Start);
-    const slot2Avail = slot2 && getSlotDisplayInfo(slot2, selectedDate).isAvail;
+      const discountAmt = Math.max(0, totalOriginalPrice - totalPrice);
 
-    if (slot2Avail) {
       options.push({
-        end: minsToTime(startMin + 120),
-        duration: 2,
+        end: cursor.end || cursor.endTime,
+        duration: totalMins / 60,
+        durationMins: totalMins,
+        price: totalPrice,
+        originalPrice: totalOriginalPrice,
+        discountAmount: discountAmt,
+        offer: matchedOffer,
+        offerId: matchedOffer?.id || null,
       });
 
-      // Check Option 3: 3 Hours Play (Third 1-hour slot must also exist and be available)
-      const slot3Start = minsToTime(startMin + 120);
-      const slot3 = slots.find((s) => (s.start || s.startTime) === slot3Start);
-      const slot3Avail = slot3 && getSlotDisplayInfo(slot3, selectedDate).isAvail;
-
-      if (slot3Avail) {
-        options.push({
-          end: minsToTime(startMin + 180),
-          duration: 3,
-        });
-      }
+      const nextStart = cursor.end || cursor.endTime;
+      const next = slots.find((s) => (s.start || s.startTime) === nextStart);
+      if (!next || !getSlotDisplayInfo(next, selectedDate).isAvail) break;
+      cursor = next;
     }
 
     return options;
-  }, [selectedSlot, slots, selectedDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSlot, slots, selectedDate, turfPrice]);
 
   const handleSlotSelect = (slot) => {
     const slotInfo = getSlotDisplayInfo(slot, selectedDate);
@@ -183,12 +247,18 @@ export default function SlotPickerScreen({ route, navigation }) {
       return;
     }
     navigation.navigate('BookingConfirm', {
-      turfData:  { ...turf, _id: turfId, pricePerHour: turfPrice, price: turfPrice },
+      turfData: { ...turf, _id: turfId, pricePerHour: turfPrice, price: turfPrice },
       sport,
-      date:      selectedDate,
+      date: selectedDate,
       startTime: selectedSlot.start,
-      endTime:   endSlot.end,
-      duration:  endSlot.duration || 1,
+      endTime: endSlot.end,
+      duration: endSlot.duration || 1,
+      durationMins: endSlot.durationMins,
+      totalPrice: endSlot.price,
+      originalPrice: endSlot.originalPrice || endSlot.price,
+      discountAmount: endSlot.discountAmount || 0,
+      offerId: endSlot.offerId || null,
+      appliedOffer: endSlot.offer || null,
     });
   };
 
@@ -244,7 +314,7 @@ export default function SlotPickerScreen({ route, navigation }) {
             contentContainerStyle={styles.dateScroll}
           >
             {days.map((d) => {
-              const ds     = fmtDate(d);
+              const ds = fmtDate(d);
               const active = ds === selectedDate;
               const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
               const monthName = d.toLocaleDateString('en-US', { month: 'short' });
@@ -283,7 +353,7 @@ export default function SlotPickerScreen({ route, navigation }) {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Feather name="clock" size={16} color={C.primary} style={{ marginRight: 8 }} />
                 <Text style={[styles.selectedTimeText, { color: C.primaryDark || C.primary }]}>
-                  {to12h(selectedSlot.start)} → {to12h(endSlot.end)} ({endSlot.duration} {endSlot.duration > 1 ? 'Hours' : 'Hour'})
+                  {to12h(selectedSlot.start)} → {to12h(endSlot.end)} ({formatDuration(endSlot.durationMins)})
                 </Text>
               </View>
               <TouchableOpacity onPress={() => { setSelectedSlot(null); setEndSlot(null); }}>
@@ -334,6 +404,15 @@ export default function SlotPickerScreen({ route, navigation }) {
                     onPress={() => handleSlotSelect(slot)}
                     activeOpacity={0.8}
                   >
+                    {slot.hasOffer && isAvail && (
+                      <View style={styles.slotOfferTag}>
+                        <Text style={styles.slotOfferTagText}>
+                          {slot.offer?.discountType === 'percentage'
+                            ? `${slot.offer.discountValue}% OFF`
+                            : 'OFFER'}
+                        </Text>
+                      </View>
+                    )}
                     <Text
                       style={[
                         styles.slotTime,
@@ -357,7 +436,20 @@ export default function SlotPickerScreen({ route, navigation }) {
                         },
                       ]}
                     >
-                      {isSelected ? 'SELECTED' : slotInfo.label}                    </Text>
+                      {isSelected ? 'SELECTED' : slotInfo.label}
+                    </Text>
+                    {isAvail && Number(slot.price) > 0 && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 4 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: isSelected ? '#FFFFFF' : (slot.hasOffer ? '#059669' : C.primary) }}>
+                          ₹{slot.price}
+                        </Text>
+                        {slot.hasOffer && slot.regularPrice && slot.regularPrice > slot.price && (
+                          <Text style={{ fontSize: 9, textDecorationLine: 'line-through', color: isSelected ? 'rgba(255,255,255,0.7)' : C.caption }}>
+                            ₹{slot.regularPrice}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -369,9 +461,21 @@ export default function SlotPickerScreen({ route, navigation }) {
         <View style={[styles.footer, { backgroundColor: dark ? '#131E2F' : '#FFFFFF', borderTopColor: C.border }]}>
           <View>
             <Text style={[styles.footerLabel, { color: C.subtext }]}>Total Amount</Text>
-            <Text style={[styles.footerPrice, { color: C.primary }]}>
-              ₹{turfPrice * (endSlot?.duration || 1)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={[styles.footerPrice, { color: endSlot?.discountAmount > 0 ? '#059669' : C.primary }]}>
+                ₹{endSlot ? endSlot.price : 0}
+              </Text>
+              {endSlot?.discountAmount > 0 && (
+                <Text style={{ textDecorationLine: 'line-through', color: C.subtext, fontSize: 13, fontWeight: '600' }}>
+                  ₹{endSlot.originalPrice}
+                </Text>
+              )}
+            </View>
+            {endSlot?.discountAmount > 0 && (
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669', marginTop: 1 }}>
+                🎉 Saving ₹{endSlot.discountAmount}
+              </Text>
+            )}
           </View>
           <PrimaryButton
             title="Continue to Confirm →"
@@ -391,7 +495,7 @@ export default function SlotPickerScreen({ route, navigation }) {
               Start time: {selectedSlot ? to12h(selectedSlot.start) : ''}
             </Text>
 
-            <View style={styles.durationOptions}>
+            <ScrollView style={{ maxHeight: SCREEN_HEIGHT * 0.45 }} contentContainerStyle={styles.durationOptions}>
               {endSlots.map((opt) => (
                 <TouchableOpacity
                   key={opt.end}
@@ -409,17 +513,31 @@ export default function SlotPickerScreen({ route, navigation }) {
                   activeOpacity={0.8}
                 >
                   <View>
-                    <Text style={[styles.durationHours, { color: C.text }]}>
-                      {opt.duration} {opt.duration > 1 ? 'Hours Play' : 'Hour Play'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.durationHours, { color: C.text }]}>
+                        {formatDuration(opt.durationMins)} Play
+                      </Text>
+                      {opt.discountAmount > 0 && (
+                        <View style={styles.durationSaveBadge}>
+                          <Text style={styles.durationSaveBadgeText}>Save ₹{opt.discountAmount}</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[styles.durationEnd, { color: C.subtext }]}>Until {to12h(opt.end)}</Text>
                   </View>
-                  <Text style={[styles.durationPrice, { color: C.primary }]}>
-                    ₹{turfPrice * opt.duration}
-                  </Text>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.durationPrice, { color: opt.discountAmount > 0 ? '#059669' : C.primary }]}>
+                      ₹{opt.price}
+                    </Text>
+                    {opt.discountAmount > 0 && (
+                      <Text style={{ fontSize: 11, textDecorationLine: 'line-through', color: C.subtext }}>
+                        ₹{opt.originalPrice}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.modalCancelBtn, { borderColor: C.border }]}
@@ -611,5 +729,32 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     alignItems: 'center',
+  },
+  slotOfferTag: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#10B981',
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    zIndex: 2,
+  },
+  slotOfferTagText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  durationSaveBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+  durationSaveBadgeText: {
+    color: '#059669',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

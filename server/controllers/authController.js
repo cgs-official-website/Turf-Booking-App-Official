@@ -244,18 +244,10 @@ const authController = {
         });
       }
 
-      // In development, auto-approve pending vendors so developers/testers can test immediately
-      if (vendor.kycStatus === 'pending' && process.env.NODE_ENV !== 'production') {
-        vendor = await prisma.vendor.update({
-          where: { id: vendor.id },
-          data: { kycStatus: 'approved' },
-        });
-      }
-
       if (vendor.kycStatus === 'pending') {
         return sendError(
           res,
-          'Your account is pending Superadmin approval. You will be able to log in once your account has been approved.',
+          'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.',
           403,
           'ACCOUNT_PENDING',
           { kycStatus: 'pending', vendor: formatVendor(vendor) }
@@ -273,10 +265,10 @@ const authController = {
       }
 
       if (vendor.kycStatus === 'rejected') {
-        const reason = vendor.rejectionReason ? ` Reason: ${vendor.rejectionReason}` : '';
+        const reason = vendor.rejectionReason ? ` Reason: ${vendor.rejectionReason}.` : '';
         return sendError(
           res,
-          `Your account registration was not approved.${reason} Please contact support.`,
+          `Your profile was rejected by Super Admin.${reason} Please review the rejection reason and contact support or update your details if the existing workflow permits it.`,
           403,
           'KYC_REJECTED',
           { kycStatus: 'rejected', rejectionReason: vendor.rejectionReason, vendor: formatVendor(vendor) }
@@ -501,6 +493,15 @@ const authController = {
       });
 
       if (vendor) {
+        if (vendor.kycStatus === 'pending') {
+          return sendError(
+            res,
+            'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.',
+            403,
+            'ACCOUNT_PENDING',
+            { kycStatus: 'pending', vendor: formatVendor(vendor) }
+          );
+        }
         if (vendor.kycStatus === 'suspended') {
           return sendError(
             res,
@@ -511,10 +512,10 @@ const authController = {
           );
         }
         if (vendor.kycStatus === 'rejected') {
-          const reason = vendor.rejectionReason ? ` Reason: ${vendor.rejectionReason}` : '';
+          const reason = vendor.rejectionReason ? ` Reason: ${vendor.rejectionReason}.` : '';
           return sendError(
             res,
-            `Your account registration was not approved.${reason} Please contact support.`,
+            `Your profile was rejected by Super Admin.${reason} Please review the rejection reason and contact support or update your details if the existing workflow permits it.`,
             403,
             'KYC_REJECTED',
             { kycStatus: 'rejected', rejectionReason: vendor.rejectionReason, vendor: formatVendor(vendor) }
@@ -645,6 +646,15 @@ const authController = {
       });
 
       if (vendor) {
+        if (vendor.kycStatus === 'pending') {
+          return sendError(
+            res,
+            'Your profile has been submitted to Super Admin and is awaiting approval. You can log in once your profile is approved.',
+            403,
+            'ACCOUNT_PENDING',
+            { kycStatus: 'pending', vendor: formatVendor(vendor) }
+          );
+        }
         if (vendor.kycStatus === 'suspended') {
           return sendError(
             res,
@@ -655,10 +665,10 @@ const authController = {
           );
         }
         if (vendor.kycStatus === 'rejected') {
-          const reason = vendor.rejectionReason ? ` Reason: ${vendor.rejectionReason}` : '';
+          const reason = vendor.rejectionReason ? ` Reason: ${vendor.rejectionReason}.` : '';
           return sendError(
             res,
-            `Your account registration was not approved.${reason} Please contact support.`,
+            `Your profile was rejected by Super Admin.${reason} Please review the rejection reason and contact support or update your details if the existing workflow permits it.`,
             403,
             'KYC_REJECTED',
             { kycStatus: 'rejected', rejectionReason: vendor.rejectionReason, vendor: formatVendor(vendor) }
@@ -1126,6 +1136,56 @@ const authController = {
 
     return sendSuccess(res, {
       message: 'Password reset successfully. Please sign in with your new password.',
+    });
+  },
+
+  /**
+   * GET /api/v1/auth/vendor-status or POST /api/v1/auth/vendor-status
+   * Fetch actual approval status of vendor application
+   */
+  async getVendorStatus(req, res) {
+    const rawEmail = req.query?.email || req.body?.email || req.query?.identifier || req.body?.identifier;
+
+    if (!rawEmail) {
+      return sendError(res, 'Email address is required', 400, 'MISSING_FIELDS');
+    }
+
+    const cleanEmail = String(rawEmail).toLowerCase().trim();
+    const vendorUid = `vendor_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+
+    const vendor = await prisma.vendor.findFirst({
+      where: {
+        OR: [
+          { email: { equals: cleanEmail, mode: 'insensitive' } },
+          { id: vendorUid },
+          { phone: cleanEmail },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        kycStatus: true,
+        rejectionReason: true,
+        reviewedAt: true,
+        createdAt: true,
+        turfOnboardingComplete: true,
+      },
+    });
+
+    if (!vendor) {
+      return sendError(res, 'Vendor account not found', 404, 'ACCOUNT_NOT_FOUND');
+    }
+
+    return sendSuccess(res, {
+      id: vendor.id,
+      email: vendor.email,
+      name: vendor.name,
+      kycStatus: vendor.kycStatus,
+      rejectionReason: vendor.rejectionReason,
+      reviewedAt: vendor.reviewedAt,
+      createdAt: vendor.createdAt,
     });
   },
 };

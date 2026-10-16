@@ -8,20 +8,20 @@ import { Platform } from 'react-native';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT = 'http://10.48.78.39:5000/api/v1';
+export const LAN_URL_CURRENT = 'http://192.168.0.213:5000/api/v1';
 export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
 export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Primary base URL is cloud Railway production. LAN candidate is secondary fallback.
-export const BASE_URL = RAILWAY_PROD_URL;
+// Production URL is fallback; local/LAN endpoints are prioritized during development and USB debugging.
+export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
 
 const CANDIDATE_URLS = [
-  RAILWAY_PROD_URL,
-  LAN_URL_CURRENT,
   LOCAL_URL,
+  LAN_URL_CURRENT,
   LOCAL_HOST_URL,
+  RAILWAY_PROD_URL,
   Platform.OS === 'android' ? EMULATOR_URL : null,
 ].filter(Boolean);
 
@@ -42,7 +42,12 @@ export const getImageUrl = (path) => {
 class ApiClient {
   constructor() {
     this.activeBaseUrl = BASE_URL;
-    this.initSavedBaseUrl();
+    if (IS_DEV) {
+      this.initSavedBaseUrl();
+    } else {
+      // Release build: clear any local URL saved by old test builds
+      AsyncStorage.removeItem('activeBaseUrl').catch(() => { });
+    }
   }
 
   async initSavedBaseUrl() {
@@ -77,13 +82,7 @@ class ApiClient {
       const baseUrl = urlsToTry[i];
       try {
         const controller = new AbortController();
-        const isLocal =
-          baseUrl.includes('127.0.0.1') ||
-          baseUrl.includes('localhost') ||
-          baseUrl.includes('10.0.2.2') ||
-          baseUrl.includes('10.') ||
-          baseUrl.includes('192.168.') ||
-          baseUrl.includes('172.');
+        const isLocal = /^https?:\/\/(127\.|localhost|10\.|192\.168\.|172\.)/.test(baseUrl);
         const timeoutMs = isLocal ? 2000 : 25000;
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -91,13 +90,20 @@ class ApiClient {
           ...cleanOptions,
           signal: controller.signal,
         });
-        clearTimeout(timeoutId);
+        if (res && res.status === 404 && i < urlsToTry.length - 1) {
+          lastError = new Error(`Route not found on ${baseUrl}`);
+          continue;
+        }
 
         // Server responded! Lock in this working base URL
-        console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
-        if (this.activeBaseUrl !== baseUrl) {
+        if (IS_DEV) {
+          console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
+        }
+        if (this.activeBaseUrl !== baseUrl && res.ok) {
           this.activeBaseUrl = baseUrl;
-          AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
+          if (IS_DEV) {
+            AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });
+          }
         }
         return res;
       } catch (err) {

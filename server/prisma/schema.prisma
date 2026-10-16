@@ -178,6 +178,9 @@ model Booking {
   cancellationReason String?   @map("cancellation_reason")
   isReviewed         Boolean   @default(false) @map("is_reviewed")
   reviewId           String?   @map("review_id") @db.VarChar(255)
+  offerId            String?   @map("offer_id") @db.VarChar(255)
+  discountAmount     Decimal?  @default(0.00) @map("discount_amount") @db.Decimal(10, 2)
+  originalAmount     Decimal?  @map("original_amount") @db.Decimal(10, 2)
 
   payments           Payment[]
 
@@ -215,6 +218,8 @@ model Vendor {
   subscriptions            VendorSubscription[]
   kycDocuments             VendorKycDocument[]
   reports                  Report[]
+  offers                   Offer[]
+  tournaments              Tournament[]
 
   @@map("vendors")
 }
@@ -249,6 +254,8 @@ model Turf {
   wishlistItems   WishlistItem[]
   reviews         Review[]
   matches         Match[]
+  offers          Offer[]
+  tournaments     Tournament[]
 
   @@index([vendorId])
   @@index([city])
@@ -269,6 +276,7 @@ model User {
   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   wishlistItems WishlistItem[]
+  tournaments   Tournament[]
 
   @@map("users")
 }
@@ -510,4 +518,96 @@ model VendorEnquiry {
   @@index([vendorMobile])
   @@index([status])
   @@map("vendor_enquiries")
+}
+
+model Offer {
+  id              String    @id @default(uuid()) @map("id") @db.VarChar(255)
+  turfId          String    @map("turf_id") @db.VarChar(255)
+  turf            Turf      @relation(fields: [turfId], references: [id], onDelete: Cascade)
+  vendorId        String    @map("vendor_id") @db.VarChar(255)
+  vendor          Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  title           String    @map("title") @db.VarChar(255)
+  description     String?   @map("description") @db.Text
+  discountType    String    @map("discount_type") @db.VarChar(32) // "percentage" | "fixed"
+  discountValue   Decimal   @map("discount_value") @db.Decimal(10, 2)
+  scope           String    @map("scope") @db.VarChar(32) // "slot" | "day" | "weekdays" | "date_range"
+  startDate       String    @map("start_date") @db.VarChar(10) // YYYY-MM-DD
+  endDate         String    @map("end_date") @db.VarChar(10)   // YYYY-MM-DD
+  applicableSlots Json?     @default("[]") @map("applicable_slots")
+  weekdays        Json?     @default("[]") @map("weekdays")
+  bannerUrl       String?   @map("banner_url") @db.Text
+  status          String    @default("active") @map("status") @db.VarChar(32) // "active" | "paused"
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([turfId, status])
+  @@index([vendorId])
+  @@index([startDate, endDate])
+  @@map("offers")
+}
+
+model Tournament {
+  id                       String    @id @default(uuid()) @map("id") @db.VarChar(255)
+  creatorType              String    @default("VENDOR") @map("creator_type") @db.VarChar(32) // "VENDOR" | "USER"
+  turfId                   String?   @map("turf_id") @db.VarChar(255)
+  turf                     Turf?     @relation(fields: [turfId], references: [id], onDelete: SetNull)
+  vendorId                 String?   @map("vendor_id") @db.VarChar(255)
+  vendor                   Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  userId                   String?   @map("user_id") @db.VarChar(255)
+  user                     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                     String    @map("name") @db.VarChar(255)
+  description              String?   @map("description") @db.Text
+  sport                    String    @map("sport") @db.VarChar(64)
+  venueName                String?   @map("venue_name") @db.VarChar(255)
+  city                     String?   @map("city") @db.VarChar(128)
+  venueLocation            Json?     @map("venue_location")
+  startDate                String    @map("start_date") @db.VarChar(32)
+  endDate                  String    @map("end_date") @db.VarChar(32)
+  registrationStartDate    String?   @map("registration_start_date") @db.VarChar(32)
+  registrationEndDate      String?   @map("registration_end_date") @db.VarChar(32)
+  entryFee                 Decimal   @default(0.00) @map("entry_fee") @db.Decimal(10, 2)
+  prizePool                Decimal?  @default(0.00) @map("prize_pool") @db.Decimal(10, 2)
+  prizeDetails             Json?     @map("prize_details")
+  participantCapacity      Int       @default(16) @map("participant_capacity")
+  format                   String    @default("knockout") @map("format") @db.VarChar(64)
+  rules                    String?   @map("rules") @db.Text
+  bannerUrl                String?   @map("banner_url") @db.Text
+  status                   String    @default("draft") @map("status") @db.VarChar(32)
+  currentParticipantsCount Int      @default(0) @map("current_participants_count")
+  contactPhone             String?   @map("contact_phone") @db.VarChar(32)
+  contactEmail             String?   @map("contact_email") @db.VarChar(255)
+  createdBy                String?   @map("created_by") @db.VarChar(255)
+  numberOfTeams            Int?      @map("number_of_teams")
+  playersPerTeam           Int?      @map("players_per_team")
+  oversPerTeam             Int?      @map("overs_per_team")
+  shareableIdentifier      String?   @unique @map("shareable_identifier") @db.VarChar(255)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([sport])
+  @@index([turfId])
+  @@index([vendorId])
+  @@index([startDate, endDate])
+  @@index([creatorType, status])
+  @@index([turfId, status])
+  @@index([vendorId, status])
+  @@index([userId, status])
+  @@index([shareableIdentifier])
+  @@map("tournaments")
+}
+
+model ApiIntegration {
+  provider       String    @id @map("provider") @db.VarChar(64)
+  isEnabled      Boolean   @default(true) @map("is_enabled")
+  config         Json      @default("{}") @map("config")
+  status         String    @default("not_configured") @map("status") @db.VarChar(32)
+  lastTestAt     DateTime? @map("last_test_at") @db.Timestamptz(6)
+  lastError      String?   @map("last_error") @db.Text
+  lastSuccessAt  DateTime? @map("last_success_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("api_integrations")
 }

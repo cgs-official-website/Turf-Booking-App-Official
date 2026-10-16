@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const turfController = require('../controllers/turfController');
 const nearbyTurfsController = require('../controllers/nearbyTurfsController');
+const userOfferController = require('../controllers/userOfferController');
 const verifySessionToken = require('../middleware/verifySessionToken');
 
 // Public Turf Discovery Endpoints
@@ -13,6 +14,7 @@ router.get('/:turfId', turfController.getTurfById);
 router.get('/:turfId/slots', turfController.getAvailableSlots);
 router.get('/:turfId/availability', turfController.getAvailableSlots);
 router.get('/:turfId/reviews', turfController.getTurfReviews);
+router.get('/:turfId/offers', userOfferController.getTurfOffers);
 
 // Authenticated User Wishlist Toggle
 router.post('/:turfId/wishlist', verifySessionToken, turfController.toggleWishlist);

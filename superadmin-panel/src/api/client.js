@@ -244,6 +244,76 @@ class AdminApiClient {
       method: 'DELETE',
     });
   }
+  // Tournaments Management
+  getAllTournaments(status, sport, search, turfId) {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    if (sport && sport !== 'all') params.set('sport', sport);
+    if (search) params.set('search', search);
+    if (turfId) params.set('turfId', turfId);
+    const qs = params.toString();
+    return this.request(`/admin/tournaments${qs ? `?${qs}` : ''}`);
+  }
+
+  getTournamentById(id) {
+    return this.request(`/admin/tournaments/${id}`);
+  }
+
+  createTournament(data) {
+    return this.request('/admin/tournaments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateTournament(id, data) {
+    return this.request(`/admin/tournaments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateTournamentStatus(id, status) {
+    return this.request(`/admin/tournaments/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  deleteTournament(id, force = false) {
+    return this.request(`/admin/tournaments/${id}${force ? '?force=true' : ''}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Centralized API Integrations & Usage Monitoring
+  getIntegrations() {
+    return this.request('/admin/integrations');
+  }
+
+  updateIntegration(provider, data) {
+    return this.request(`/admin/integrations/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  testIntegration(provider, credentials = null) {
+    return this.request(`/admin/integrations/${provider}/test`, {
+      method: 'POST',
+      body: JSON.stringify({ credentials }),
+    });
+  }
+
+  getIntegrationUsage(provider) {
+    return this.request(`/admin/integrations/${provider}/usage`);
+  }
+
+  refreshIntegrationUsage(provider) {
+    return this.request(`/admin/integrations/${provider}/refresh-usage`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new AdminApiClient();

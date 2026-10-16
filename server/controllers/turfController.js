@@ -2,10 +2,28 @@ const prisma = require('../config/prisma');
 const bookingService = require('../services/bookingService');
 const cacheService = require('../services/cacheService');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
+const { getChunkPrice, getHourlyRate, resolveBestOffer } = require('../utils/pricing');
+const { formatSlotsLabel } = require('../utils/slotLabel');
 
 /**
  * Standardize turf entity shape across UserApp, VendorApp, and AdminPanel
  */
+const to12h = (t24) => {
+  if (!t24) return undefined;
+  const [h, m] = String(t24).split(':').map(Number);
+  if (Number.isNaN(h)) return undefined;
+  const hh = h % 24;
+  const ap = hh >= 12 ? 'PM' : 'AM';
+  return `${String(hh % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ap}`;
+};
+
+const getLocalDateStr = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 function formatTurf(t) {
   if (!t) return null;
   const baseRate = Number(t.pricePerHour || 0);
@@ -17,6 +35,81 @@ function formatTurf(t) {
   const images = Array.isArray(t.images) ? t.images : [];
   const lat = t.latitude ?? t.lat ?? (t.location?.geo?.lat || t.location?.lat || null);
   const lng = t.longitude ?? t.lng ?? (t.location?.geo?.lng || t.location?.lng || null);
+  const cfg = (t.slotConfig && typeof t.slotConfig === 'object') ? t.slotConfig : {};
+  const pricing = cfg.pricing || {};
+  const pincode = t.location?.pincode || '';
+
+  const todayStr = getLocalDateStr();
+  const now = new Date();
+  const dayNum = now.getDay();
+  const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const todayDayName = dayNames[dayNum];
+
+  const activeOffers = (Array.isArray(t.offers) ? t.offers : []).filter((o) => {
+    if (!o || o.status !== 'active') return false;
+    const startStr = String(o.startDate || '').slice(0, 10);
+    const endStr = String(o.endDate || o.startDate || '').slice(0, 10);
+    if (todayStr < startStr || todayStr > endStr) return false;
+
+    if (o.scope === 'weekdays') {
+      const weekdays = Array.isArray(o.weekdays) ? o.weekdays : [];
+      return weekdays.some((w) => {
+        if (typeof w === 'number') return w === dayNum;
+        const str = String(w).trim().toLowerCase();
+        return str === todayDayName || str === String(dayNum);
+      });
+    }
+
+    return true;
+  });
+
+  let activeOffer = null;
+  if (activeOffers.length > 0) {
+    const top = activeOffers[0];
+    const isPct = top.discountType === 'percentage';
+    const val = Number(top.discountValue);
+    const discountLabel = isPct ? `${Math.round(val)}% OFF` : `₹${Math.round(val)}/hr`;
+
+    // Only apply the discount to the displayed general starting rate if the scope covers all slots today
+    // (i.e. 'day', 'date_range', or matching 'weekdays'). For 'slot' scope, show the badge, but don't cross out the base rate.
+    const calculatedOfferPrice = isPct
+      ? Math.max(1, Math.round(baseRate * (1 - val / 100)))
+      : Math.max(1, Math.round(val));
+
+    let eligibleSlotLabel = 'All Day Slots';
+    const scope = String(top.scope || 'date_range').toLowerCase();
+    if (scope === 'slot') {
+      const slots = Array.isArray(top.applicableSlots) ? top.applicableSlots : [];
+      const slotText = formatSlotsLabel(slots, 2);
+      eligibleSlotLabel = slotText ? `Slots: ${slotText}` : 'Specific Slots';
+    } else if (scope === 'day') {
+      eligibleSlotLabel = 'All Slots Today';
+    } else if (scope === 'weekdays') {
+      const days = Array.isArray(top.weekdays) ? top.weekdays : [];
+      const map = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun' };
+      const names = days.map((d) => map[d] || d);
+      eligibleSlotLabel = names.length > 0 ? `${names.join(', ')} Slots` : 'Weekday Slots';
+    }
+
+    activeOffer = {
+      id: top.id,
+      title: top.title,
+      description: top.description || '',
+      discountType: top.discountType,
+      discountValue: val,
+      discountLabel,
+      offerPrice: calculatedOfferPrice,
+      saving: Math.max(0, baseRate - calculatedOfferPrice),
+      scope: top.scope,
+      startDate: top.startDate,
+      endDate: top.endDate,
+      applicableSlots: Array.isArray(top.applicableSlots) ? top.applicableSlots : [],
+      weekdays: Array.isArray(top.weekdays) ? top.weekdays : [],
+      bannerUrl: top.bannerUrl || null,
+      qualifiesForGeneralPrice: true,
+      eligibleSlotLabel,
+    };
+  }
 
   return {
     id: t.id,
@@ -34,6 +127,7 @@ function formatTurf(t) {
     location: {
       city,
       address,
+      pincode,
       geo: (lat && lng) ? { lat, lng } : (t.location?.geo || null),
     },
     sportTypes: sports,
@@ -42,8 +136,8 @@ function formatTurf(t) {
     price: baseRate,
     pricing: {
       baseRate,
-      weekendRate: Number(t.pricing?.weekendRate || baseRate),
-      peakHourRate: Number(t.pricing?.peakHourRate || baseRate),
+      weekendRate: Number(pricing.weekend || baseRate),
+      peakHourRate: Number(pricing.evening || baseRate),
     },
     courtCount: t.courtCount || 1,
     rating: {
@@ -56,10 +150,55 @@ function formatTurf(t) {
     status: t.status,
     images,
     image: images[0] || '',
+    logo: t.logo || '',
+    pinCode: pincode,
+    openingTime: to12h(cfg.openTime || '06:00'),
+    closingTime: to12h(cfg.closeTime || '23:00'),
+    slotDuration: String(cfg.slotDurationMins || 60),
+    basePrice: baseRate,
+    eveningPrice: pricing.evening || null,
+    weekendPrice: pricing.weekend || null,
+    weekendEveningPrice: pricing.weekendEvening || null,
+    ballPrice: pricing.ball || null,
     amenities: Array.isArray(t.amenities) ? t.amenities : [],
     slotConfig: t.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 },
     rejectionReason: t.rejectionReason || null,
     reviewedAt: t.reviewedAt || null,
+    activeOffer,
+    hasOffer: !!activeOffer,
+    offerPrice: activeOffer ? activeOffer.offerPrice : null,
+    offerDiscount: activeOffer ? activeOffer.discountLabel : null,
+    eligibleSlotLabel: activeOffer ? activeOffer.eligibleSlotLabel : null,
+    hasTournament: Array.isArray(t.tournaments) && t.tournaments.some((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)),
+    tournamentAvailable: Array.isArray(t.tournaments) && t.tournaments.some((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)),
+    activeTournament: (Array.isArray(t.tournaments) ? t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)) : null) ? {
+      id: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).id,
+      name: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).name,
+      sport: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).sport,
+      category: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).sport,
+      startDate: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).startDate,
+      endDate: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).endDate,
+      numberOfTeams: Number(t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).numberOfTeams),
+      playersPerTeam: Number(t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).playersPerTeam),
+      oversPerTeam: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).oversPerTeam ? Number(t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).oversPerTeam) : null,
+      status: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).status,
+      shareableIdentifier: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).shareableIdentifier,
+      shareableUrl: `https://turfbookingapp.com/tournament/${t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).shareableIdentifier}?turfId=${t.id}`,
+    } : null,
+    tournaments: (Array.isArray(t.tournaments) ? t.tournaments.filter((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)) : []).map((trn) => ({
+      id: trn.id,
+      name: trn.name,
+      sport: trn.sport,
+      category: trn.sport,
+      startDate: trn.startDate,
+      endDate: trn.endDate,
+      numberOfTeams: Number(trn.numberOfTeams),
+      playersPerTeam: Number(trn.playersPerTeam),
+      oversPerTeam: trn.oversPerTeam ? Number(trn.oversPerTeam) : null,
+      status: trn.status,
+      shareableIdentifier: trn.shareableIdentifier,
+      shareableUrl: `https://turfbookingapp.com/tournament/${trn.shareableIdentifier}?turfId=${t.id}`,
+    })),
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -174,6 +313,14 @@ const turfController = {
         where,
         orderBy,
         take: take + 1,
+        include: {
+          offers: {
+            where: { status: 'active' },
+          },
+          tournaments: {
+            where: { status: 'published' },
+          },
+        },
       };
 
       if (cursor) {
@@ -304,24 +451,32 @@ const turfController = {
   async getTurfById(req, res) {
     try {
       const { turfId } = req.params;
+      const bypassCache = req.query.refresh === 'true' || req.headers['cache-control'] === 'no-cache';
       const cacheKey = `turf:${turfId}`;
 
-      const cached = await cacheService.get(cacheKey);
-      if (cached) {
-        return sendSuccess(res, { turf: cached });
-      }
-
-      const turf = await prisma.turf.findUnique({
-        where: { id: turfId },
-      });
-
+      let turf = !bypassCache ? await cacheService.get(cacheKey) : null;
       if (!turf) {
-        return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+        turf = await prisma.turf.findUnique({
+          where: { id: turfId },
+          include: {
+            offers: {
+              where: { status: 'active' },
+            },
+            tournaments: {
+              where: { status: 'published' },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        });
+
+        if (!turf) {
+          return sendError(res, 'Turf not found', 404, 'NOT_FOUND');
+        }
+
+        await cacheService.set(cacheKey, turf, 30);
       }
 
       const formatted = formatTurf(turf);
-      await cacheService.set(cacheKey, formatted, 300);
-
       return sendSuccess(res, { turf: formatted });
     } catch (err) {
       console.error('getTurfById error:', err);
@@ -350,7 +505,6 @@ const turfController = {
       }
 
       const slotConfig = turf.slotConfig || { openTime: '06:00', closeTime: '23:00', slotDurationMins: 60 };
-      const baseRate = Number(turf.pricePerHour ?? turf.price ?? 500);
 
       // Read slot overrides from Postgres slot_overrides table
       let slotOverrides = { blockedSlots: [], priceOverrides: {} };
@@ -368,13 +522,28 @@ const turfController = {
         console.warn('Error reading slot overrides:', err.message);
       }
 
+      // Read active offers for this turf and date
+      let activeOffers = [];
+      try {
+        activeOffers = await prisma.offer.findMany({
+          where: {
+            turfId,
+            status: 'active',
+            startDate: { lte: date },
+            endDate: { gte: date },
+          },
+        });
+      } catch (err) {
+        console.warn('Error reading active offers in getAvailableSlots:', err.message);
+      }
+
       const courtCount = turf.courtCount || 1;
       const activeBookings = await bookingService.activeForSlot(turfId, date);
 
       const slots = [];
       const [openH, openM] = (slotConfig.openTime || '06:00').split(':').map(Number);
       const [closeH, closeM] = (slotConfig.closeTime || '23:00').split(':').map(Number);
-      const duration = slotConfig.slotDurationMins || 60;
+      const duration = Number(slotConfig.slotDurationMins) || 60;
 
       let current = new Date();
       current.setHours(openH, openM, 0, 0);
@@ -399,12 +568,13 @@ const turfController = {
         }).length;
         const isBooked = bookedCourts >= courtCount;
 
-        let price = baseRate;
-        if (slotOverrides.priceOverrides && slotOverrides.priceOverrides[slotKey]) {
-          price = Number(slotOverrides.priceOverrides[slotKey]);
-        } else if (slotOverrides.priceOverrides && slotOverrides.priceOverrides[startTime]) {
-          price = Number(slotOverrides.priceOverrides[startTime]);
-        }
+        const regularRate = Math.round(getHourlyRate(turf, date, startTime));
+        const regularPrice = Math.round((regularRate * duration) / 60);
+
+        const bestOffer = resolveBestOffer(turf, date, startTime, endTime, activeOffers);
+        const price = Math.round(getChunkPrice(turf, date, startTime, endTime, slotOverrides.priceOverrides, activeOffers));
+        const hasSlotOverride = slotOverrides.priceOverrides && (slotOverrides.priceOverrides[slotKey] !== undefined || slotOverrides.priceOverrides[startTime] !== undefined);
+        const hasOffer = !hasSlotOverride && !!bestOffer && price < regularPrice;
 
         slots.push({
           slotKey,
@@ -413,9 +583,22 @@ const turfController = {
           start: startTime,
           end: endTime,
           price,
+          regularPrice,
+          rate: regularRate,
+          durationMins: duration,
           available: !isBlocked && !isBooked,
           isBlocked,
           isBooked,
+          hasOffer,
+          offer: hasOffer && bestOffer ? {
+            id: bestOffer.offer.id,
+            title: bestOffer.offer.title,
+            discountType: bestOffer.offer.discountType,
+            discountValue: Number(bestOffer.offer.discountValue),
+            discountPercent: bestOffer.discountPercent,
+            saving: bestOffer.saving,
+            bannerUrl: bestOffer.offer.bannerUrl,
+          } : null,
         });
 
         current = next;
@@ -425,6 +608,17 @@ const turfController = {
         turfId,
         date,
         slots,
+        activeOffers: activeOffers.map((o) => ({
+          id: o.id,
+          title: o.title,
+          description: o.description,
+          discountType: o.discountType,
+          discountValue: Number(o.discountValue),
+          scope: o.scope,
+          startDate: o.startDate,
+          endDate: o.endDate,
+          bannerUrl: o.bannerUrl,
+        })),
       });
     } catch (err) {
       console.error('getAvailableSlots error:', err);

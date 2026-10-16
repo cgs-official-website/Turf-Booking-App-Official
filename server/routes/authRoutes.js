@@ -9,6 +9,8 @@ const { otpRateLimiter } = require('../middleware/rateLimiter');
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.post('/mobile-login', authController.mobileLogin);
+router.get('/vendor-status', authController.getVendorStatus);
+router.post('/vendor-status', authController.getVendorStatus);
 
 // OTP Endpoints (rate-limited)
 router.post('/otp/send', otpRateLimiter, authController.sendPhoneOtp);
@@ -17,6 +19,11 @@ router.post('/send-otp', otpRateLimiter, authController.sendPhoneOtp); // Alias 
 router.post('/verify-otp', authController.verifyPhoneOtp); // Alias for mobile app
 router.post('/otp/send-email', otpRateLimiter, authController.sendEmailOtp);
 router.post('/otp/verify-email', authController.verifyEmailOtp);
+
+// MSG91 OTP Widget Authentication (Public Safe Endpoints)
+const integrationController = require('../controllers/integrationController');
+router.get('/msg91-widget/config', integrationController.getWidgetConfig);
+router.post('/msg91-widget/verify', otpRateLimiter, integrationController.verifyWidgetOtp);
 
 // Password Reset Endpoints
 router.post('/forgot-password', otpRateLimiter, authController.forgotPassword);

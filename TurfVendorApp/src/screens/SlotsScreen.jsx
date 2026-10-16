@@ -12,6 +12,7 @@ import {
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
+import VendorOffersModal from '../components/VendorOffersModal';
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -163,6 +164,7 @@ const SlotsScreen = ({ navigation }) => {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [selectAllConfirmOpen, setSelectAllConfirmOpen] = useState(false);
   const [filterType, setFilterType] = useState('all');
+  const [offersModalOpen, setOffersModalOpen] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -334,10 +336,18 @@ const SlotsScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Screen Header */}
         <View style={styles.headerRow}>
-          <View>
+          <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.screenTitle}>Slot Calendar</Text>
             <Text style={styles.screenSub}>Real-time availability & block management</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.offersHeaderBtn, { backgroundColor: colors.primary || '#0F766E' }]}
+            onPress={() => setOffersModalOpen(true)}
+            activeOpacity={0.8}
+          >
+            <Feather name="tag" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.offersHeaderBtnText}>Offers</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Turf Selector Strip (If Multiple Turfs) */}
@@ -730,6 +740,17 @@ const SlotsScreen = ({ navigation }) => {
         colors={colors}
         isDark={isDark}
       />
+
+      {/* Vendor Offers & Discounts Modal */}
+      <VendorOffersModal
+        visible={offersModalOpen}
+        onClose={() => setOffersModalOpen(false)}
+        activeTurf={activeTurf}
+        availableSlots={availableSlots}
+        currentDateStr={dateStr}
+        colors={colors}
+        onOffersChanged={refresh}
+      />
     </View>
   );
 };
@@ -939,30 +960,34 @@ const DatePickerModal = ({ visible, onClose, selectedDate, onSelectDate, colors,
           <View style={calModalStyles.grid}>
             {cells.map((c) => {
               if (!c.day) {
-                return <View key={c.key} style={calModalStyles.cell} />;
+                return <View key={c.key} style={calModalStyles.cellWrap} />;
               }
               return (
                 <TouchableOpacity
                   key={c.key}
-                  style={[
-                    calModalStyles.cell,
-                    c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#0F766E' }],
-                    c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#0F766E' }],
-                  ]}
+                  style={calModalStyles.cellWrap}
                   onPress={() => onSelectDate(c.date)}
                   activeOpacity={0.7}
                 >
-                  <Text
+                  <View
                     style={[
-                      calModalStyles.cellText,
-                      { color: colors.text },
-                      c.isSelected && calModalStyles.selectedCellText,
-                      c.isToday && !c.isSelected && { color: colors.primary || '#0F766E', fontWeight: '700' },
-                      c.isPast && !c.isSelected && { color: colors.textSecondary, opacity: 0.45 },
+                      calModalStyles.cell,
+                      c.isSelected && [calModalStyles.selectedCell, { backgroundColor: colors.primary || '#0F766E' }],
+                      c.isToday && !c.isSelected && [calModalStyles.todayCell, { borderColor: colors.primary || '#0F766E' }],
                     ]}
                   >
-                    {c.day}
-                  </Text>
+                    <Text
+                      style={[
+                        calModalStyles.cellText,
+                        { color: colors.text },
+                        c.isSelected && calModalStyles.selectedCellText,
+                        c.isToday && !c.isSelected && { color: colors.primary || '#0F766E', fontWeight: '700' },
+                        c.isPast && !c.isSelected && { color: colors.textSecondary, opacity: 0.45 },
+                      ]}
+                    >
+                      {c.day}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -1027,11 +1052,10 @@ const calModalStyles = StyleSheet.create({
   },
   weekRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     marginBottom: 8,
   },
   weekLabel: {
-    width: 38,
+    width: '14.2857%',
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '600',
@@ -1039,14 +1063,17 @@ const calModalStyles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-around',
+  },
+  cellWrap: {
+    width: '14.2857%',
+    alignItems: 'center',
+    marginVertical: 3,
   },
   cell: {
     width: 38,
     height: 38,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 3,
     borderRadius: 19,
   },
   cellText: {
@@ -1108,6 +1135,18 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '500',
     marginTop: 2,
+  },
+  offersHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  offersHeaderBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: SIZES.xs,
   },
   templateBtn: {
     flexDirection: 'row',

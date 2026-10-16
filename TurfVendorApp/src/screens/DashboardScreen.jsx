@@ -10,6 +10,7 @@ import {
 import RecentBookingCard from '../components/RecentBookingCard';
 import PendingRequestCard from '../components/PendingRequestCard';
 import PlanPromoCard from '../components/PlanPromoCard';
+import TournamentCard from '../components/TournamentCard';
 import TurfSwitcher from '../components/TurfSwitcher';
 import Icon from '../components/Icon';
 import { SIZES, SHADOWS } from '../utils/theme';
@@ -205,6 +206,17 @@ const DashboardScreen = ({ navigation }) => {
             </View>
             <Text style={styles.actionLabel}>Reviews</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.quickActionBtn, SHADOWS.sm]}
+            onPress={() => navigation.navigate('TournamentList')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.actionIconBox, { backgroundColor: 'rgba(15, 118, 110, 0.12)' }]}>
+              <Icon name="award" size={18} color={colors.primary} />
+            </View>
+            <Text style={styles.actionLabel}>Tournaments</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Pending Request Alert (If Any) */}
@@ -288,8 +300,13 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         )}
 
+        {/* Tournament Module Card */}
+        <View style={{ marginTop: 14 }}>
+          <TournamentCard onPress={() => navigation.navigate('TournamentList')} />
+        </View>
+
         {/* Plan Upgrade Promo */}
-        <View style={{ marginTop: 6 }}>
+        <View style={{ marginTop: 2 }}>
           <PlanPromoCard
             mySubscription={mySubscription}
             topPlan={topPlan}
@@ -424,30 +441,32 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 20,
-    gap: 10,
+    gap: 6,
   },
   quickActionBtn: {
     flex: 1,
     backgroundColor: colors.card,
     borderRadius: SIZES.radius,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
   actionIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 5,
   },
   actionLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: colors.text,
+    textAlign: 'center',
   },
 
   sectionHeader: {

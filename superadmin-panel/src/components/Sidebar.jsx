@@ -13,6 +13,9 @@ import {
   LogOut,
   ChevronRight,
   X,
+  Zap,
+  Swords,
+  Key,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import appLogoSm from '../assets/logosm.png';
@@ -34,10 +37,11 @@ export const Sidebar = ({
     { id: 'kyc', label: 'KYC & Approvals', icon: ShieldCheck, badge: pendingKycCount },
     { id: 'turfs', label: 'All Turfs', icon: Building2 },
     { id: 'vendors', label: 'Turf Partners', icon: UserCheck },
-    { id: 'subscriptions', label: 'Partner Plans', icon: Trophy },
+    { id: 'subscriptions', label: 'Partner Plans', icon: Zap },
+    { id: 'tournaments', label: 'Tournaments', icon: Trophy },
+    { id: 'matches', label: 'Matches & Scores', icon: Swords },
     { id: 'reviews', label: 'Turf Reviews', icon: Star },
     { id: 'users', label: 'Players Directory', icon: Users },
-    { id: 'matches', label: 'Matches & Scores', icon: Trophy },
     {
       id: 'inquiries',
       label: 'Inquiries & Leads',
@@ -52,6 +56,7 @@ export const Sidebar = ({
       badge: openReportsCount,
       badgeColor: 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
     },
+    { id: 'integrations', label: 'API Integrations', icon: Key },
   ];
 
   const handleTabClick = (tabId) => {

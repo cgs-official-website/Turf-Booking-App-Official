@@ -26,4 +26,8 @@ export const turfsApi = {
   getNearby:       ({ lat, lng, radius = 5 }) => client.get(`/turfs/nearby?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&radius=${encodeURIComponent(radius)}`),
   // GET /api/turfs/:id/reviews
   getReviews:      (id)              => client.get(`/turfs/${id}/reviews`),
+  // GET /api/offers
+  getOffers:       (params = {})     => client.get(`/offers${buildQuery(params)}`),
+  // GET /api/turfs/:id/offers
+  getTurfOffers:   (id)              => client.get(`/turfs/${id}/offers`),
 };

@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const { query } = require('../config/db');
+const { priceForRange, calculateRangePricing } = require('../utils/pricing');
 
 /**
  * Retry helper for transient DB connection errors (e.g. Railway proxy resets).
@@ -178,6 +179,9 @@ function toApi(row, { turf, user } = {}) {
     paymentMode,
     sport: row.sport || null,
     courtNumber: row.courtNumber || 1,
+    offerId: row.offerId || null,
+    discountAmount: Number(row.discountAmount || 0),
+    originalAmount: row.originalAmount ? Number(row.originalAmount) : amountNum,
     razorpayOrderId: row.razorpayOrderId || null,
     razorpayPaymentId: row.razorpayPaymentId || null,
     reservedAt,
@@ -271,21 +275,14 @@ const bookingService = {
 
     const { dateObj } = validateBookingInput(payload);
     const courtNumber = resolveCourtNumber(turf, payload.courtNumber);
-    let hourlyRate = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
-
-    // Check custom price overrides for this date and slot
+    // Per-slot vendor price overrides for this date (optional)
+    let priceOverrides = null;
     try {
-      const dateStr = payload.date;
       const override = await prisma.slotOverride.findUnique({
-        where: { turfId_date: { turfId: turf.id, date: dateStr } },
+        where: { turfId_date: { turfId: turf.id, date: payload.date } },
       });
-      if (override && override.priceOverrides) {
-        const slotKey = `${payload.startTime}-${payload.endTime}`;
-        if (override.priceOverrides[slotKey] !== undefined) {
-          hourlyRate = Number(override.priceOverrides[slotKey]);
-        } else if (override.priceOverrides[payload.startTime] !== undefined) {
-          hourlyRate = Number(override.priceOverrides[payload.startTime]);
-        }
+      if (override && override.priceOverrides && typeof override.priceOverrides === 'object') {
+        priceOverrides = override.priceOverrides;
       }
     } catch (overrideErr) {
       console.warn('⚠️ Warning checking slot price override in reserveSlot:', overrideErr.message);
@@ -297,16 +294,38 @@ const bookingService = {
       payload.endTime = `${String(eh).padStart(2, '0')}:${String(sm || 0).padStart(2, '0')}`;
     }
 
-    let durationHours = 1;
-    if (payload.startTime && payload.endTime) {
-      const [sh, sm] = payload.startTime.split(':').map(Number);
-      const [eh, em] = payload.endTime.split(':').map(Number);
-      const diffMins = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
-      if (diffMins > 0) {
-        durationHours = Math.max(1, Math.round(diffMins / 60));
-      }
+    const bookingDateStr = String(payload.date).slice(0, 10);
+
+    // Fetch active offers for this turf and date
+    let activeOffers = [];
+    try {
+      activeOffers = await prisma.offer.findMany({
+        where: {
+          turfId: turf.id,
+          status: 'active',
+          startDate: { lte: bookingDateStr },
+          endDate: { gte: bookingDateStr },
+        },
+      });
+    } catch (offerErr) {
+      console.warn('⚠️ Warning checking active offers in reserveSlot:', offerErr.message);
     }
-    const price = hourlyRate * durationHours;
+
+    // Detailed server-side price calculation applying offers and overrides
+    const pricingResult = calculateRangePricing({
+      turf,
+      date: bookingDateStr,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      overrides: priceOverrides,
+      offers: activeOffers,
+    });
+
+    const price = pricingResult.total;
+    const appliedOfferId = pricingResult.appliedOffer?.id || null;
+    const discountAmount = pricingResult.discountAmount || 0;
+    const originalAmount = pricingResult.originalTotal || price;
+
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
     const bookingId = generateBookingId();
@@ -380,6 +399,9 @@ const bookingService = {
                 startTime: payload.startTime,
                 endTime: payload.endTime,
                 totalAmount: price,
+                offerId: appliedOfferId,
+                discountAmount: discountAmount,
+                originalAmount: originalAmount,
                 sport: bookingSport,
                 holdExpiresAt: expiresAt,
                 updatedAt: now,
@@ -406,6 +428,9 @@ const bookingService = {
             startTime: payload.startTime,
             endTime: payload.endTime,
             totalAmount: price,
+            offerId: appliedOfferId,
+            discountAmount: discountAmount,
+            originalAmount: originalAmount,
             bookingStatus: 'reserved',
             paymentStatus: 'pending',
             courtNumber,

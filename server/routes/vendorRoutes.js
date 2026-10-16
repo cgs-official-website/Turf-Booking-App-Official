@@ -2,6 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const vendorController = require('../controllers/vendorController');
+const vendorOfferController = require('../controllers/vendorOfferController');
+const tournamentController = require('../controllers/tournamentController');
 const verifySessionToken = require('../middleware/verifySessionToken');
 const requireRole = require('../middleware/requireRole');
 
@@ -48,7 +50,11 @@ router.get('/reports', vendorController.getMyReports);
 router.get('/turfs', vendorController.getMyTurfs);
 router.post('/turfs', vendorController.addTurf);
 router.get('/turfs/:turfId', vendorController.getTurfById);
-router.put('/turfs/:turfId', vendorController.updateTurf);
+router.put(
+  '/turfs/:turfId',
+  upload.fields([{ name: 'logo', maxCount: 1 }, { name: 'images', maxCount: 10 }]),
+  vendorController.updateTurf
+);
 router.delete('/turfs/:turfId', vendorController.deleteTurf);
 
 router.get('/slots/calendar', vendorController.getSlotCalendar);
@@ -57,5 +63,22 @@ router.post('/slots/freeze', vendorController.freezeSlot);
 router.post('/turfs/:turfId/slots/freeze', vendorController.freezeSlot);
 router.post('/turfs/:turfId/slots', vendorController.addSlot);
 router.delete('/turfs/:turfId/slots/:slotId', vendorController.deleteSlot);
+
+// Vendor Offers & Discounts Management
+router.post('/turfs/:turfId/offers', upload.single('banner'), vendorOfferController.createOffer);
+router.get('/turfs/:turfId/offers', vendorOfferController.getOffers);
+router.put('/turfs/:turfId/offers/:offerId', upload.single('banner'), vendorOfferController.updateOffer);
+router.patch('/turfs/:turfId/offers/:offerId/status', vendorOfferController.toggleOfferStatus);
+router.delete('/turfs/:turfId/offers/:offerId', vendorOfferController.deleteOffer);
+
+// Vendor Tournament Management (Phase 1)
+router.post('/turfs/:turfId/tournaments', tournamentController.createTournament);
+router.get('/turfs/:turfId/tournaments', tournamentController.getVendorTournaments);
+router.post('/tournaments', tournamentController.createTournament);
+router.get('/tournaments', tournamentController.getVendorTournaments);
+router.get('/tournaments/:id', tournamentController.getTournamentById);
+router.put('/tournaments/:id', tournamentController.updateTournament);
+router.post('/tournaments/:id/publish', tournamentController.publishTournament);
+router.patch('/tournaments/:id/publish', tournamentController.publishTournament);
 
 module.exports = router;

@@ -19,7 +19,11 @@ import BookingDetailScreen   from '../screens/BookingDetailScreen';
 import RequestPendingScreen  from '../screens/RequestPendingScreen';
 import NotificationsScreen   from '../screens/NotificationsScreen';
 import ExploreScreen         from '../screens/ExploreScreen';
+import OffersScreen          from '../screens/OffersScreen';
 import PersonalInfoScreen    from '../screens/PersonalInfoScreen';
+import TournamentScreen      from '../screens/TournamentScreen';
+import CreateTournamentScreen from '../screens/CreateTournamentScreen';
+import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 import CreateMatchScreen     from '../screens/CreateMatchScreen';
 import SelectPlayersScreen   from '../screens/SelectPlayersScreen';
 import BuildTeamsScreen      from '../screens/BuildTeamsScreen';
@@ -87,6 +91,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="Location"       component={LocationScreen} />
             <Stack.Screen name="Explore"        component={ExploreScreen}        options={{ presentation: 'card' }} />
+            <Stack.Screen name="Offers"         component={OffersScreen}         options={{ presentation: 'card' }} />
             <Stack.Screen name="TurfDetail"     component={TurfDetailScreen}     options={{ presentation: 'card' }} />
             <Stack.Screen name="SlotPicker"     component={SlotPickerScreen}     options={{ presentation: 'card' }} />
             <Stack.Screen name="RequestPending" component={RequestPendingScreen} options={{ presentation: 'card' }} />
@@ -94,6 +99,9 @@ export default function RootNavigator() {
             <Stack.Screen name="BookingDetail"  component={BookingDetailScreen}  options={{ presentation: 'modal' }} />
             <Stack.Screen name="Notifications"  component={NotificationsScreen}  options={{ presentation: 'card' }} />
             <Stack.Screen name="PersonalInfo"   component={PersonalInfoScreen} />
+            <Stack.Screen name="Tournament"     component={TournamentScreen}     options={{ presentation: 'card' }} />
+            <Stack.Screen name="CreateTournament" component={CreateTournamentScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ presentation: 'card' }} />
 
             {/* ── Match / Team / Toss / Live Scorecard ── */}
             <Stack.Screen name="CreateMatch"    component={CreateMatchScreen}    options={{ presentation: 'card' }} />

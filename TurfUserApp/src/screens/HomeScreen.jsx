@@ -289,10 +289,29 @@ export default function HomeScreen({ navigation }) {
     );
   }, [onLocationSuccess]);
 
-  // When returning to app after turning on location in mobile settings, auto-detect & view location
+  const load = useCallback(async (showLoading = false) => {
+    try {
+      if (showLoading || turfs.length === 0) {
+        setLoading(true);
+      }
+      const params = {};
+      if (sport) params.sport = sport;
+      if (activeFilters.sort) params.sort = activeFilters.sort;
+      if (activeFilters.time) params.time = activeFilters.time;
+      const res = await turfsApi.getTurfs(params);
+      setTurfs(res.turfs || res.items || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [sport, activeFilters, location, turfs.length]);
+
+  // When returning to app, re-fetch turfs/offers and auto-detect location if needed
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       if (nextAppState === 'active') {
+        load(false);
         if (waitingForLocationRef.current || locationOff) {
           waitingForLocationRef.current = false;
           Geolocation.getCurrentPosition(
@@ -312,25 +331,7 @@ export default function HomeScreen({ navigation }) {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [locationOff, onLocationSuccess]);
-
-  const load = useCallback(async (showLoading = false) => {
-    try {
-      if (showLoading || turfs.length === 0) {
-        setLoading(true);
-      }
-      const params = {};
-      if (sport) params.sport = sport;
-      if (activeFilters.sort) params.sort = activeFilters.sort;
-      if (activeFilters.time) params.time = activeFilters.time;
-      const res = await turfsApi.getTurfs(params);
-      setTurfs(res.turfs || res.items || []);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [sport, activeFilters, location, turfs.length]);
+  }, [locationOff, onLocationSuccess, load]);
 
   useEffect(() => { load(true); }, [sport, activeFilters]);
   useEffect(() => {
@@ -518,6 +519,26 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[
+                styles.quickCard,
+                {
+                  backgroundColor: C.card,
+                  borderColor: dark ? 'rgba(245, 158, 11, 0.45)' : '#FDE68A',
+                },
+                SHADOW.subtle,
+              ]}
+              onPress={() => navigation.navigate('Offers')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.quickIconWrap, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.22)' : '#FEF3C7' }]}>
+                <Ionicons name="pricetag" size={15} color="#D97706" />
+              </View>
+              <Text style={[styles.quickTitle, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                Offers
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
               onPress={() => navigation.navigate('CreateMatch')}
               activeOpacity={0.8}
@@ -556,6 +577,86 @@ export default function HomeScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* ── Premium Dark-Green-and-Gold "Turf Deals" Promotional Banner ── */}
+          <TouchableOpacity
+            style={[styles.goldenDealsBanner, SHADOW.card]}
+            onPress={() => navigation.navigate('Offers')}
+            activeOpacity={0.9}
+          >
+            <View style={styles.goldenDealsHeader}>
+              <View style={styles.goldenTagPill}>
+                <Text style={styles.goldenTagText}>EXCLUSIVE DISCOUNTS</Text>
+              </View>
+              <View style={styles.goldenDealLivePill}>
+                <View style={styles.livePulseDot} />
+                <Text style={styles.goldenLiveText}>LIVE DEALS</Text>
+              </View>
+            </View>
+
+            <View style={styles.goldenDealsBody}>
+              <Text style={styles.goldenDealsHeadline}>Turf Deals</Text>
+              <Text style={styles.goldenDealsDesc}>
+                Unlock exclusive verified discounts & prime match hours across top arenas.
+              </Text>
+            </View>
+
+            <View style={styles.goldenDealsFooter}>
+              <View style={styles.goldenExploreBtn}>
+                <Text style={styles.goldenExploreBtnText}>Explore Offers</Text>
+                <Feather name="arrow-right" size={13} color="#062C22" style={{ marginLeft: 5 }} />
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* ── Tournaments Promotional Banner ── */}
+          <TouchableOpacity
+            style={[
+              styles.tournamentHomeBanner,
+              {
+                backgroundColor: dark ? '#1E1B4B' : '#F5F3FF',
+                borderColor: dark ? '#7C3AED' : '#C4B5FD',
+              },
+              SHADOW.card,
+            ]}
+            onPress={() => navigation.navigate('Tournament')}
+            activeOpacity={0.9}
+          >
+            <View style={styles.tournamentHomeHeader}>
+              <View
+                style={[
+                  styles.tournamentTagPill,
+                  {
+                    backgroundColor: dark ? 'rgba(124, 58, 237, 0.25)' : '#EDE9FE',
+                    borderColor: '#A78BFA',
+                  },
+                ]}
+              >
+                <Text style={{ fontSize: 12, marginRight: 4 }}>🏆</Text>
+                <Text style={[styles.tournamentTagText, { color: dark ? '#C4B5FD' : '#6D28D9' }]}>
+                  TOURNAMENTS
+                </Text>
+              </View>
+              <View style={[styles.tournamentLiveBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                <View style={styles.livePulseDot} />
+                <Text style={styles.tournamentLiveText}>ACTIVE & OPEN</Text>
+              </View>
+            </View>
+
+            <View style={styles.tournamentHomeBody}>
+              <Text style={[styles.tournamentHomeHeadline, { color: C.text }]}>🏆 Tournaments</Text>
+              <Text style={[styles.tournamentHomeDesc, { color: C.subtext }]}>
+                Explore turf tournaments or create your own
+              </Text>
+            </View>
+
+            <View style={styles.tournamentHomeFooter}>
+              <View style={[styles.tournamentExploreBtn, { backgroundColor: '#7C3AED' }]}>
+                <Text style={styles.tournamentExploreBtnText}>View Tournaments</Text>
+                <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 5 }} />
+              </View>
+            </View>
+          </TouchableOpacity>
 
           {/* ── Sports Category Selector ── */}
           <View style={styles.sportsSection}>
@@ -804,31 +905,187 @@ const styles = StyleSheet.create({
   quickActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.md || 14,
     marginTop: 14,
-    gap: 8,
+    gap: 6,
   },
   quickCard: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
     borderRadius: RADIUS.xl,
     borderWidth: 1.5,
   },
   quickIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 5,
   },
   quickTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: 0.1,
+  },
+  goldenDealsBanner: {
+    marginHorizontal: SPACING.md || 14,
+    marginTop: 14,
+    borderRadius: RADIUS.xxl,
+    backgroundColor: '#062C22',
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    padding: 16,
+    overflow: 'hidden',
+  },
+  goldenDealsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  goldenTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(251, 191, 36, 0.18)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.4)',
+  },
+  goldenTagText: {
+    color: '#FBBF24',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  goldenDealLivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.round,
+  },
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginRight: 4,
+  },
+  goldenLiveText: {
+    color: '#34D399',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  goldenDealsBody: {
+    marginBottom: 12,
+  },
+  goldenDealsHeadline: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  goldenDealsDesc: {
+    fontSize: 12,
+    color: '#D1FAE5',
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  goldenDealsFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  goldenExploreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: RADIUS.round,
+  },
+  goldenExploreBtnText: {
+    color: '#062C22',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  tournamentHomeBanner: {
+    marginHorizontal: SPACING.md || 14,
+    marginTop: 12,
+    borderRadius: RADIUS.xxl,
+    borderWidth: 1.5,
+    padding: 16,
+    overflow: 'hidden',
+  },
+  tournamentHomeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  tournamentTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+  },
+  tournamentTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  tournamentLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.round,
+  },
+  tournamentLiveText: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  tournamentHomeBody: {
+    marginBottom: 12,
+  },
+  tournamentHomeHeadline: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  tournamentHomeDesc: {
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  tournamentHomeFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tournamentExploreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: RADIUS.round,
+  },
+  tournamentExploreBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
     letterSpacing: 0.2,
   },
   sportsSection: {

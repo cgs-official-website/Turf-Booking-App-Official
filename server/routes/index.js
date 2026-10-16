@@ -14,6 +14,8 @@ const adminRoutes = require('./adminRoutes');
 const wishlistRoutes = require('./wishlistRoutes');
 const enquiryRoutes = require('./enquiryRoutes');
 const reviewRoutes = require('./reviewRoutes');
+const offerRoutes = require('./offerRoutes');
+const tournamentRoutes = require('./tournamentRoutes');
 const { sendSuccess } = require('../utils/response');
 
 // Health Check
@@ -60,6 +62,8 @@ router.use('/enquiries', enquiryRoutes);
 router.use('/inquiries', enquiryRoutes);
 router.use('/vendor-enquiries', enquiryRoutes);
 router.use('/reviews', reviewRoutes);
+router.use('/offers', offerRoutes);
+router.use('/tournaments', tournamentRoutes);
 router.post('/reports/inquiry', require('../controllers/enquiryController').createEnquiry);
 
 module.exports = router;

@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
   ActivityIndicator, FlatList, Dimensions, Platform,
-  Linking, Share, StatusBar, StyleSheet, Modal, Alert,
+  Linking, Share, StatusBar, StyleSheet, Modal, Alert, AppState,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import Feather from 'react-native-vector-icons/Feather';
@@ -20,30 +21,30 @@ const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1
 
 const AMENITY_CONFIG = {
   'FIFA Approved Turf': { icon: 'award', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
-  Floodlights:          { icon: 'sun', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
-  Parking:              { icon: 'truck', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.12)' },
-  'Locker Room':        { icon: 'lock', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  'Changing Rooms':     { icon: 'user-check', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  Showers:              { icon: 'droplet', color: '#06B6D4', bg: 'rgba(6, 182, 212, 0.12)' },
-  'Mineral Water':      { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
-  'Water Dispenser':    { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
-  Cafeteria:            { icon: 'coffee', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)' },
-  Dugout:               { icon: 'shield', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
-  CCTV:                 { icon: 'video', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },
-  'First Aid':          { icon: 'plus-circle', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
-  'Cricket Nets':       { icon: 'grid', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
-  'Bowling Machine':    { icon: 'zap', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)' },
-  'Badminton Courts':   { icon: 'activity', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
-  'Tennis Court':       { icon: 'circle', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
-  'Basketball Court':   { icon: 'disc', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
+  Floodlights: { icon: 'sun', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
+  Parking: { icon: 'truck', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.12)' },
+  'Locker Room': { icon: 'lock', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
+  'Changing Rooms': { icon: 'user-check', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
+  Showers: { icon: 'droplet', color: '#06B6D4', bg: 'rgba(6, 182, 212, 0.12)' },
+  'Mineral Water': { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
+  'Water Dispenser': { icon: 'coffee', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)' },
+  Cafeteria: { icon: 'coffee', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)' },
+  Dugout: { icon: 'shield', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
+  CCTV: { icon: 'video', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' },
+  'First Aid': { icon: 'plus-circle', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
+  'Cricket Nets': { icon: 'grid', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
+  'Bowling Machine': { icon: 'zap', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)' },
+  'Badminton Courts': { icon: 'activity', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' },
+  'Tennis Court': { icon: 'circle', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
+  'Basketball Court': { icon: 'disc', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
 };
 
 const openMap = (address, lat, lng) => {
   const url = (lat && lng)
     ? Platform.select({
-        ios:     `maps://app?ll=${lat},${lng}&q=${encodeURIComponent(address)}`,
-        android: `geo:${lat},${lng}?q=${encodeURIComponent(address)}`,
-      })
+      ios: `maps://app?ll=${lat},${lng}&q=${encodeURIComponent(address)}`,
+      android: `geo:${lat},${lng}?q=${encodeURIComponent(address)}`,
+    })
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   Linking.openURL(url).catch(() =>
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`)
@@ -57,35 +58,42 @@ const shareTurf = async (turf) => {
       title: turf.name,
       message: `🏟️ ${turf.name}\n📍 ${turf.address || turf.location?.address || turf.city || 'Tamil Nadu'}\n💰 ₹${price}/hour\n\nBook your slot now on Turf Booking App!`,
     });
-  } catch (e) {}
+  } catch (e) { }
 };
 
 export default function TurfDetailScreen({ route, navigation }) {
   const id = route.params?.turfId ?? route.params?.id;
 
-  const dispatch    = useDispatch();
+  const dispatch = useDispatch();
   const { C, dark } = useTheme();
-  const wishlist    = useSelector((s) => s.wishlist.wishlist || []);
+  const wishlist = useSelector((s) => s.wishlist.wishlist || []);
 
-  const [turf,          setTurf]          = useState(null);
-  const [reviews,       setReviews]       = useState([]);
-  const [imgIndex,      setImgIndex]      = useState(0);
-  const [modalVisible,  setModalVisible]  = useState(false);
-  const [modalIndex,    setModalIndex]    = useState(0);
-  const [loading,       setLoading]       = useState(true);
+  const [turf, setTurf] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [imgIndex, setImgIndex] = useState(0);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalIndex, setModalIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [selectedSport, setSelectedSport] = useState(null);
+  const [offers, setOffers] = useState([]);
 
-  const sliderRef      = useRef(null);
+  const sliderRef = useRef(null);
   const modalSliderRef = useRef(null);
 
-  useEffect(() => {
-    Promise.all([turfsApi.getTurf(id), turfsApi.getReviews(id)])
-      .then(([t, r]) => {
+  const fetchTurfDetails = useCallback(() => {
+    Promise.all([
+      turfsApi.getTurf(id),
+      turfsApi.getReviews(id),
+      turfsApi.getTurfOffers ? turfsApi.getTurfOffers(id).catch(() => ({ offers: [] })) : Promise.resolve({ offers: [] }),
+    ])
+      .then(([t, r, o]) => {
         const loadedTurf = t?.turf || t;
         setTurf(loadedTurf);
         const rawReviews = r?.reviews || r?.items || [];
         const sorted = [...rawReviews].sort((a, b) => (b.rating || 5) - (a.rating || 5));
         setReviews(sorted);
+        const rawOffers = o?.offers || o?.data?.offers || (Array.isArray(o) ? o : []);
+        setOffers(rawOffers);
 
         const availableSports = (Array.isArray(loadedTurf?.sports) && loadedTurf.sports.length > 0)
           ? loadedTurf.sports
@@ -94,11 +102,30 @@ export default function TurfDetailScreen({ route, navigation }) {
           setSelectedSport(availableSports[0]);
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
+  }, [id]);
 
+  useEffect(() => {
+    fetchTurfDetails();
     dispatch(fetchWishlist());
-  }, [id, dispatch]);
+  }, [fetchTurfDetails, dispatch]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTurfDetails();
+    }, [fetchTurfDetails])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        fetchTurfDetails();
+      }
+    };
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [fetchTurfDetails]);
 
   if (loading || !turf) {
     return (
@@ -109,19 +136,67 @@ export default function TurfDetailScreen({ route, navigation }) {
     );
   }
 
+  const isValidOffer = (o) => {
+    if (!o) return false;
+    if (o.status && o.status !== 'active') return false;
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+
+    const startStr = String(o.startDate || '').slice(0, 10);
+    const endStr = String(o.endDate || o.startDate || '').slice(0, 10);
+
+    if (startStr && todayStr < startStr) return false;
+    if (endStr && todayStr > endStr) return false;
+
+    if (o.scope === 'weekdays' && Array.isArray(o.weekdays) && o.weekdays.length > 0) {
+      const dayNum = now.getDay();
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayName = dayNames[dayNum];
+      const match = o.weekdays.some((w) => {
+        if (typeof w === 'number') return w === dayNum;
+        const str = String(w).trim().toLowerCase();
+        return str === todayName || str === String(dayNum);
+      });
+      if (!match) return false;
+    }
+    return true;
+  };
+
   const isWishlisted = wishlist.some((t) => (t._id || t.id) === (turf._id || turf.id));
-  const rawImages    = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
-  const images       = rawImages.map(getImageUrl);
-  const lat          = turf.location?.lat  || turf.location?.latitude  || null;
-  const lng          = turf.location?.lng  || turf.location?.longitude || null;
-  const city         = turf.city || turf.location?.city || 'Chennai';
-  const address      = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
-  const sports       = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
-  const amenities    = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
+  const rawImages = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
+  const images = rawImages.map(getImageUrl);
+  const lat = turf.location?.lat || turf.location?.latitude || null;
+  const lng = turf.location?.lng || turf.location?.longitude || null;
+  const city = turf.city || turf.location?.city || 'Chennai';
+  const address = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
+  const sports = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
+  const amenities = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
   const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
-  const reviewCount  = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
-  const ratingAvg    = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
-  const openTiming   = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
+
+  const rawActiveOffer = turf?.activeOffer || (offers.length > 0 ? offers[0] : null);
+  const activeOffer = isValidOffer(rawActiveOffer) ? rawActiveOffer : null;
+
+  let offerPrice = null;
+  if (activeOffer) {
+    if (turf?.offerPrice) {
+      offerPrice = Number(turf.offerPrice);
+    } else if (activeOffer.offerPrice) {
+      offerPrice = Number(activeOffer.offerPrice);
+    } else {
+      const isPct = activeOffer.discountType === 'percentage';
+      const val = Number(activeOffer.discountValue || 0);
+      offerPrice = isPct ? Math.max(1, Math.round(pricePerHour * (1 - val / 100))) : Math.max(1, Math.round(val));
+    }
+    if (offerPrice >= pricePerHour) offerPrice = null;
+  }
+  const offerSavings = (offerPrice && pricePerHour > offerPrice) ? Math.max(0, pricePerHour - offerPrice) : 0;
+  const reviewCount = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
+  const ratingAvg = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
+  const openTiming = turf.slotConfig ? `${turf.slotConfig.openTime || '06:00'} - ${turf.slotConfig.closeTime || '23:00'}` : '06:00 - 23:00';
 
   const openFullscreenGallery = (index = 0) => {
     setModalIndex(index);
@@ -293,6 +368,46 @@ export default function TurfDetailScreen({ route, navigation }) {
           {/* Turf Name */}
           <Text style={[styles.turfTitle, { color: C.text }]}>{turf.name}</Text>
 
+          {/* Tournament Available Highlight Banner */}
+          {(turf.hasTournament || turf.tournamentAvailable) && turf.activeTournament && (
+            <TouchableOpacity
+              style={[
+                styles.tournamentBanner,
+                {
+                  backgroundColor: dark ? '#132A24' : '#F0FDF4',
+                  borderColor: dark ? 'rgba(16, 185, 129, 0.4)' : '#BBF7D0',
+                },
+                SHADOW.subtle,
+              ]}
+              onPress={() => {
+                const trn = turf.activeTournament;
+                Alert.alert(
+                  trn.name,
+                  `🏆 Sport: ${trn.sport}\n📅 Dates: ${trn.startDate} to ${trn.endDate}\n👥 Teams: ${trn.numberOfTeams} (${trn.playersPerTeam} players/team)${trn.oversPerTeam ? `\n🏏 Overs: ${trn.oversPerTeam}` : ''}\n\nHost Venue: ${turf.name}\n\nShare link:\n${trn.shareableUrl}`
+                );
+              }}
+              activeOpacity={0.85}
+            >
+              <View style={styles.tournamentBannerLeft}>
+                <View style={[styles.tournamentIconCircle, { backgroundColor: '#0F766E' }]}>
+                  <Feather name="award" size={18} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.tournamentTagRow}>
+                    <Text style={styles.tournamentBadgeText}>TOURNAMENT AVAILABLE</Text>
+                  </View>
+                  <Text style={[styles.tournamentTitleText, { color: C.text }]} numberOfLines={1}>
+                    {turf.activeTournament.name}
+                  </Text>
+                  <Text style={[styles.tournamentSubtitleText, { color: C.subtext }]}>
+                    {turf.activeTournament.sport} • {turf.activeTournament.numberOfTeams} Teams • Tap for details
+                  </Text>
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color="#0F766E" />
+            </TouchableOpacity>
+          )}
+
           {/* Quick Info Grid (3 Pillars) */}
           <View style={[styles.quickInfoGrid, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
             <View style={styles.infoCol}>
@@ -380,6 +495,158 @@ export default function TurfDetailScreen({ route, navigation }) {
             })}
           </View>
 
+          {/* ── Active Special Deals & Offers Card ── */}
+          {activeOffer && (
+            <View style={[styles.offerCard, { borderColor: '#10B981', backgroundColor: dark ? '#064E3B20' : '#ECFDF5' }, SHADOW.card]}>
+              {(activeOffer.bannerUrl || activeOffer.bannerImage) ? (
+                <Image
+                  source={{ uri: getImageUrl(activeOffer.bannerUrl || activeOffer.bannerImage) }}
+                  style={styles.offerBannerImg}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.offerContent}>
+                <View style={styles.offerTopRow}>
+                  <View style={styles.offerBadge}>
+                    <Ionicons name="pricetag" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.offerBadgeText}>
+                      {activeOffer.discountType === 'percentage'
+                        ? `${Math.round(activeOffer.discountValue)}% OFF`
+                        : `FLAT ₹${Math.round(activeOffer.discountValue)} OFF`}
+                    </Text>
+                  </View>
+                  <Text style={[styles.offerExpiry, { color: C.subtext }]}>
+                    {activeOffer.endDate ? `Valid till ${activeOffer.endDate}` : 'Limited Time Deal'}
+                  </Text>
+                </View>
+
+                <Text style={[styles.offerTitle, { color: C.text }]}>{activeOffer.title}</Text>
+                {!!activeOffer.description && (
+                  <Text style={[styles.offerDesc, { color: C.subtext }]} numberOfLines={2}>
+                    {activeOffer.description}
+                  </Text>
+                )}
+
+                {/* Offer Scope / Eligibility Details */}
+                <View style={styles.offerScopeRow}>
+                  <Feather name="info" size={13} color="#059669" style={{ marginRight: 5 }} />
+                  <Text style={[styles.offerScopeText, { color: dark ? '#34D399' : '#065F46' }]}>
+                    {(activeOffer.scope === 'weekdays' || activeOffer.scopeType === 'weekdays')
+                      ? `Valid on: ${(Array.isArray(activeOffer.weekdays) ? activeOffer.weekdays : (activeOffer.selectedDays || []))
+                          .map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d] || d).join(', ')}`
+                      : (activeOffer.scope === 'slot' || activeOffer.scopeType === 'specific_slot')
+                      ? `Valid for slots: ${(Array.isArray(activeOffer.applicableSlots) ? activeOffer.applicableSlots : (activeOffer.timeSlots || []))
+                          .slice(0, 3).join(', ')}${(activeOffer.applicableSlots?.length > 3 || activeOffer.timeSlots?.length > 3) ? '...' : ''}`
+                      : (activeOffer.scope === 'day' || activeOffer.scopeType === 'day')
+                      ? `Valid on date: ${activeOffer.startDate}`
+                      : 'Applicable to booking dates within range'}
+                  </Text>
+                </View>
+
+                {offerPrice && (
+                  <View style={styles.offerPricingPill}>
+                    <Text style={[styles.offerPriceNow, { color: '#059669' }]}>
+                      ₹{offerPrice}/hr
+                    </Text>
+                    <Text style={[styles.offerPriceOld, { color: C.subtext }]}>
+                      ₹{pricePerHour}/hr
+                    </Text>
+                    <Text style={styles.offerPriceSave}>
+                      Save ₹{offerSavings}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* ── Active Tournament Available Highlight ── */}
+          {turf.activeTournament && (
+            <TouchableOpacity
+              style={[
+                styles.turfTournamentCard,
+                {
+                  borderColor: '#7C3AED',
+                  backgroundColor: dark ? '#1E1B4B50' : '#F5F3FF',
+                },
+                SHADOW.card,
+              ]}
+              onPress={() =>
+                navigation.navigate('TournamentDetail', {
+                  tournamentId: turf.activeTournament.id,
+                  tournament: turf.activeTournament,
+                })
+              }
+              activeOpacity={0.88}
+            >
+              <View style={styles.turfTournamentHeader}>
+                <View style={styles.turfTournamentBadge}>
+                  <Text style={{ fontSize: 13, marginRight: 5 }}>🏆</Text>
+                  <Text style={styles.turfTournamentBadgeText}>TOURNAMENT AVAILABLE</Text>
+                </View>
+                <View style={styles.turfTournamentSportTag}>
+                  <Text style={styles.turfTournamentSportTagText}>{turf.activeTournament.sport}</Text>
+                </View>
+              </View>
+
+              <Text style={[styles.turfTournamentTitle, { color: C.text }]}>
+                {turf.activeTournament.name}
+              </Text>
+              <Text style={[styles.turfTournamentMeta, { color: C.subtext }]}>
+                Dates: {turf.activeTournament.startDate} to {turf.activeTournament.endDate} • {turf.activeTournament.numberOfTeams} Teams ({turf.activeTournament.playersPerTeam} players/team)
+              </Text>
+
+              <View style={styles.turfTournamentFooter}>
+                <Text style={[styles.turfTournamentCtaText, { color: C.primary }]}>
+                  View Tournament →
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* ── Pricing & Timings (set by the turf owner) ── */}
+          {(() => {
+            const cfg = turf.slotConfig || {};
+            const p = cfg.pricing || {};
+            const pick = (v) => (Number(v) > 0 ? Number(v) : null);
+            const evening = pick(turf.eveningPrice ?? p.evening);
+            const weekend = pick(turf.weekendPrice ?? p.weekend);
+            const slotMins = Number(turf.slotDuration ?? cfg.slotDurationMins) || 60;
+            const to12 = (t) => {
+              if (!t) return '';
+              if (/AM|PM/i.test(t)) return t;
+              const [h, m] = String(t).split(':').map(Number);
+              return `${String(h % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${h >= 12 && h < 24 ? 'PM' : 'AM'}`;
+            };
+            const rows = [
+              { label: 'Regular hours', value: `₹${pricePerHour} / hour` },
+              evening && { label: 'Evening (after 6 PM)', value: `₹${evening} / hour` },
+              weekend && { label: 'Weekend (Sat & Sun)', value: `₹${weekend} / hour` },
+              { label: 'Slot duration', value: slotMins === 30 ? '30 minutes' : `${slotMins} minutes` },
+              { label: 'Open hours', value: `${to12(turf.openingTime || cfg.openTime || '06:00')} - ${to12(turf.closingTime || cfg.closeTime || '23:00')}` },
+            ].filter(Boolean);
+            return (
+              <>
+                <Text style={[styles.sectionTitle, { color: C.text }]}>Pricing & Timings</Text>
+                <View style={{ backgroundColor: C.card, borderColor: C.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, marginBottom: 20 }}>
+                  {rows.map((r, i) => (
+                    <View
+                      key={r.label}
+                      style={{
+                        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                        paddingVertical: 12,
+                        borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.border,
+                      }}
+                    >
+                      <Text style={{ color: C.subtext, fontSize: 13, fontWeight: '600' }}>{r.label}</Text>
+                      <Text style={{ color: C.text, fontSize: 14, fontWeight: '800' }}>{r.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            );
+          })()}
+
           {/* ── Amenities & Ground Facilities ── */}
           <Text style={[styles.sectionTitle, { color: C.text }]}>World-Class Facilities</Text>
           <View style={styles.amenitiesGrid}>
@@ -454,29 +721,29 @@ export default function TurfDetailScreen({ route, navigation }) {
               .sort((a, b) => (b.rating || 5) - (a.rating || 5))
               .slice(0, 5)
               .map((rv) => (
-              <View
-                key={rv._id || rv.id}
-                style={[styles.reviewCard, { backgroundColor: C.card, borderColor: C.border }]}
-              >
-                <View style={styles.reviewTop}>
-                  <View style={[styles.reviewerAvatar, { backgroundColor: C.primaryLight }]}>
-                    <Text style={[styles.avatarLetter, { color: C.primary }]}>
-                      {(rv.user?.name || 'P')[0].toUpperCase()}
-                    </Text>
+                <View
+                  key={rv._id || rv.id}
+                  style={[styles.reviewCard, { backgroundColor: C.card, borderColor: C.border }]}
+                >
+                  <View style={styles.reviewTop}>
+                    <View style={[styles.reviewerAvatar, { backgroundColor: C.primaryLight }]}>
+                      <Text style={[styles.avatarLetter, { color: C.primary }]}>
+                        {(rv.user?.name || 'P')[0].toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.reviewerName, { color: C.text }]}>
+                        {rv.user?.name || 'Verified Player'}
+                      </Text>
+                      <Text style={[styles.reviewDate, { color: C.caption }]}>Verified Match Booking</Text>
+                    </View>
+                    <RatingBadge rating={rv.rating || 5} size="sm" />
                   </View>
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={[styles.reviewerName, { color: C.text }]}>
-                      {rv.user?.name || 'Verified Player'}
-                    </Text>
-                    <Text style={[styles.reviewDate, { color: C.caption }]}>Verified Match Booking</Text>
-                  </View>
-                  <RatingBadge rating={rv.rating || 5} size="sm" />
+                  {!!rv.comment && (
+                    <Text style={[styles.reviewComment, { color: C.subtext }]}>{rv.comment}</Text>
+                  )}
                 </View>
-                {!!rv.comment && (
-                  <Text style={[styles.reviewComment, { color: C.subtext }]}>{rv.comment}</Text>
-                )}
-              </View>
-            ))
+              ))
           )}
         </View>
       </ScrollView>
@@ -493,10 +760,24 @@ export default function TurfDetailScreen({ route, navigation }) {
         ]}
       >
         <View style={styles.bottomPriceCol}>
-          <Text style={[styles.pricePrefix, { color: C.subtext }]}>Slot Price</Text>
+          <Text style={[styles.pricePrefix, { color: C.subtext }]}>
+            {activeOffer && offerPrice ? 'Special Offer Price' : 'Starting from'}
+          </Text>
           <View style={styles.priceRow}>
-            <Text style={[styles.priceAmount, { color: C.primary }]}>₹{pricePerHour}</Text>
-            <Text style={[styles.priceUnit, { color: C.subtext }]}> / hour</Text>
+            {activeOffer && offerPrice ? (
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={[styles.priceAmount, { color: '#059669' }]}>₹{offerPrice}</Text>
+                <Text style={{ textDecorationLine: 'line-through', color: C.subtext, fontSize: 13, marginLeft: 6 }}>
+                  ₹{pricePerHour}
+                </Text>
+                <Text style={[styles.priceUnit, { color: C.subtext }]}> / hr</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.priceAmount, { color: C.primary }]}>₹{pricePerHour}</Text>
+                <Text style={[styles.priceUnit, { color: C.subtext }]}> / hour</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -1140,5 +1421,141 @@ const styles = StyleSheet.create({
   thumbImage: {
     width: '100%',
     height: '100%',
+  },
+  offerCard: {
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  offerBannerImg: {
+    width: '100%',
+    height: 120,
+  },
+  offerContent: {
+    padding: SPACING.md,
+  },
+  offerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  offerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  offerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  offerExpiry: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  offerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  offerDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  offerScopeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  offerScopeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  offerPricingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: RADIUS.md,
+  },
+  offerPriceNow: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginRight: 6,
+  },
+  offerPriceOld: {
+    fontSize: 12,
+    textDecorationLine: 'line-through',
+    marginRight: 8,
+  },
+  offerPriceSave: {
+    color: '#059669',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  turfTournamentCard: {
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 20,
+  },
+  turfTournamentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  turfTournamentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  turfTournamentBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  turfTournamentSportTag: {
+    backgroundColor: 'rgba(124, 58, 237, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.round,
+  },
+  turfTournamentSportTagText: {
+    color: '#7C3AED',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  turfTournamentTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  turfTournamentMeta: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  turfTournamentFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  turfTournamentCtaText: {
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

@@ -127,6 +127,34 @@ async function calculateVendorTodayOpenSlots(vendorId, targetTurfId = null) {
   return totalAvailableSlots;
 }
 
+const parseJsonValue = (v) => {
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return v; }
+};
+
+const toArrayValue = (v) => {
+  const parsed = parseJsonValue(v);
+  if (Array.isArray(parsed)) return parsed;
+  return parsed ? [parsed] : [];
+};
+
+// "06:00 AM" -> "06:00", "11:00 PM" -> "23:00", "18:30" stays "18:30"
+const to24h = (t) => {
+  const s = String(t || '').trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) return s;
+  let h = Number(m[1]);
+  const min = m[2];
+  const ap = (m[3] || '').toUpperCase();
+  if (ap === 'PM' && h < 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${min}`;
+};
+
+const toNumberOrUndefined = (v) =>
+  (v === undefined || v === null || v === '' || Number.isNaN(Number(v))) ? undefined : Number(v);
+
+
 const vendorController = {
   formatVendor,
 
@@ -148,27 +176,27 @@ const vendorController = {
 
       let parsedData = { ...req.body };
       if (typeof req.body.pricing === 'string') {
-        try { parsedData.pricing = JSON.parse(req.body.pricing); } catch {}
+        try { parsedData.pricing = JSON.parse(req.body.pricing); } catch { }
       }
       if (typeof req.body.slotConfig === 'string') {
-        try { parsedData.slotConfig = JSON.parse(req.body.slotConfig); } catch {}
+        try { parsedData.slotConfig = JSON.parse(req.body.slotConfig); } catch { }
       }
       if (typeof req.body.sportTypes === 'string') {
-        try { parsedData.sportTypes = JSON.parse(req.body.sportTypes); } catch {}
+        try { parsedData.sportTypes = JSON.parse(req.body.sportTypes); } catch { }
       } else if (typeof req.body.sports === 'string') {
-        try { parsedData.sportTypes = JSON.parse(req.body.sports); } catch {}
+        try { parsedData.sportTypes = JSON.parse(req.body.sports); } catch { }
       } else if (Array.isArray(req.body.sports)) {
         parsedData.sportTypes = req.body.sports;
       }
       if (typeof req.body.amenities === 'string') {
-        try { parsedData.amenities = JSON.parse(req.body.amenities); } catch {}
+        try { parsedData.amenities = JSON.parse(req.body.amenities); } catch { }
       } else if (typeof req.body.facilities === 'string') {
-        try { parsedData.amenities = JSON.parse(req.body.facilities); } catch {}
+        try { parsedData.amenities = JSON.parse(req.body.facilities); } catch { }
       } else if (Array.isArray(req.body.facilities)) {
         parsedData.amenities = req.body.facilities;
       }
       if (typeof req.body.geo === 'string') {
-        try { parsedData.geo = JSON.parse(req.body.geo); } catch {}
+        try { parsedData.geo = JSON.parse(req.body.geo); } catch { }
       }
 
       if (!parsedData.pricing && parsedData.price !== undefined) {
@@ -300,9 +328,9 @@ const vendorController = {
       }
 
       const panDoc = (files.pan && files.pan[0]) ||
-                     (files.panCard && files.panCard[0]) ||
-                     (files.pan_card && files.pan_card[0]) ||
-                     (files.panFront && files.panFront[0]);
+        (files.panCard && files.panCard[0]) ||
+        (files.pan_card && files.pan_card[0]) ||
+        (files.panFront && files.panFront[0]);
 
       if (panDoc) {
         const resPan = await storageService.uploadFile(panDoc, 'kyc');
@@ -488,7 +516,15 @@ const vendorController = {
         turfApprovalAcknowledged: vendor.turfApprovalAcknowledged || false,
         hasActiveSubscription: hasActiveSub,
         subscription: hasActiveSub ? vendor.subscriptions[0] : (vendor.subscription || null),
-        turf: turf ? { id: turf.id, name: turf.name, status: turf.status } : null,
+        turf: turf ? {
+          id: turf.id,
+          name: turf.name,
+          city: turf.city || '',
+          location: turf.location || null,
+          status: turf.status,
+          reviewedAt: vendor.reviewedAt || null, // approval date = vendors.reviewed_at, set by superadmin approval
+          createdAt: turf.createdAt,
+        } : null,
         vendor: formatVendor(vendor),
       });
     } catch (err) {
@@ -936,7 +972,7 @@ const vendorController = {
       const { uid } = req.user;
       let data = req.body;
       if (typeof data === 'string') {
-        try { data = JSON.parse(data); } catch {}
+        try { data = JSON.parse(data); } catch { }
       }
 
       const sportTypes = data.sports || data.sportTypes || ['Football'];
@@ -1017,6 +1053,7 @@ const vendorController = {
 
   /**
    * PUT /api/v1/vendor/turfs/:turfId
+   * Accepts JSON or multipart (logo + images files).
    */
   async updateTurf(req, res) {
     try {
@@ -1032,45 +1069,114 @@ const vendorController = {
         return sendError(res, 'Access denied: You do not own this turf', 403, 'FORBIDDEN');
       }
 
-      let data = req.body;
+      let data = req.body || {};
       if (typeof data === 'string') {
-        try { data = JSON.parse(data); } catch {}
+        try { data = JSON.parse(data); } catch { data = {}; }
       }
 
+      const files = (req.files && !Array.isArray(req.files)) ? req.files : {};
       const updateData = {};
-      if (data.name) updateData.name = data.name;
+
+      // ---- Basic info ----
+      if (data.name) updateData.name = String(data.name).trim();
       if (data.description !== undefined) updateData.description = data.description;
-      if (data.city) updateData.city = data.city;
-      if (data.location) updateData.location = data.location;
-      
+      if (data.city) updateData.city = String(data.city).trim();
+
+      const pin = data.pinCode ?? data.pincode;
+      const newLocation = parseJsonValue(data.location);
+      const hasLocationInput =
+        data.address !== undefined || pin !== undefined || data.city ||
+        (newLocation && typeof newLocation === 'object');
+
+      if (hasLocationInput) {
+        const prevLocation = (existing.location && typeof existing.location === 'object') ? existing.location : {};
+        updateData.location = {
+          ...prevLocation,
+          ...((newLocation && typeof newLocation === 'object') ? newLocation : {}),
+          ...(data.address !== undefined ? { address: String(data.address).trim() } : {}),
+          ...(pin !== undefined ? { pincode: String(pin).trim() } : {}),
+          ...(data.city ? { city: String(data.city).trim() } : {}),
+        };
+      }
+
+      // ---- Sports & amenities ----
       const rawSports = data.sports || data.selectedSports || data.sportTypes;
       if (rawSports) {
-        let sportsArr = rawSports;
-        if (typeof sportsArr === 'string') {
-          try { sportsArr = JSON.parse(sportsArr); } catch { sportsArr = [sportsArr]; }
-        }
-        if (Array.isArray(sportsArr)) {
-          updateData.sports = sportsArr;
-        }
+        const sportsArr = toArrayValue(rawSports);
+        if (sportsArr.length >= 0) updateData.sports = sportsArr;
       }
 
       const rawAmenities = data.amenities || data.selectedAmenities;
       if (rawAmenities) {
-        let amenitiesArr = rawAmenities;
-        if (typeof amenitiesArr === 'string') {
-          try { amenitiesArr = JSON.parse(amenitiesArr); } catch { amenitiesArr = [amenitiesArr]; }
-        }
-        if (Array.isArray(amenitiesArr)) {
-          updateData.amenities = amenitiesArr;
-        }
+        updateData.amenities = toArrayValue(rawAmenities);
       }
 
-      if (data.pricePerHour !== undefined || data.price !== undefined) {
-        updateData.pricePerHour = Number(data.pricePerHour ?? data.price);
-      }
       if (data.courtCount !== undefined) updateData.courtCount = Number(data.courtCount);
-      if (data.slotConfig) updateData.slotConfig = data.slotConfig;
-      if (data.images) updateData.images = data.images;
+
+      // ---- Timing & pricing (stored inside slotConfig JSON, no schema change) ----
+      const prevCfg = (existing.slotConfig && typeof existing.slotConfig === 'object') ? existing.slotConfig : {};
+      const incomingCfg = parseJsonValue(data.slotConfig);
+      const cfg = { ...prevCfg, ...((incomingCfg && typeof incomingCfg === 'object') ? incomingCfg : {}) };
+      let cfgChanged = Boolean(incomingCfg && typeof incomingCfg === 'object');
+
+      if (data.openingTime) { cfg.openTime = to24h(data.openingTime); cfgChanged = true; }
+      if (data.closingTime) {
+        cfg.closeTime = to24h(data.closingTime);
+        if (cfg.closeTime === '00:00') cfg.closeTime = '24:00'; // midnight closing
+        cfgChanged = true;
+      }
+      const duration = toNumberOrUndefined(data.slotDuration ?? data.slotDurationMins);
+      if (duration) { cfg.slotDurationMins = duration; cfgChanged = true; }
+
+      // Base price is REQUIRED (> 0). Evening / weekend / weekend-evening / ball add-on are OPTIONAL:
+      // sending a blank / null / 0 clears that price, and the turf falls back to the base price.
+      const baseRaw = data.basePrice ?? data.pricePerHour ?? data.price;
+      const baseInput = toNumberOrUndefined(baseRaw);
+      if (baseRaw !== undefined && !(baseInput > 0)) {
+        return sendError(res, 'Base price is required and must be greater than 0', 400, 'INVALID_BASE_PRICE');
+      }
+      const optionalPrices = {
+        evening: 'eveningPrice',
+        weekend: 'weekendPrice',
+        weekendEvening: 'weekendEveningPrice',
+        ball: 'ballPrice',
+      };
+      const pricing = { ...((cfg.pricing && typeof cfg.pricing === 'object') ? cfg.pricing : {}) };
+      let pricingTouched = false;
+      if (baseInput !== undefined) {
+        pricing.base = baseInput;
+        updateData.pricePerHour = baseInput;
+        pricingTouched = true;
+      }
+      Object.entries(optionalPrices).forEach(([key, field]) => {
+        if (data[field] === undefined) return; // not sent -> leave as is
+        const n = toNumberOrUndefined(data[field]);
+        if (n > 0) pricing[key] = n; else delete pricing[key];
+        pricingTouched = true;
+      });
+      if (pricingTouched) {
+        cfg.pricing = pricing;
+        cfgChanged = true;
+      }
+      if (cfgChanged) updateData.slotConfig = cfg;
+
+      // ---- Photos: cover logo + gallery ----
+      if (files.logo && files.logo[0]) {
+        const up = await storageService.uploadFile(files.logo[0], 'turfs');
+        updateData.logo = up.url;
+      } else if (typeof data.logo === 'string' && /^https?:/i.test(data.logo)) {
+        updateData.logo = data.logo;
+      }
+
+      const uploadedImages = [];
+      for (const f of (files.images || [])) {
+        const up = await storageService.uploadFile(f, 'turfs');
+        uploadedImages.push(up.url);
+      }
+      if (uploadedImages.length > 0 || data.images !== undefined || data.existingImages !== undefined) {
+        const keep = data.existingImages !== undefined ? toArrayValue(data.existingImages) : toArrayValue(data.images);
+        updateData.images = [...keep, ...uploadedImages];
+      }
 
       const updated = await prisma.turf.update({
         where: { id: turfId },
@@ -1078,7 +1184,10 @@ const vendorController = {
       });
 
       await cacheService.del(`turf:${turfId}`);
+      await cacheService.del('turfs_meta_locations');
       await cacheService.invalidatePattern('turf*');
+      await cacheService.invalidatePattern('*nearby*');
+      await cacheService.invalidatePattern('*featured*');
       await cacheService.invalidateDashboard(uid);
 
       return sendSuccess(res, { turf: formatTurf(updated) });
