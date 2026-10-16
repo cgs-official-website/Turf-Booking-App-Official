@@ -51,7 +51,7 @@ const TournamentListScreen = ({ navigation }) => {
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // 'all' | 'published' | 'draft'
+  const [filter, setFilter] = useState('all'); // 'all' | 'turf_hosted' | 'user_created' | 'draft'
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -106,7 +106,9 @@ const TournamentListScreen = ({ navigation }) => {
   };
 
   const filteredTournaments = tournaments.filter((t) => {
-    if (filter === 'published') return t.status === 'published';
+    const isUser = t.creatorType === 'USER' || t.source === 'USER CREATED';
+    if (filter === 'turf_hosted') return !isUser;
+    if (filter === 'user_created') return isUser;
     if (filter === 'draft') return t.status === 'draft';
     return true;
   });
@@ -121,6 +123,7 @@ const TournamentListScreen = ({ navigation }) => {
       };
 
     const isPublished = item.status === 'published';
+    const isUserCreated = item.creatorType === 'USER' || item.source === 'USER CREATED';
 
     return (
       <TouchableOpacity
@@ -128,7 +131,9 @@ const TournamentListScreen = ({ navigation }) => {
           styles.itemCard,
           {
             backgroundColor: colors.card,
-            borderColor: colors.border,
+            borderColor: isUserCreated
+              ? (isDark ? 'rgba(139, 92, 246, 0.4)' : '#DDD6FE')
+              : colors.border,
           },
           SHADOWS.sm,
         ]}
@@ -137,6 +142,28 @@ const TournamentListScreen = ({ navigation }) => {
       >
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
+            {/* Source Badge */}
+            <View
+              style={[
+                styles.sourceTag,
+                {
+                  backgroundColor: isUserCreated
+                    ? (isDark ? 'rgba(124, 58, 237, 0.25)' : '#EDE9FE')
+                    : (isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7'),
+                  borderColor: isUserCreated ? '#A78BFA' : '#86EFAC',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.sourceTagText,
+                  { color: isUserCreated ? '#7C3AED' : '#0F766E' },
+                ]}
+              >
+                {isUserCreated ? 'USER CREATED' : 'TURF HOSTED'}
+              </Text>
+            </View>
+
             <View
               style={[
                 styles.sportBadge,
@@ -200,6 +227,15 @@ const TournamentListScreen = ({ navigation }) => {
         <Text style={[styles.tournamentName, { color: colors.text }]} numberOfLines={2}>
           {item.name}
         </Text>
+
+        {isUserCreated && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+            <Feather name="user" size={12} color="#8B5CF6" style={{ marginRight: 5 }} />
+            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+              Created by <Text style={{ fontWeight: '700', color: colors.text }}>{item.creatorName || item.creator || 'Community Member'}</Text>
+            </Text>
+          </View>
+        )}
 
         {item.turfName || activeTurf?.name ? (
           <View style={styles.turfNameRow}>
@@ -268,7 +304,8 @@ const TournamentListScreen = ({ navigation }) => {
       <View style={styles.filterBar}>
         {[
           { key: 'all', label: 'All' },
-          { key: 'published', label: 'Published' },
+          { key: 'turf_hosted', label: 'Turf Hosted' },
+          { key: 'user_created', label: 'User Created' },
           { key: 'draft', label: 'Draft' },
         ].map((tab) => {
           const isActive = filter === tab.key;
@@ -435,6 +472,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  sourceTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  sourceTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
   sportBadge: {
     paddingHorizontal: 8,

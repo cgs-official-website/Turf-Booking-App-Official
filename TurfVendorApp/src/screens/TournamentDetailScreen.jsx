@@ -73,7 +73,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
         fontWeight: '700',
       },
       headerRight: () =>
-        tournament ? (
+        tournament && (tournament.canEdit || tournament.creatorType !== 'USER') ? (
           <TouchableOpacity
             style={styles.headerEditBtn}
             onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
@@ -301,8 +301,17 @@ const TournamentDetailScreen = ({ route, navigation }) => {
 
   const isPublished = tournament.status === 'published';
   const isCricket = (tournament.sport || '').toLowerCase().includes('cricket');
+  const isUserCreated = tournament.creatorType === 'USER' || tournament.source === 'USER CREATED';
   const turfName = tournament.turfName || tournament.turf?.name || 'Partner Facility';
   const turfCity = tournament.turf?.city || tournament.turf?.address || 'Tamil Nadu';
+  const maxPlayers = tournament.playersPerTeam || 11;
+  const teamsList = Array.isArray(tournament.teams) && tournament.teams.length > 0
+    ? tournament.teams
+    : Array.from({ length: tournament.numberOfTeams || 2 }, (_, idx) => ({
+        id: `team_${idx + 1}`,
+        name: `Team ${idx + 1}`,
+        players: [],
+      }));
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -321,11 +330,35 @@ const TournamentDetailScreen = ({ route, navigation }) => {
         {/* Status Header Hero */}
         <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <View style={styles.heroTopRow}>
-            <View style={[styles.sportTag, { backgroundColor: colors.primaryLight }]}>
-              <Feather name="award" size={13} color={colors.primary} />
-              <Text style={[styles.sportTagText, { color: colors.primary }]}>
-                {tournament.sport ? tournament.sport.toUpperCase() : 'TOURNAMENT'}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/* Source Badge */}
+              <View
+                style={[
+                  styles.sourceTag,
+                  {
+                    backgroundColor: isUserCreated
+                      ? (isDark ? 'rgba(124, 58, 237, 0.25)' : '#EDE9FE')
+                      : (isDark ? 'rgba(16, 185, 129, 0.25)' : '#DCFCE7'),
+                    borderColor: isUserCreated ? '#A78BFA' : '#86EFAC',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sourceTagText,
+                    { color: isUserCreated ? '#7C3AED' : '#0F766E' },
+                  ]}
+                >
+                  {isUserCreated ? 'USER CREATED' : 'TURF HOSTED'}
+                </Text>
+              </View>
+
+              <View style={[styles.sportTag, { backgroundColor: colors.primaryLight }]}>
+                <Feather name="award" size={13} color={colors.primary} />
+                <Text style={[styles.sportTagText, { color: colors.primary }]}>
+                  {tournament.sport ? tournament.sport.toUpperCase() : 'TOURNAMENT'}
+                </Text>
+              </View>
             </View>
 
             <View
@@ -361,6 +394,29 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
 
           <Text style={[styles.tournamentTitle, { color: colors.text }]}>{tournament.name}</Text>
+
+          {/* User Creator Info Note if Community Tournament */}
+          {isUserCreated && (
+            <View
+              style={[
+                styles.creatorBannerBox,
+                {
+                  backgroundColor: isDark ? 'rgba(124, 58, 237, 0.12)' : '#F5F3FF',
+                  borderColor: isDark ? 'rgba(124, 58, 237, 0.3)' : '#DDD6FE',
+                },
+              ]}
+            >
+              <Feather name="info" size={15} color="#7C3AED" style={{ marginRight: 8, marginTop: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.creatorBannerTitle, { color: isDark ? '#DDD6FE' : '#6D28D9' }]}>
+                  User-Created Community Tournament
+                </Text>
+                <Text style={[styles.creatorBannerSub, { color: isDark ? '#A78BFA' : '#5B21B6' }]}>
+                  Organized by {tournament.creatorName || tournament.creator || 'Community Athlete'}. This tournament is conducted at your turf venue.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Turf Host Card */}
           <View
@@ -520,6 +576,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+<<<<<<< HEAD
         {/* ── Team Registrations Section (Part 3) ── */}
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <View style={styles.regSectionHeaderRow}>
@@ -797,20 +854,102 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               })()}
             </View>
           )}
+=======
+        {/* Teams & Squad Rosters Card */}
+        <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+          <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Teams & Squad Rosters</Text>
+          <Text style={[styles.shareSub, { color: colors.textSecondary }]}>
+            Configured squads ({tournament.numberOfTeams} teams • max {maxPlayers} players/team):
+          </Text>
+
+          {teamsList.map((team, idx) => {
+            const players = Array.isArray(team.players) ? team.players : [];
+            const isFull = players.length >= maxPlayers;
+            return (
+              <View
+                key={team.id || idx}
+                style={[
+                  styles.teamCard,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.teamHeader}>
+                  <Text style={[styles.teamNameText, { color: colors.text }]}>{team.name}</Text>
+                  <View
+                    style={[
+                      styles.capacityPill,
+                      {
+                        backgroundColor: isFull
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : isDark
+                          ? 'rgba(255,255,255,0.06)'
+                          : '#F1F5F9',
+                        borderColor: isFull ? '#10B981' : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.capacityPillText,
+                        { color: isFull ? '#10B981' : colors.textSecondary },
+                      ]}
+                    >
+                      {players.length} / {maxPlayers} Players
+                    </Text>
+                  </View>
+                </View>
+
+                {players.length > 0 ? (
+                  <View style={{ marginTop: 6, gap: 5 }}>
+                    {players.map((p, pIdx) => (
+                      <View
+                        key={p.id || pIdx}
+                        style={[
+                          styles.playerItemRow,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <Feather name="user" size={12} color={colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={[styles.playerNameText, { color: colors.text }]}>{p.name}</Text>
+                        {p.phone ? (
+                          <Text style={{ fontSize: 10, color: colors.textSecondary, marginLeft: 'auto' }}>
+                            {p.phone}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.textSecondary, marginTop: 4 }}>
+                    No players registered in this squad yet.
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+>>>>>>> 4d1ada6 (Describe your changes)
         </View>
 
         {/* Bottom Actions */}
         <View style={styles.bottomActions}>
-          <TouchableOpacity
-            style={[styles.editBtn, { borderColor: colors.primary }]}
-            onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
-            activeOpacity={0.8}
-          >
-            <Feather name="edit" size={16} color={colors.primary} style={{ marginRight: 6 }} />
-            <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Details</Text>
-          </TouchableOpacity>
+          {!isUserCreated && (tournament.canEdit !== false) && (
+            <TouchableOpacity
+              style={[styles.editBtn, { borderColor: colors.primary }]}
+              onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
+              activeOpacity={0.8}
+            >
+              <Feather name="edit" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Details</Text>
+            </TouchableOpacity>
+          )}
 
-          {!isPublished ? (
+          {!isPublished && !isUserCreated ? (
             <TouchableOpacity
               style={[styles.publishActionBtn, { backgroundColor: colors.primary }]}
               onPress={handlePublish}
@@ -1151,6 +1290,7 @@ const styles = StyleSheet.create({
     fontSize: SIZES.sm + 1,
     fontWeight: '700',
   },
+<<<<<<< HEAD
 
   // ── Team Registrations Styles ──
   regSectionHeaderRow: {
@@ -1237,10 +1377,15 @@ const styles = StyleSheet.create({
   },
   regStatusBadge: {
     paddingHorizontal: 8,
+=======
+  sourceTag: {
+    paddingHorizontal: 7,
+>>>>>>> 4d1ada6 (Describe your changes)
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
   },
+<<<<<<< HEAD
   regStatusBadgeText: {
     fontSize: 10,
     fontWeight: '800',
@@ -1414,6 +1559,68 @@ const styles = StyleSheet.create({
     fontSize: SIZES.xs + 1,
     fontWeight: '700',
   },
+=======
+  sourceTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  creatorBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  creatorBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  creatorBannerSub: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  teamCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  teamHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamNameText: {
+    fontSize: SIZES.sm + 1,
+    fontWeight: '700',
+  },
+  capacityPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  capacityPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  playerItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  playerNameText: {
+    fontSize: SIZES.xs + 1,
+    fontWeight: '600',
+  },
+>>>>>>> 4d1ada6 (Describe your changes)
 });
 
 export default TournamentDetailScreen;

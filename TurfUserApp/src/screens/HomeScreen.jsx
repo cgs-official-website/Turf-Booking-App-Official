@@ -504,7 +504,11 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {/* ── Quick Action Cards ── */}
-          <View style={styles.quickActionRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickActionScroll}
+          >
             <TouchableOpacity
               style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
               onPress={() => navigation.navigate('Explore')}
@@ -535,6 +539,26 @@ export default function HomeScreen({ navigation }) {
               </View>
               <Text style={[styles.quickTitle, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
                 Offers
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.quickCard,
+                {
+                  backgroundColor: C.card,
+                  borderColor: dark ? 'rgba(15, 118, 110, 0.45)' : '#CCFBF1',
+                },
+                SHADOW.subtle,
+              ]}
+              onPress={() => navigation.navigate('Tournament')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.quickIconWrap, { backgroundColor: dark ? 'rgba(15, 118, 110, 0.22)' : '#CCFBF1' }]}>
+                <Ionicons name="trophy" size={16} color="#0F766E" />
+              </View>
+              <Text style={[styles.quickTitle, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                Tournaments
               </Text>
             </TouchableOpacity>
 
@@ -576,7 +600,7 @@ export default function HomeScreen({ navigation }) {
                 My Pass
               </Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
 
           {/* ── Premium Dark-Green-and-Gold "Turf Deals" Promotional Banner ── */}
           <TouchableOpacity
@@ -605,55 +629,6 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.goldenExploreBtn}>
                 <Text style={styles.goldenExploreBtnText}>Explore Offers</Text>
                 <Feather name="arrow-right" size={13} color="#062C22" style={{ marginLeft: 5 }} />
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          {/* ── Tournaments Promotional Banner ── */}
-          <TouchableOpacity
-            style={[
-              styles.tournamentHomeBanner,
-              {
-                backgroundColor: dark ? '#1E1B4B' : '#F5F3FF',
-                borderColor: dark ? '#7C3AED' : '#C4B5FD',
-              },
-              SHADOW.card,
-            ]}
-            onPress={() => navigation.navigate('Tournament')}
-            activeOpacity={0.9}
-          >
-            <View style={styles.tournamentHomeHeader}>
-              <View
-                style={[
-                  styles.tournamentTagPill,
-                  {
-                    backgroundColor: dark ? 'rgba(124, 58, 237, 0.25)' : '#EDE9FE',
-                    borderColor: '#A78BFA',
-                  },
-                ]}
-              >
-                <Text style={{ fontSize: 12, marginRight: 4 }}>🏆</Text>
-                <Text style={[styles.tournamentTagText, { color: dark ? '#C4B5FD' : '#6D28D9' }]}>
-                  TOURNAMENTS
-                </Text>
-              </View>
-              <View style={[styles.tournamentLiveBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                <View style={styles.livePulseDot} />
-                <Text style={styles.tournamentLiveText}>ACTIVE & OPEN</Text>
-              </View>
-            </View>
-
-            <View style={styles.tournamentHomeBody}>
-              <Text style={[styles.tournamentHomeHeadline, { color: C.text }]}>🏆 Tournaments</Text>
-              <Text style={[styles.tournamentHomeDesc, { color: C.subtext }]}>
-                Explore turf tournaments or create your own
-              </Text>
-            </View>
-
-            <View style={styles.tournamentHomeFooter}>
-              <View style={[styles.tournamentExploreBtn, { backgroundColor: '#7C3AED' }]}>
-                <Text style={styles.tournamentExploreBtnText}>View Tournaments</Text>
-                <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 5 }} />
               </View>
             </View>
           </TouchableOpacity>
@@ -902,19 +877,17 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  quickActionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  quickActionScroll: {
     paddingHorizontal: SPACING.md || 14,
     marginTop: 14,
-    gap: 6,
+    gap: 8,
   },
   quickCard: {
-    flex: 1,
+    width: 68,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
     borderRadius: RADIUS.xl,
     borderWidth: 1.5,
   },
@@ -1018,76 +991,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.2,
   },
-  tournamentHomeBanner: {
-    marginHorizontal: SPACING.md || 14,
-    marginTop: 12,
-    borderRadius: RADIUS.xxl,
-    borderWidth: 1.5,
-    padding: 16,
-    overflow: 'hidden',
-  },
-  tournamentHomeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  tournamentTagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: RADIUS.round,
-    borderWidth: 1,
-  },
-  tournamentTagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  tournamentLiveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: RADIUS.round,
-  },
-  tournamentLiveText: {
-    color: '#10B981',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  tournamentHomeBody: {
-    marginBottom: 12,
-  },
-  tournamentHomeHeadline: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  tournamentHomeDesc: {
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  tournamentHomeFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tournamentExploreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: RADIUS.round,
-  },
-  tournamentExploreBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
+
   sportsSection: {
     marginTop: 22,
   },

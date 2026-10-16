@@ -372,13 +372,14 @@ export default function TurfDetailScreen({ route, navigation }) {
           {(turf.hasTournament || turf.tournamentAvailable) && turf.activeTournament && (
             <TouchableOpacity
               style={[
-                styles.tournamentBanner,
+                styles.turfTournamentCard,
                 {
                   backgroundColor: dark ? '#132A24' : '#F0FDF4',
                   borderColor: dark ? 'rgba(16, 185, 129, 0.4)' : '#BBF7D0',
                 },
-                SHADOW.subtle,
+                SHADOW.card,
               ]}
+<<<<<<< HEAD
               onPress={() =>
                 navigation.navigate('TournamentDetail', {
                   tournamentId: turf.activeTournament.id,
@@ -386,24 +387,43 @@ export default function TurfDetailScreen({ route, navigation }) {
                 })
               }
               activeOpacity={0.85}
+=======
+              onPress={() => {
+                navigation.navigate('TournamentDetail', {
+                  tournamentId: turf.activeTournament.id,
+                  tournament: turf.activeTournament,
+                });
+              }}
+              activeOpacity={0.88}
+>>>>>>> 4d1ada6 (Describe your changes)
             >
-              <View style={styles.tournamentBannerLeft}>
-                <View style={[styles.tournamentIconCircle, { backgroundColor: '#0F766E' }]}>
-                  <Feather name="award" size={18} color="#FFFFFF" />
+              <View style={styles.turfTournamentHeader}>
+                <View style={[styles.turfTournamentBadge, { backgroundColor: '#0F766E' }]}>
+                  <Text style={{ fontSize: 11, marginRight: 4 }}>🏆</Text>
+                  <Text style={styles.turfTournamentBadgeText}>Tournament Available</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.tournamentTagRow}>
-                    <Text style={styles.tournamentBadgeText}>TOURNAMENT AVAILABLE</Text>
-                  </View>
-                  <Text style={[styles.tournamentTitleText, { color: C.text }]} numberOfLines={1}>
-                    {turf.activeTournament.name}
-                  </Text>
-                  <Text style={[styles.tournamentSubtitleText, { color: C.subtext }]}>
-                    {turf.activeTournament.sport} • {turf.activeTournament.numberOfTeams} Teams • Tap for details
+                <View style={[styles.turfTournamentSportTag, { backgroundColor: 'rgba(15, 118, 110, 0.15)' }]}>
+                  <Text style={[styles.turfTournamentSportTagText, { color: '#0F766E' }]}>
+                    {turf.activeTournament.sport}
                   </Text>
                 </View>
               </View>
-              <Feather name="chevron-right" size={18} color="#0F766E" />
+
+              <Text style={[styles.turfTournamentTitle, { color: C.text }]}>
+                {turf.activeTournament.name}
+              </Text>
+
+              <Text style={[styles.turfTournamentMeta, { color: C.subtext }]}>
+                📅 {turf.activeTournament.startDate} to {turf.activeTournament.endDate} • 👥 {turf.activeTournament.numberOfTeams} Teams ({turf.activeTournament.playersPerTeam} / team)
+              </Text>
+
+              <View style={[styles.turfTournamentFooter, { marginTop: 6 }]}>
+                <View style={{ flex: 1 }} />
+                <View style={[styles.viewTurfBtn, { backgroundColor: '#0F766E', borderColor: '#0F766E' }]}>
+                  <Text style={[styles.viewTurfText, { color: '#FFFFFF' }]}>View Tournament</Text>
+                  <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 5 }} />
+                </View>
+              </View>
             </TouchableOpacity>
           )}
 
@@ -559,49 +579,6 @@ export default function TurfDetailScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* ── Active Tournament Available Highlight ── */}
-          {turf.activeTournament && (
-            <TouchableOpacity
-              style={[
-                styles.turfTournamentCard,
-                {
-                  borderColor: '#7C3AED',
-                  backgroundColor: dark ? '#1E1B4B50' : '#F5F3FF',
-                },
-                SHADOW.card,
-              ]}
-              onPress={() =>
-                navigation.navigate('TournamentDetail', {
-                  tournamentId: turf.activeTournament.id,
-                  tournament: turf.activeTournament,
-                })
-              }
-              activeOpacity={0.88}
-            >
-              <View style={styles.turfTournamentHeader}>
-                <View style={styles.turfTournamentBadge}>
-                  <Text style={{ fontSize: 13, marginRight: 5 }}>🏆</Text>
-                  <Text style={styles.turfTournamentBadgeText}>TOURNAMENT AVAILABLE</Text>
-                </View>
-                <View style={styles.turfTournamentSportTag}>
-                  <Text style={styles.turfTournamentSportTagText}>{turf.activeTournament.sport}</Text>
-                </View>
-              </View>
-
-              <Text style={[styles.turfTournamentTitle, { color: C.text }]}>
-                {turf.activeTournament.name}
-              </Text>
-              <Text style={[styles.turfTournamentMeta, { color: C.subtext }]}>
-                Dates: {turf.activeTournament.startDate} to {turf.activeTournament.endDate} • {turf.activeTournament.numberOfTeams} Teams ({turf.activeTournament.playersPerTeam} players/team)
-              </Text>
-
-              <View style={styles.turfTournamentFooter}>
-                <Text style={[styles.turfTournamentCtaText, { color: C.primary }]}>
-                  View Tournament →
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
 
           {/* ── Pricing & Timings (set by the turf owner) ── */}
           {(() => {

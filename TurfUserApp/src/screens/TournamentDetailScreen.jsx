@@ -11,6 +11,10 @@ import {
   ActivityIndicator,
   RefreshControl,
   Clipboard,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -23,7 +27,11 @@ import {
   getTournamentByIdApi,
   publishTournamentApi,
   cancelTournamentApi,
+<<<<<<< HEAD
   getMyTournamentRegistrationApi,
+=======
+  updateTournamentTeamsApi,
+>>>>>>> 4d1ada6 (Describe your changes)
 } from '../api/tournaments';
 
 const DEFAULT_SPORT_IMAGES = {
@@ -61,6 +69,13 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [loading, setLoading] = useState(!initialTournament);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Team & Player Management Modal State
+  const [playerModalVisible, setPlayerModalVisible] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [playerNameInput, setPlayerNameInput] = useState('');
+  const [playerPhoneInput, setPlayerPhoneInput] = useState('');
+  const [savingTeams, setSavingTeams] = useState(false);
 
   const loadDetails = useCallback(async () => {
     if (!tournamentId) return;
@@ -124,17 +139,21 @@ export default function TournamentDetailScreen({ route, navigation }) {
     DEFAULT_SPORT_IMAGES[tournament?.sport] ||
     'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800';
 
+  const hostTurfName = tournament?.turf?.name || tournament?.turfName || 'Selected Host Turf';
+  const turfLocation =
+    tournament?.turf?.city ||
+    tournament?.turf?.location?.city ||
+    tournament?.turf?.address ||
+    tournament?.city ||
+    'Host Facility';
+
   const shareUrl =
     tournament?.shareableUrl ||
     `https://turfbookingapp.com/tournament/${tournament?.shareableIdentifier || tournament?.id}`;
 
   const handleShare = async () => {
     if (!tournament) return;
-    const host = isCommunity
-      ? (tournament.creatorName ? `Organized by ${tournament.creatorName}` : 'Organized by Community Member')
-      : `Hosted at ${tournament.turf?.name || tournament.turfName || 'Verified Turf'}`;
-
-    const message = `🏆 Join "${tournament.name}" (${tournament.sport})!\n\n📍 ${host}\n📅 Dates: ${formatDate(tournament.startDate)} to ${formatDate(tournament.endDate)}\n👥 Format: ${tournament.numberOfTeams} Teams (${tournament.playersPerTeam} players/team)${isCricket && tournament.oversPerTeam ? `\n🏏 Overs: ${tournament.oversPerTeam}` : ''}\n\nView details & follow updates:\n${shareUrl}`;
+    const message = `🏆 Join "${tournament.name}" (${tournament.sport}) hosted at ${hostTurfName}!\n\n📅 Dates: ${formatDate(tournament.startDate)} to ${formatDate(tournament.endDate)}\n👥 Format: ${tournament.numberOfTeams} Teams (${tournament.playersPerTeam} players/team)${isCricket && tournament.oversPerTeam ? `\n🏏 Overs: ${tournament.oversPerTeam}` : ''}\n\nView details & follow updates:\n${shareUrl}`;
 
     try {
       await Share.share({
@@ -222,6 +241,98 @@ export default function TournamentDetailScreen({ route, navigation }) {
     );
   };
 
+  // Open Add Player Modal
+  const handleOpenAddPlayer = (teamId) => {
+    setSelectedTeamId(teamId);
+    setPlayerNameInput('');
+    setPlayerPhoneInput('');
+    setPlayerModalVisible(true);
+  };
+
+  // Save Player to Team
+  const handleSavePlayer = async () => {
+    if (!playerNameInput.trim()) {
+      Alert.alert('Required', 'Please enter player name.');
+      return;
+    }
+
+    const currentTeams = Array.isArray(tournament?.teams) ? [...tournament.teams] : [];
+    const teamIndex = currentTeams.findIndex((t) => t.id === selectedTeamId);
+    if (teamIndex === -1) return;
+
+    const maxCap = tournament.playersPerTeam || 11;
+    const team = currentTeams[teamIndex];
+    const existingPlayers = Array.isArray(team.players) ? team.players : [];
+
+    if (existingPlayers.length >= maxCap) {
+      Alert.alert(
+        'Capacity Reached',
+        `This team is at maximum capacity (${maxCap} players). Cannot add more players.`
+      );
+      return;
+    }
+
+    const newPlayer = {
+      id: `p_${Date.now()}`,
+      name: playerNameInput.trim(),
+      phone: playerPhoneInput.trim() || undefined,
+      isInvited: true,
+      invitedAt: new Date().toISOString(),
+    };
+
+    const updatedTeam = {
+      ...team,
+      players: [...existingPlayers, newPlayer],
+    };
+    currentTeams[teamIndex] = updatedTeam;
+
+    setSavingTeams(true);
+    try {
+      await updateTournamentTeamsApi(tournament.id, currentTeams);
+      setTournament((prev) => ({ ...prev, teams: currentTeams }));
+      setPlayerModalVisible(false);
+      Alert.alert('Player Added', `${newPlayer.name} has been added to ${team.name}.`);
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to update team roster.');
+    } finally {
+      setSavingTeams(false);
+    }
+  };
+
+  // Remove Player from Team
+  const handleRemovePlayer = (teamId, playerId, playerName) => {
+    Alert.alert(
+      'Remove Player',
+      `Remove ${playerName} from this team?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const currentTeams = Array.isArray(tournament?.teams) ? [...tournament.teams] : [];
+            const teamIndex = currentTeams.findIndex((t) => t.id === teamId);
+            if (teamIndex === -1) return;
+
+            const team = currentTeams[teamIndex];
+            const updatedPlayers = (team.players || []).filter((p) => p.id !== playerId);
+            currentTeams[teamIndex] = { ...team, players: updatedPlayers };
+
+            setSavingTeams(true);
+            try {
+              await updateTournamentTeamsApi(tournament.id, currentTeams);
+              setTournament((prev) => ({ ...prev, teams: currentTeams }));
+            } catch (err) {
+              Alert.alert('Error', err.message || 'Failed to remove player.');
+            } finally {
+              setSavingTeams(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View style={[styles.centerBox, { backgroundColor: C.bg }]}>
@@ -246,6 +357,16 @@ export default function TournamentDetailScreen({ route, navigation }) {
     );
   }
 
+  const teamsList = Array.isArray(tournament.teams) && tournament.teams.length > 0
+    ? tournament.teams
+    : Array.from({ length: tournament.numberOfTeams || 2 }, (_, idx) => ({
+        id: `team_${idx + 1}`,
+        name: `Team ${idx + 1}`,
+        players: [],
+      }));
+
+  const maxPlayersPerTeam = tournament.playersPerTeam || 11;
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>
       {/* ── Top Header Bar ── */}
@@ -262,7 +383,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
             {tournament.name}
           </Text>
           <Text style={[styles.headerSub, { color: C.subtext }]}>
-            {isCommunity ? 'Community Tournament' : 'Turf Hosted Tournament'}
+            {isCommunity ? 'User Created Tournament' : 'Turf Hosted Tournament'}
           </Text>
         </View>
 
@@ -293,7 +414,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
               style={[
                 styles.sourceBadge,
                 {
-                  backgroundColor: isCommunity ? '#7C3AED' : '#0F766E',
+                  backgroundColor: '#0F766E',
                 },
               ]}
             >
@@ -304,7 +425,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 style={{ marginRight: 5 }}
               />
               <Text style={styles.sourceBadgeText}>
-                {isCommunity ? (isOwner ? 'MY TOURNAMENT' : 'COMMUNITY') : 'TURF HOSTED'}
+                {isCommunity ? (isOwner ? 'MY TOURNAMENT • USER CREATED' : 'USER CREATED') : 'TURF HOSTED'}
               </Text>
             </View>
 
@@ -355,36 +476,33 @@ export default function TournamentDetailScreen({ route, navigation }) {
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <Text style={[styles.mainTitle, { color: C.text }]}>{tournament.name}</Text>
 
-          {/* Host / Creator Row */}
+          {/* Host Facility Row */}
           <View style={styles.hostRow}>
             <View
               style={[
                 styles.hostAvatar,
-                { backgroundColor: isCommunity ? 'rgba(124, 58, 237, 0.15)' : 'rgba(16, 185, 129, 0.15)' },
+                { backgroundColor: 'rgba(16, 185, 129, 0.15)' },
               ]}
             >
               <Ionicons
-                name={isCommunity ? 'person' : 'business'}
+                name="business"
                 size={16}
-                color={isCommunity ? '#7C3AED' : '#10B981'}
+                color="#10B981"
               />
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={[styles.hostLabel, { color: C.subtext }]}>
-                {isCommunity ? 'Organized by' : 'Host Facility'}
+                Host Turf Venue
               </Text>
               <Text style={[styles.hostName, { color: C.text }]}>
-                {isCommunity
-                  ? (isOwner ? 'You (Logged-in Organizer)' : (tournament.creatorName || 'Community Member'))
-                  : (tournament.turf?.name || tournament.turfName || 'Verified Arena')}
+                {hostTurfName}
               </Text>
             </View>
 
-            {/* If Turf Hosted, allow jumping to TurfDetail */}
-            {!isCommunity && tournament.turf && (
+            {tournament.turf && (
               <TouchableOpacity
                 style={[styles.viewTurfBtn, { borderColor: C.primary }]}
-                onPress={() => navigation.navigate('TurfDetail', { turf: tournament.turf })}
+                onPress={() => navigation.navigate('TurfDetail', { turfId: tournament.turf.id || tournament.turfId, turf: tournament.turf })}
               >
                 <Text style={[styles.viewTurfText, { color: C.primary }]}>View Arena</Text>
                 <Feather name="arrow-right" size={12} color={C.primary} style={{ marginLeft: 4 }} />
@@ -392,12 +510,27 @@ export default function TournamentDetailScreen({ route, navigation }) {
             )}
           </View>
 
-          {!isCommunity && (tournament.turf?.city || tournament.turf?.address) && (
-            <View style={styles.locationRow}>
-              <Feather name="map-pin" size={13} color={C.primary} style={{ marginRight: 6 }} />
-              <Text style={[styles.locationText, { color: C.subtext }]}>
-                {tournament.turf?.city || tournament.turf?.address}
-              </Text>
+          {/* Location */}
+          <View style={styles.locationRow}>
+            <Feather name="map-pin" size={13} color={C.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.locationText, { color: C.subtext }]}>
+              {turfLocation}
+            </Text>
+          </View>
+
+          {/* Creator Info if User Created */}
+          {isCommunity && (
+            <View style={[styles.creatorInfoBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+              <Ionicons name="person-circle" size={18} color="#0F766E" style={{ marginRight: 8 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.creatorLabel, { color: C.subtext }]}>Tournament Organizer</Text>
+                <Text style={[styles.creatorVal, { color: C.text }]}>
+                  {isOwner ? 'You (Logged-in Organizer)' : (tournament.creatorName || 'Community Member')}
+                </Text>
+              </View>
+              <View style={styles.userCreatedBadge}>
+                <Text style={styles.userCreatedBadgeText}>USER CREATED</Text>
+              </View>
             </View>
           )}
         </View>
@@ -423,7 +556,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
             {/* Teams */}
             <View style={[styles.metricBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-              <Ionicons name="people-outline" size={18} color="#7C3AED" />
+              <Ionicons name="people-outline" size={18} color="#0F766E" />
               <Text style={[styles.metricLabel, { color: C.subtext }]}>Teams</Text>
               <Text style={[styles.metricVal, { color: C.text }]}>{tournament.numberOfTeams} Teams</Text>
             </View>
@@ -437,11 +570,11 @@ export default function TournamentDetailScreen({ route, navigation }) {
           </View>
 
           {/* Cricket Overs Indicator */}
-          {isCricket && tournament.oversPerTeam && (
+          {isCricket && Boolean(tournament.oversPerTeam) && (
             <View style={[styles.cricketOversRow, { backgroundColor: dark ? '#1E293B' : '#FEF3C7' }]}>
               <Feather name="disc" size={16} color="#D97706" style={{ marginRight: 8 }} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cricketOversTitle, { color: '#B45309' }]}>Match Overs Rule</Text>
+                <Text style={[styles.cricketOversTitle, { color: '#B45309' }]}>Cricket Match Overs Rule</Text>
                 <Text style={[styles.cricketOversSub, { color: '#92400E' }]}>
                   {tournament.oversPerTeam} overs per inning / side
                 </Text>
@@ -450,6 +583,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
           )}
         </View>
 
+<<<<<<< HEAD
         {/* ── Capacity & Slots Overview (Part 1 & 5) ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <View style={styles.capacityHeaderRow}>
@@ -667,6 +801,141 @@ export default function TournamentDetailScreen({ route, navigation }) {
           </View>
         )}
 
+=======
+        {/* ── Teams & Player Rosters Section ── */}
+        <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={[styles.sectionHeading, { color: C.text, marginBottom: 2 }]}>Teams & Squads</Text>
+              <Text style={[styles.sectionSubtitle, { color: C.subtext }]}>
+                {tournament.numberOfTeams} Teams • Capacity: {maxPlayersPerTeam} players per team
+              </Text>
+            </View>
+          </View>
+
+          {teamsList.map((team, idx) => {
+            const players = Array.isArray(team.players) ? team.players : [];
+            const isFull = players.length >= maxPlayersPerTeam;
+            const fillRatio = Math.min(players.length / maxPlayersPerTeam, 1);
+
+            return (
+              <View
+                key={team.id || idx}
+                style={[
+                  styles.teamCard,
+                  { backgroundColor: C.bgSoft, borderColor: C.border },
+                ]}
+              >
+                {/* Team Card Header */}
+                <View style={styles.teamCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.teamNameText, { color: C.text }]}>{team.name}</Text>
+                  </View>
+
+                  {/* Capacity Pill */}
+                  <View
+                    style={[
+                      styles.capacityPill,
+                      {
+                        backgroundColor: isFull
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : 'rgba(59, 130, 246, 0.12)',
+                        borderColor: isFull ? '#10B981' : '#3B82F6',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.capacityPillText,
+                        { color: isFull ? '#10B981' : '#2563EB' },
+                      ]}
+                    >
+                      {players.length} / {maxPlayersPerTeam} Players
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Progress bar */}
+                <View style={[styles.capacityTrack, { backgroundColor: C.border }]}>
+                  <View
+                    style={[
+                      styles.capacityBar,
+                      {
+                        width: `${fillRatio * 100}%`,
+                        backgroundColor: isFull ? '#10B981' : '#3B82F6',
+                      },
+                    ]}
+                  />
+                </View>
+
+                {/* Player List */}
+                {players.length > 0 ? (
+                  <View style={styles.playersListWrap}>
+                    {players.map((player, pIdx) => (
+                      <View
+                        key={player.id || pIdx}
+                        style={[
+                          styles.playerItemRow,
+                          {
+                            backgroundColor: C.card,
+                            borderColor: C.border,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.playerAvatar, { backgroundColor: C.primaryLight }]}>
+                          <Text style={[styles.playerAvatarText, { color: C.primary }]}>
+                            {String(player.name || 'P').charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 8 }}>
+                          <Text style={[styles.playerNameText, { color: C.text }]} numberOfLines={1}>
+                            {player.name}
+                          </Text>
+                          {player.phone ? (
+                            <Text style={[styles.playerPhoneText, { color: C.subtext }]}>
+                              📞 {player.phone}
+                            </Text>
+                          ) : null}
+                        </View>
+
+                        {/* Remove button if owner */}
+                        {isOwner && (
+                          <TouchableOpacity
+                            style={styles.playerRemoveBtn}
+                            onPress={() => handleRemovePlayer(team.id, player.id, player.name)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Feather name="x" size={14} color={C.error} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={[styles.noPlayersText, { color: C.subtext }]}>
+                    No players registered in this squad yet.
+                  </Text>
+                )}
+
+                {/* Add Player CTA if owner & not full */}
+                {isOwner && !isFull && (
+                  <TouchableOpacity
+                    style={[styles.addPlayerBtn, { borderColor: '#0F766E' }]}
+                    onPress={() => handleOpenAddPlayer(team.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="user-plus" size={13} color="#0F766E" style={{ marginRight: 6 }} />
+                    <Text style={[styles.addPlayerBtnText, { color: '#0F766E' }]}>
+                      Add / Invite Player ({players.length}/{maxPlayersPerTeam})
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+>>>>>>> 4d1ada6 (Describe your changes)
         {/* ── Description ── */}
         {Boolean(tournament.description) && (
           <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
@@ -695,12 +964,12 @@ export default function TournamentDetailScreen({ route, navigation }) {
               {shareUrl}
             </Text>
             <TouchableOpacity style={styles.copyBtn} onPress={handleCopyLink} activeOpacity={0.7}>
-              <Feather name="copy" size={16} color={C.primary} />
+              <Feather name="copy" size={16} color="#0F766E" />
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={[styles.shareBigBtn, { backgroundColor: C.primary }]}
+            style={[styles.shareBigBtn, { backgroundColor: '#0F766E' }]}
             onPress={handleShare}
             activeOpacity={0.88}
           >
@@ -714,7 +983,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
           <View style={styles.ownerActionsWrap}>
             {isDraft && (
               <TouchableOpacity
-                style={[styles.publishActionBtn, { backgroundColor: '#10B981' }, SHADOW.floating]}
+                style={[styles.publishActionBtn, { backgroundColor: '#0F766E' }, SHADOW.floating]}
                 onPress={handlePublish}
                 disabled={actionLoading}
                 activeOpacity={0.88}
@@ -744,6 +1013,71 @@ export default function TournamentDetailScreen({ route, navigation }) {
           </View>
         )}
       </ScrollView>
+
+      {/* ── Add Player Modal ── */}
+      <Modal visible={playerModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Add Player to Squad</Text>
+              <TouchableOpacity
+                onPress={() => setPlayerModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Feather name="x" size={20} color={C.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalInputLabel, { color: C.text }]}>
+              Player Name <Text style={{ color: C.error }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
+              placeholder="e.g. Rahul Sharma"
+              placeholderTextColor={C.subtext}
+              value={playerNameInput}
+              onChangeText={setPlayerNameInput}
+              autoFocus
+            />
+
+            <Text style={[styles.modalInputLabel, { color: C.text }]}>
+              Phone Number (Optional / For Invitation)
+            </Text>
+            <TextInput
+              style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
+              placeholder="e.g. 9876543210"
+              placeholderTextColor={C.subtext}
+              keyboardType="phone-pad"
+              value={playerPhoneInput}
+              onChangeText={setPlayerPhoneInput}
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: C.border }]}
+                onPress={() => setPlayerModalVisible(false)}
+              >
+                <Text style={[styles.modalCancelText, { color: C.subtext }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { backgroundColor: '#0F766E' }]}
+                onPress={handleSavePlayer}
+                disabled={savingTeams}
+              >
+                {savingTeams ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Add Player</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -850,6 +1184,16 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   mainTitle: {
     fontSize: 20,
     fontWeight: '900',
@@ -900,6 +1244,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  creatorInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  creatorLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  creatorVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  userCreatedBadge: {
+    backgroundColor: '#0F766E',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
+  userCreatedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
   sectionHeading: {
     fontSize: 16,
     fontWeight: '800',
@@ -942,6 +1315,95 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     marginTop: 1,
+  },
+  teamCard: {
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  teamCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  teamNameText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  capacityPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  capacityPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  capacityTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  capacityBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  playersListWrap: {
+    marginBottom: 6,
+  },
+  playerItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 7,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  playerAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playerAvatarText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  playerNameText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  playerPhoneText: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  playerRemoveBtn: {
+    padding: 4,
+    marginLeft: 6,
+  },
+  noPlayersText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  addPlayerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: 4,
+  },
+  addPlayerBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   bodyText: {
     fontSize: 13,
@@ -1030,13 +1492,14 @@ const styles = StyleSheet.create({
   backBtnPill: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: RADIUS.round,
+    borderRadius: RADIUS.md,
   },
   backBtnText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
   },
+<<<<<<< HEAD
 
   // ── Capacity Section ──
   capacityHeaderRow: {
@@ -1181,5 +1644,66 @@ const styles = StyleSheet.create({
   blockedCtaText: {
     fontSize: 13,
     fontFamily: FONT.bold,
+=======
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    borderWidth: 1,
+    padding: SPACING.xl,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modalInputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  modalTextInput: {
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 14,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 6,
+  },
+  modalCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalSaveBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+  },
+  modalSaveText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+>>>>>>> 4d1ada6 (Describe your changes)
   },
 });

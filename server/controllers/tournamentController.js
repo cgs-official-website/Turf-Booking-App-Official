@@ -41,6 +41,7 @@ function formatTournament(t, reqUser = null) {
     (currentUserId === userId || currentUserId === vendorId)
   );
 
+<<<<<<< HEAD
   const totalTeams = t.numberOfTeams !== null && t.numberOfTeams !== undefined
     ? Number(t.numberOfTeams)
     : (t.participantCapacity || 16);
@@ -106,12 +107,42 @@ function formatTournament(t, reqUser = null) {
       };
     }
   }
+=======
+  let teams = [];
+  if (Array.isArray(t.teams)) {
+    teams = t.teams;
+  } else if (typeof t.teams === 'string') {
+    try { teams = JSON.parse(t.teams); } catch (_) { teams = []; }
+  }
+  if (!teams || teams.length === 0) {
+    const teamCount = t.numberOfTeams || 2;
+    teams = Array.from({ length: teamCount }, (_, idx) => ({
+      id: `team_${idx + 1}`,
+      name: `Team ${idx + 1}`,
+      players: [],
+    }));
+  }
+
+  // Permissions:
+  // - Admin can edit/delete
+  // - User creator can edit/delete their own tournament
+  // - Vendor creator can edit/delete their own tournament
+  // - Vendor CANNOT edit/delete user-created tournaments
+  // - User CANNOT edit/delete vendor-created tournaments or another user's tournaments
+  const isAdmin = reqUser ? reqUser.role === 'admin' || reqUser.role === 'superadmin' : false;
+  const canEdit = Boolean(
+    isAdmin ||
+    (isCommunity && currentUserId && currentUserId === userId) ||
+    (!isCommunity && currentUserId && currentUserId === vendorId)
+  );
+>>>>>>> 4d1ada6 (Describe your changes)
 
   return {
     id: t.id,
     creatorType,
-    source: isCommunity ? 'COMMUNITY' : 'TURF HOSTED',
-    sourceLabel: isCommunity ? 'COMMUNITY / MY TOURNAMENT' : 'TURF HOSTED',
+    source: isCommunity ? 'USER CREATED' : 'TURF HOSTED',
+    sourceLabel: isCommunity ? 'USER CREATED' : 'TURF HOSTED',
+    sourceBadge: isCommunity ? '[USER CREATED]' : '[TURF HOSTED]',
     turfId,
     turfName: t.turf?.name || t.venueName || undefined,
     turf: t.turf
@@ -125,15 +156,31 @@ function formatTournament(t, reqUser = null) {
         }
       : undefined,
     vendorId,
+    vendor: t.vendor
+      ? {
+          id: t.vendor.id,
+          name: t.vendor.name,
+          phone: t.vendor.phone,
+          email: t.vendor.email,
+        }
+      : undefined,
+    vendorName: t.vendor?.name || null,
+    turfOwner: t.vendor?.name || null,
     userId,
     user: t.user
       ? {
           id: t.user.id,
           name: t.user.name,
           avatar: t.user.avatar || null,
+          phone: t.user.phone || null,
         }
       : undefined,
-    creatorName: t.user?.name || (isCommunity ? 'Community Member' : (t.turf?.name || t.venueName || 'Turf Host')),
+    creatorName: isCommunity
+      ? (t.user?.name || 'Community Member')
+      : (t.vendor?.name || t.turf?.name || t.venueName || 'Turf Host'),
+    creator: isCommunity
+      ? (t.user?.name || 'Community Member')
+      : (t.vendor?.name || t.turf?.name || t.venueName || 'Turf Host'),
     name: t.name,
     sport: t.sport,
     category: t.sport,
@@ -142,6 +189,7 @@ function formatTournament(t, reqUser = null) {
     numberOfTeams: totalTeams,
     playersPerTeam: t.playersPerTeam !== null && t.playersPerTeam !== undefined ? Number(t.playersPerTeam) : null,
     oversPerTeam: t.oversPerTeam !== null && t.oversPerTeam !== undefined ? Number(t.oversPerTeam) : null,
+    teams,
     status: t.status,
     lifecycleStatus,
     lifecycleLabel,
@@ -174,7 +222,12 @@ function formatTournament(t, reqUser = null) {
       ? `https://turfbookingapp.com/tournament/${shareId}${turfId ? `?turfId=${turfId}` : ''}`
       : null,
     isOwner,
+<<<<<<< HEAD
     registrations: (isOwner || isAdmin) ? registrationsList : undefined,
+=======
+    canEdit,
+    canDelete: canEdit,
+>>>>>>> 4d1ada6 (Describe your changes)
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -219,6 +272,15 @@ const tournamentController = {
               id: true,
               name: true,
               avatar: true,
+              phone: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              email: true,
             },
           },
         },
@@ -267,7 +329,7 @@ const tournamentController = {
 
   /**
    * GET /api/v1/tournaments/available
-   * Public list of currently active, published turf-owner tournaments for UserApp
+   * Public list of currently active, published tournaments (both Turf-hosted and User-created) for UserApp
    */
   async getAvailableTournaments(req, res) {
     try {
@@ -277,9 +339,9 @@ const tournamentController = {
       const d = String(today.getDate()).padStart(2, '0');
       const todayStr = `${y}-${m}-${d}`;
 
+      // Only published, active tournaments (NOT draft, NOT cancelled, NOT expired)
       const tournaments = await prisma.tournament.findMany({
         where: {
-          creatorType: 'VENDOR',
           status: 'published',
           endDate: {
             gte: todayStr,
@@ -298,7 +360,13 @@ const tournamentController = {
               pricePerHour: true,
             },
           },
+<<<<<<< HEAD
           registrations: true,
+=======
+          user: {
+            select: { id: true, name: true, avatar: true },
+          },
+>>>>>>> 4d1ada6 (Describe your changes)
         },
         orderBy: [{ startDate: 'asc' }, { createdAt: 'desc' }],
       });
@@ -332,6 +400,16 @@ const tournamentController = {
           userId,
         },
         include: {
+          turf: {
+            select: {
+              id: true,
+              name: true,
+              city: true,
+              location: true,
+              images: true,
+              logo: true,
+            },
+          },
           user: {
             select: { id: true, name: true, avatar: true },
           },
@@ -354,6 +432,7 @@ const tournamentController = {
   /**
    * GET /api/v1/vendor/tournaments
    * Vendor retrieves tournaments for their turf(s)
+   * Displays both Vendor-created tournaments and User-created tournaments hosted at vendor's turf!
    */
   async getVendorTournaments(req, res) {
     try {
@@ -364,12 +443,30 @@ const tournamentController = {
         return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
       }
 
-      const where = {
-        vendorId,
-        creatorType: 'VENDOR',
-      };
+      let where = {};
       if (turfId) {
-        where.turfId = turfId;
+        // Verify turf belongs to this vendor
+        const turf = await prisma.turf.findUnique({
+          where: { id: turfId },
+          select: { id: true, vendorId: true },
+        });
+        if (!turf || turf.vendorId !== vendorId) {
+          return sendError(res, 'Turf not found or does not belong to vendor', 403, 'FORBIDDEN');
+        }
+        where = { turfId };
+      } else {
+        // Query all turfs belonging to vendor
+        const vendorTurfs = await prisma.turf.findMany({
+          where: { vendorId },
+          select: { id: true },
+        });
+        const turfIds = vendorTurfs.map((t) => t.id);
+        where = {
+          OR: [
+            { turfId: { in: turfIds } },
+            { vendorId: vendorId },
+          ],
+        };
       }
 
       const tournaments = await prisma.tournament.findMany({
@@ -378,12 +475,18 @@ const tournamentController = {
           turf: {
             select: { id: true, name: true, city: true, images: true, logo: true, location: true },
           },
+<<<<<<< HEAD
           registrations: true,
+=======
+          user: {
+            select: { id: true, name: true, avatar: true, phone: true },
+          },
+>>>>>>> 4d1ada6 (Describe your changes)
         },
         orderBy: { createdAt: 'desc' },
       });
 
-      const formatted = tournaments.map((t) => formatTournament(t, req.user));
+      const formatted = tournaments.map((t) => formatTournament(t, req.user || req.vendor));
 
       return sendSuccess(res, {
         tournaments: formatted,
@@ -427,6 +530,15 @@ const tournamentController = {
               id: true,
               name: true,
               avatar: true,
+              phone: true,
+            },
+          },
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              email: true,
             },
           },
           registrations: {
@@ -449,7 +561,7 @@ const tournamentController = {
 
   /**
    * POST /api/v1/tournaments
-   * User creates a tournament (UserApp)
+   * User creates a tournament (UserApp) - Turf MUST be selected first
    */
   async createUserTournament(req, res) {
     try {
@@ -459,6 +571,7 @@ const tournamentController = {
       }
 
       const {
+        turfId,
         name,
         sport,
         category,
@@ -470,12 +583,16 @@ const tournamentController = {
         description,
         rules,
         bannerUrl,
+        teams,
         publishNow,
       } = req.body;
 
       const effectiveSport = (sport || category || '').trim();
       const errors = {};
 
+      if (!turfId) {
+        errors.turfId = 'Turf facility selection is required to create a tournament';
+      }
       if (!name || !name.trim() || name.trim().length < 3) {
         errors.name = 'Tournament name is required (minimum 3 characters)';
       }
@@ -515,13 +632,51 @@ const tournamentController = {
         return sendError(res, Object.values(errors)[0], 400, 'VALIDATION_ERROR', errors);
       }
 
+      // Verify that the selected turf exists in the database
+      const turf = await prisma.turf.findUnique({
+        where: { id: turfId },
+        select: { id: true, vendorId: true, name: true, city: true, images: true, logo: true, location: true },
+      });
+
+      if (!turf) {
+        return sendError(res, 'Selected turf venue was not found', 404, 'TURF_NOT_FOUND');
+      }
+
+      // Initialize or sanitize teams roster
+      let initialTeams = [];
+      if (Array.isArray(teams) && teams.length > 0) {
+        initialTeams = teams.slice(0, teamsCount).map((tm, idx) => ({
+          id: tm.id || `team_${idx + 1}`,
+          name: (tm.name || `Team ${idx + 1}`).trim(),
+          players: Array.isArray(tm.players)
+            ? tm.players.slice(0, playersCount).map((p, pIdx) => ({
+                id: p.id || `p_${Date.now()}_${pIdx}`,
+                name: (p.name || `Player ${pIdx + 1}`).trim(),
+                phone: p.phone ? String(p.phone).trim() : '',
+                isInvited: Boolean(p.isInvited || p.phone),
+              }))
+            : [],
+        }));
+      } else {
+        initialTeams = Array.from({ length: teamsCount }, (_, idx) => ({
+          id: `team_${idx + 1}`,
+          name: `Team ${idx + 1}`,
+          players: [],
+        }));
+      }
+
       const shareableIdentifier = generateShareableIdentifier();
-      const initialStatus = publishNow ? 'published' : 'draft';
+      const initialStatus = (publishNow === true || req.body?.status === 'published') ? 'published' : 'draft';
 
       const tournament = await prisma.tournament.create({
         data: {
           creatorType: 'USER',
           userId,
+          turfId: turf.id,
+          vendorId: turf.vendorId, // Associated with the turf's vendor!
+          venueName: turf.name,
+          city: turf.city,
+          venueLocation: turf.location,
           name: name.trim(),
           sport: effectiveSport,
           startDate: String(startDate).slice(0, 32),
@@ -529,13 +684,18 @@ const tournamentController = {
           numberOfTeams: teamsCount,
           playersPerTeam: playersCount,
           oversPerTeam: parsedOvers,
+          teams: initialTeams,
           description: description ? description.trim() : null,
           rules: rules ? rules.trim() : null,
           bannerUrl: bannerUrl ? bannerUrl.trim() : null,
           status: initialStatus,
           shareableIdentifier,
+          createdBy: req.user?.name || req.user?.phone || 'User',
         },
         include: {
+          turf: {
+            select: { id: true, name: true, city: true, images: true, logo: true, location: true },
+          },
           user: {
             select: { id: true, name: true, avatar: true },
           },
@@ -548,7 +708,7 @@ const tournamentController = {
         tournament: formatted,
         shareableUrl: formatted.shareableUrl,
         message: publishNow ? 'Tournament published successfully!' : 'Tournament saved as draft',
-      }, 201);
+      });
     } catch (err) {
       console.error('createUserTournament error:', err);
       return sendError(res, 'Failed to create tournament', 500, 'CREATE_FAILED');
@@ -895,8 +1055,26 @@ const tournamentController = {
       if (oversPerTeam !== undefined) updateData.oversPerTeam = oversPerTeam ? parseInt(oversPerTeam, 10) : null;
 
       // Admin or facility fields
-      if (turfId !== undefined) updateData.turfId = turfId || null;
-      if (venueName !== undefined) updateData.venueName = venueName ? venueName.trim() : existing.venueName;
+      if (turfId !== undefined && turfId !== existing.turfId) {
+        if (turfId) {
+          const turf = await prisma.turf.findUnique({
+            where: { id: turfId },
+            select: { id: true, name: true, city: true, location: true, vendorId: true },
+          });
+          if (!turf) {
+            return sendError(res, 'Selected turf venue was not found', 404, 'TURF_NOT_FOUND');
+          }
+          updateData.turfId = turf.id;
+          updateData.vendorId = turf.vendorId;
+          updateData.venueName = turf.name;
+          updateData.city = turf.city;
+          updateData.venueLocation = turf.location;
+        } else {
+          updateData.turfId = null;
+        }
+      } else if (venueName !== undefined) {
+        updateData.venueName = venueName ? venueName.trim() : existing.venueName;
+      }
       if (city !== undefined) updateData.city = city ? city.trim() : null;
       if (venueLocation !== undefined) updateData.venueLocation = venueLocation || null;
       if (registrationStartDate !== undefined) updateData.registrationStartDate = String(registrationStartDate).slice(0, 32);
@@ -908,6 +1086,23 @@ const tournamentController = {
       if (format !== undefined) updateData.format = String(format).trim().toLowerCase();
       if (contactPhone !== undefined) updateData.contactPhone = contactPhone ? contactPhone.trim() : null;
       if (contactEmail !== undefined) updateData.contactEmail = contactEmail ? contactEmail.trim().toLowerCase() : null;
+
+      if (req.body.teams !== undefined) {
+        const teamsInput = Array.isArray(req.body.teams) ? req.body.teams : [];
+        const maxPlayers = updateData.playersPerTeam || existing.playersPerTeam || 11;
+        updateData.teams = teamsInput.map((tm, idx) => ({
+          id: tm.id || `team_${idx + 1}`,
+          name: (tm.name || `Team ${idx + 1}`).trim(),
+          players: Array.isArray(tm.players)
+            ? tm.players.slice(0, maxPlayers).map((p, pIdx) => ({
+                id: p.id || `p_${Date.now()}_${pIdx}`,
+                name: (p.name || `Player ${pIdx + 1}`).trim(),
+                phone: p.phone ? String(p.phone).trim() : '',
+                isInvited: Boolean(p.isInvited || p.phone),
+              }))
+            : [],
+        }));
+      }
 
       if (status !== undefined && (isAdmin || VALID_STATUSES.includes(status.toLowerCase()))) {
         updateData.status = status.toLowerCase();
@@ -930,6 +1125,78 @@ const tournamentController = {
     } catch (err) {
       console.error('Error updating tournament:', err);
       return sendError(res, err.message || 'Failed to update tournament', 500, 'UPDATE_FAILED');
+    }
+  },
+
+  /**
+   * PUT /api/v1/tournaments/:id/teams
+   * Creator updates teams and player rosters for their tournament
+   */
+  async updateTournamentTeams(req, res) {
+    try {
+      const id = req.params?.id || req.params?.tournamentId;
+      const currentUserId = req.user?.id || req.user?.uid || req.vendor?.id;
+
+      if (!currentUserId) {
+        return sendError(res, 'Authentication required', 401, 'AUTH_REQUIRED');
+      }
+
+      const existing = await prisma.tournament.findUnique({ where: { id } });
+      if (!existing) {
+        return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
+      }
+
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+      const isOwner = Boolean(
+        currentUserId &&
+        ((existing.userId && existing.userId === currentUserId) ||
+         (existing.vendorId && existing.vendorId === currentUserId))
+      );
+
+      if (!isOwner && !isAdmin) {
+        return sendError(res, 'Access denied: You cannot manage teams for this tournament', 403, 'FORBIDDEN');
+      }
+
+      const { teams } = req.body;
+      if (!Array.isArray(teams)) {
+        return sendError(res, 'Teams must be provided as an array', 400, 'INVALID_TEAMS');
+      }
+
+      const maxPlayers = existing.playersPerTeam || 11;
+      const sanitizedTeams = teams.map((tm, idx) => {
+        const rawPlayers = Array.isArray(tm.players) ? tm.players : [];
+        if (rawPlayers.length > maxPlayers) {
+          throw new Error(`Team "${tm.name || `Team ${idx + 1}`}" exceeds maximum capacity of ${maxPlayers} players`);
+        }
+        return {
+          id: tm.id || `team_${idx + 1}`,
+          name: (tm.name || `Team ${idx + 1}`).trim(),
+          players: rawPlayers.map((p, pIdx) => ({
+            id: p.id || `p_${Date.now()}_${pIdx}`,
+            name: (p.name || `Player ${pIdx + 1}`).trim(),
+            phone: p.phone ? String(p.phone).trim() : '',
+            isInvited: Boolean(p.isInvited || p.phone),
+          })),
+        };
+      });
+
+      const updated = await prisma.tournament.update({
+        where: { id },
+        data: { teams: sanitizedTeams },
+        include: {
+          turf: {
+            select: { id: true, name: true, city: true, images: true, logo: true, location: true },
+          },
+          user: {
+            select: { id: true, name: true, avatar: true },
+          },
+        },
+      });
+
+      return sendSuccess(res, { tournament: formatTournament(updated, req.user) });
+    } catch (err) {
+      console.error('updateTournamentTeams error:', err);
+      return sendError(res, err.message || 'Failed to update teams', 400, 'UPDATE_FAILED');
     }
   },
 
@@ -1150,8 +1417,13 @@ const tournamentController = {
         return sendError(res, 'Share identifier is required', 400, 'MISSING_SHARE_ID');
       }
 
-      const tournament = await prisma.tournament.findUnique({
-        where: { shareableIdentifier: shareIdentifier },
+      const tournament = await prisma.tournament.findFirst({
+        where: {
+          OR: [
+            { shareableIdentifier: shareIdentifier },
+            { id: shareIdentifier },
+          ],
+        },
         include: {
           user: {
             select: { id: true, name: true, avatar: true },

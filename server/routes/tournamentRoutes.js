@@ -9,6 +9,7 @@ router.get('/available', optionalAuth, tournamentController.getAvailableTourname
 router.get('/my', verifySessionToken, tournamentController.getMyTournaments);
 router.post('/', verifySessionToken, tournamentController.createUserTournament);
 router.put('/:id', verifySessionToken, tournamentController.updateTournament);
+router.put('/:id/teams', verifySessionToken, tournamentController.updateTournamentTeams);
 router.post('/:id/publish', verifySessionToken, tournamentController.publishTournament);
 router.patch('/:id/publish', verifySessionToken, tournamentController.publishTournament);
 router.post('/:id/cancel', verifySessionToken, tournamentController.cancelTournament);
