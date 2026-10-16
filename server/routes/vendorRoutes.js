@@ -3,6 +3,7 @@ const multer = require('multer');
 const router = express.Router();
 const vendorController = require('../controllers/vendorController');
 const vendorOfferController = require('../controllers/vendorOfferController');
+const tournamentController = require('../controllers/tournamentController');
 const verifySessionToken = require('../middleware/verifySessionToken');
 const requireRole = require('../middleware/requireRole');
 
@@ -69,5 +70,15 @@ router.get('/turfs/:turfId/offers', vendorOfferController.getOffers);
 router.put('/turfs/:turfId/offers/:offerId', upload.single('banner'), vendorOfferController.updateOffer);
 router.patch('/turfs/:turfId/offers/:offerId/status', vendorOfferController.toggleOfferStatus);
 router.delete('/turfs/:turfId/offers/:offerId', vendorOfferController.deleteOffer);
+
+// Vendor Tournament Management (Phase 1)
+router.post('/turfs/:turfId/tournaments', tournamentController.createTournament);
+router.get('/turfs/:turfId/tournaments', tournamentController.getVendorTournaments);
+router.post('/tournaments', tournamentController.createTournament);
+router.get('/tournaments', tournamentController.getVendorTournaments);
+router.get('/tournaments/:id', tournamentController.getTournamentById);
+router.put('/tournaments/:id', tournamentController.updateTournament);
+router.post('/tournaments/:id/publish', tournamentController.publishTournament);
+router.patch('/tournaments/:id/publish', tournamentController.publishTournament);
 
 module.exports = router;

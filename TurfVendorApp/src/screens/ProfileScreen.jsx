@@ -323,6 +323,15 @@ const ProfileScreen = ({ navigation }) => {
           />
           <MenuItem
             icon="award"
+            iconBg="rgba(15, 118, 110, 0.12)"
+            iconColor="#0F766E"
+            label="Tournaments"
+            subLabel="Create, manage & publish turf tournaments"
+            onPress={() => navigation.navigate('TournamentList')}
+            colors={colors}
+          />
+          <MenuItem
+            icon="award"
             iconBg="rgba(245, 158, 11, 0.12)"
             iconColor="#F59E0B"
             label="Customer Reviews"

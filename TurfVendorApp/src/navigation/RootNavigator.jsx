@@ -29,6 +29,10 @@ import TurfProfileScreen from '../screens/TurfProfileScreen';
 import LocationSearchScreen from '../screens/LocationSearchScreen';
 import ReportIssuesScreen from '../screens/ReportIssuesScreen';
 import SubscriptionDetailScreen from '../screens/SubscriptionDetailScreen';
+import TournamentListScreen from '../screens/TournamentListScreen';
+import CreateTournamentScreen from '../screens/CreateTournamentScreen';
+import EditTournamentScreen from '../screens/EditTournamentScreen';
+import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 
 // Vendor onboarding flow (Turf+Vendor setup -> Vendor KYC -> Turf KYC) — shown
 // once, right after login, before the vendor reaches Home/MainTabs.
@@ -203,6 +207,10 @@ const RootNavigator = () => {
             <Stack.Screen name="ReportIssues" component={ReportIssuesScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Terms" component={TermsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="SubscriptionDetail" component={SubscriptionDetailScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TournamentList" component={TournamentListScreen} options={{ title: 'Tournaments' }} />
+            <Stack.Screen name="CreateTournament" component={CreateTournamentScreen} options={{ title: 'Create Tournament' }} />
+            <Stack.Screen name="EditTournament" component={EditTournamentScreen} options={{ title: 'Edit Tournament' }} />
+            <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ title: 'Tournament Details' }} />
           </>
         )}
       </Stack.Navigator>

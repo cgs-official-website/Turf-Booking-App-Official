@@ -5,3 +5,4 @@ export * from './dashboard';
 export * from './subscriptions';
 export * from './enquiry';
 export * from './offers';
+export * from './tournaments';

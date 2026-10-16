@@ -8,26 +8,22 @@ import { Platform } from 'react-native';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT = 'http://10.48.78.39:5000/api/v1';
+export const LAN_URL_CURRENT = 'http://192.168.0.213:5000/api/v1';
 export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
 export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Production URL is always the primary base URL.
-export const BASE_URL = RAILWAY_PROD_URL;
+// Production URL is fallback; local/LAN endpoints are prioritized during development and USB debugging.
+export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
 
-// Release build (APK): Railway only.
-// Dev build: Railway first, then local / LAN / emulator as fallback.
-const CANDIDATE_URLS = IS_DEV
-  ? [
-    RAILWAY_PROD_URL,
-    LAN_URL_CURRENT,
-    LOCAL_URL,
-    LOCAL_HOST_URL,
-    Platform.OS === 'android' ? EMULATOR_URL : null,
-  ].filter(Boolean)
-  : [RAILWAY_PROD_URL];
+const CANDIDATE_URLS = [
+  LOCAL_URL,
+  LAN_URL_CURRENT,
+  LOCAL_HOST_URL,
+  RAILWAY_PROD_URL,
+  Platform.OS === 'android' ? EMULATOR_URL : null,
+].filter(Boolean);
 
 export const getOrigin = () => {
   if (client && client.activeBaseUrl) {
@@ -94,13 +90,16 @@ class ApiClient {
           ...cleanOptions,
           signal: controller.signal,
         });
-        clearTimeout(timeoutId);
+        if (res && res.status === 404 && i < urlsToTry.length - 1) {
+          lastError = new Error(`Route not found on ${baseUrl}`);
+          continue;
+        }
 
         // Server responded! Lock in this working base URL
         if (IS_DEV) {
           console.log(`📡 [ApiClient] Active base URL: ${baseUrl}`);
         }
-        if (this.activeBaseUrl !== baseUrl) {
+        if (this.activeBaseUrl !== baseUrl && res.ok) {
           this.activeBaseUrl = baseUrl;
           if (IS_DEV) {
             AsyncStorage.setItem('activeBaseUrl', baseUrl).catch(() => { });

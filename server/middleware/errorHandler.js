@@ -15,7 +15,9 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'SyntaxError' && err.status === 400 && 'body' in err) {
     return sendError(res, 'Invalid JSON payload received', 400, 'INVALID_JSON');
   }
-
+  if (err.code === 'P2002') {
+  return sendError(res, 'This email or phone is already used by another account', 409, 'DUPLICATE');
+}
   const statusCode = err.status || err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
   const code = err.code || 'SERVER_ERROR';

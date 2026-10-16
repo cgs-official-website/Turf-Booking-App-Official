@@ -2,33 +2,34 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT = 'http://192.168.0.36:5000/api/v1';
+export const LAN_URL_CURRENT = 'http://192.168.0.213:5000/api/v1';
 export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Release build (APK) = Railway production ONLY.
-// Dev build = Local -> LAN -> localhost -> Emulator -> Railway fallback.
-const CANDIDATE_URLS = IS_DEV
-  ? [
-    LOCAL_URL,
-    LAN_URL_CURRENT,
-    'http://localhost:5000/api/v1',
-    EMULATOR_URL,
-    RAILWAY_PROD_URL,
-  ]
-  : [RAILWAY_PROD_URL];
+export const CANDIDATE_URLS = [
+  LOCAL_URL,
+  LAN_URL_CURRENT,
+  'http://localhost:5000/api/v1',
+  EMULATOR_URL,
+  RAILWAY_PROD_URL,
+];
 
-export const BASE_URL = CANDIDATE_URLS[0];
+export const BASE_URL = LOCAL_URL;
 export const FALLBACK_URL = CANDIDATE_URLS[0];
 
 let activeBaseUrl = BASE_URL;
 
 if (IS_DEV) {
-  // Dev only: hydrate saved active URL asynchronously
+  // Dev only: hydrate saved active URL asynchronously if not outdated
   AsyncStorage.getItem('activeVendorBaseUrl')
     .then((saved) => {
-      if (saved && !saved.includes('10.48.78.39') && CANDIDATE_URLS.includes(saved)) {
+      if (
+        saved &&
+        !saved.includes('10.48.78.39') &&
+        !saved.includes('192.168.0.36') &&
+        CANDIDATE_URLS.includes(saved)
+      ) {
         activeBaseUrl = saved;
       }
     })
@@ -75,12 +76,17 @@ export const apiRequest = async (endpoint, options = {}) => {
   };
 
   let response = null;
+  let lastResponse = null;
   let lastError = null;
 
   const hostsToTry = [
+    LOCAL_URL,
+    LAN_URL_CURRENT,
+    'http://localhost:5000/api/v1',
     activeBaseUrl,
-    ...CANDIDATE_URLS.filter((h) => h !== activeBaseUrl),
-  ];
+    RAILWAY_PROD_URL,
+    EMULATOR_URL,
+  ].filter((v, i, a) => v && a.indexOf(v) === i);
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
@@ -88,13 +94,19 @@ export const apiRequest = async (endpoint, options = {}) => {
     const timeoutMs = isFormData ? 45000 : isLocalHost(host) ? 3500 : 20000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      response = await fetch(`${host}${endpoint}`, {
+      const res = await fetch(`${host}${endpoint}`, {
         ...config,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      if (response && (response.ok || response.status < 500)) {
-        if (activeBaseUrl !== host) {
+      lastResponse = res;
+      // If 404 on this host, another candidate server might have the route (e.g. local vs un-deployed remote)
+      if (res && res.status === 404 && hostsToTry.indexOf(host) < hostsToTry.length - 1) {
+        continue;
+      }
+      if (res && (res.ok || res.status < 500)) {
+        response = res;
+        if (res.ok && activeBaseUrl !== host) {
           activeBaseUrl = host;
           if (IS_DEV) {
             AsyncStorage.setItem('activeVendorBaseUrl', host).catch(() => { });
@@ -109,10 +121,13 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 
   if (!response) {
-    if (lastError?.name === 'AbortError') {
+    if (lastResponse) {
+      response = lastResponse;
+    } else if (lastError?.name === 'AbortError') {
       throw new Error('Server is taking too long to respond. Please try again in a moment.');
+    } else {
+      throw new Error('Cannot reach backend server. Please check your internet connection or verify Railway production server status.');
     }
-    throw new Error('Cannot reach backend server. Please check your internet connection or verify Railway production server status.');
   }
 
   try {

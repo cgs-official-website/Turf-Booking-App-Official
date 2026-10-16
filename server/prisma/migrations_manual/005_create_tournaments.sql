@@ -1,14 +1,22 @@
 -- Migration 005: Ensure Complete Tournaments Table Schema
--- Supports Super Admin Tournament Management module
+-- Supports Super Admin, Vendor App, and User App Tournament functionality
+
+BEGIN;
 
 -- If table does not exist, create it
 CREATE TABLE IF NOT EXISTS "tournaments" (
   "id" VARCHAR(255) PRIMARY KEY,
+  "turf_id" VARCHAR(255) REFERENCES "turfs"("id") ON DELETE SET NULL,
+  "vendor_id" VARCHAR(255) REFERENCES "vendors"("id") ON DELETE SET NULL,
   "name" VARCHAR(255) NOT NULL,
   "sport" VARCHAR(64) NOT NULL,
   "start_date" VARCHAR(32) NOT NULL,
   "end_date" VARCHAR(32) NOT NULL,
+  "number_of_teams" INTEGER,
+  "players_per_team" INTEGER,
+  "overs_per_team" INTEGER,
   "status" VARCHAR(32) NOT NULL DEFAULT 'draft',
+  "shareable_identifier" VARCHAR(255),
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -44,3 +52,8 @@ CREATE INDEX IF NOT EXISTS "idx_tournaments_status" ON "tournaments"("status");
 CREATE INDEX IF NOT EXISTS "idx_tournaments_sport" ON "tournaments"("sport");
 CREATE INDEX IF NOT EXISTS "idx_tournaments_turf_id" ON "tournaments"("turf_id");
 CREATE INDEX IF NOT EXISTS "idx_tournaments_dates" ON "tournaments"("start_date", "end_date");
+CREATE INDEX IF NOT EXISTS "idx_tournaments_turf_status" ON "tournaments"("turf_id", "status");
+CREATE INDEX IF NOT EXISTS "idx_tournaments_vendor_status" ON "tournaments"("vendor_id", "status");
+CREATE INDEX IF NOT EXISTS "idx_tournaments_shareable_identifier" ON "tournaments"("shareable_identifier");
+
+COMMIT;
