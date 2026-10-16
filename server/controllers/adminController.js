@@ -106,7 +106,7 @@ const adminController = {
    */
   async getStats(req, res) {
     try {
-      const [users, vendors, turfs, bookingStats, recentBookingsResult, matches, reports, enquiries] = await Promise.all([
+      const [users, vendors, turfs, bookingStats, recentBookingsResult, matches, reports, enquiries, tournamentCount] = await Promise.all([
         prisma.user.findMany({ select: { id: true, status: true, createdAt: true } }),
         prisma.vendor.findMany({ select: { id: true, kycStatus: true, createdAt: true } }),
         prisma.turf.findMany({ select: { id: true, name: true, status: true, createdAt: true } }),
@@ -115,6 +115,7 @@ const adminController = {
         prisma.match.findMany({ select: { id: true, status: true, createdAt: true } }),
         prisma.report.findMany({ select: { id: true, status: true, createdAt: true } }),
         prisma.vendorEnquiry.findMany({ select: { id: true, status: true, createdAt: true } }).catch(() => []),
+        prisma.tournament.count().catch(() => 0),
       ]);
 
       const liveTurfs = turfs;
@@ -159,6 +160,7 @@ const adminController = {
           openReports,
           totalEnquiries: enquiries.length,
           pendingEnquiries,
+          totalTournaments: tournamentCount,
         },
         recentBookings: recentBookingsResult.items,
         recentVendors: sortByTime(vendors).slice(0, 5),

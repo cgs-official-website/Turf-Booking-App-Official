@@ -224,6 +224,48 @@ class AdminApiClient {
       method: 'DELETE',
     });
   }
+
+  // Tournaments Management
+  getAllTournaments(status, sport, search, turfId) {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.set('status', status);
+    if (sport && sport !== 'all') params.set('sport', sport);
+    if (search) params.set('search', search);
+    if (turfId) params.set('turfId', turfId);
+    const qs = params.toString();
+    return this.request(`/admin/tournaments${qs ? `?${qs}` : ''}`);
+  }
+
+  getTournamentById(id) {
+    return this.request(`/admin/tournaments/${id}`);
+  }
+
+  createTournament(data) {
+    return this.request('/admin/tournaments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateTournament(id, data) {
+    return this.request(`/admin/tournaments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateTournamentStatus(id, status) {
+    return this.request(`/admin/tournaments/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  deleteTournament(id, force = false) {
+    return this.request(`/admin/tournaments/${id}${force ? '?force=true' : ''}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new AdminApiClient();

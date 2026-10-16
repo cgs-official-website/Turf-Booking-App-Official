@@ -18,6 +18,7 @@ import { ReportsView } from './views/ReportsView';
 import { InquiriesView } from './views/InquiriesView';
 import { SubscriptionsView } from './views/SubscriptionsView';
 import { ReviewsView } from './views/ReviewsView';
+import { TournamentsView } from './views/TournamentsView';
 import { NotFoundView } from './views/NotFoundView';
 import { Landing } from './pages/Landing/Landing';
 
@@ -125,6 +126,7 @@ function DashboardApp() {
 
           {activeTab === 'kyc' && <KycReviewView onUpdateStats={fetchStats} />}
           {activeTab === 'turfs' && <TurfsView onUpdateStats={fetchStats} />}
+          {activeTab === 'tournaments' && <TournamentsView />}
           {activeTab === 'bookings' && <BookingsView />}
           {activeTab === 'vendors' && <VendorsView />}
           {activeTab === 'users' && <UsersView />}
@@ -134,7 +136,7 @@ function DashboardApp() {
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
 
-          {!['overview', 'kyc', 'turfs', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions'].includes(activeTab) && (
+          {!['overview', 'kyc', 'turfs', 'tournaments', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions'].includes(activeTab) && (
             <NotFoundView onNavigateHome={() => setActiveTab('overview')} />
           )}
         </main>

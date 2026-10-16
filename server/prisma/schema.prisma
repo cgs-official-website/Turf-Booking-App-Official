@@ -219,6 +219,7 @@ model Vendor {
   kycDocuments             VendorKycDocument[]
   reports                  Report[]
   offers                   Offer[]
+  tournaments              Tournament[]
 
   @@map("vendors")
 }
@@ -254,6 +255,7 @@ model Turf {
   reviews         Review[]
   matches         Match[]
   offers          Offer[]
+  tournaments     Tournament[]
 
   @@index([vendorId])
   @@index([city])
@@ -541,5 +543,48 @@ model Offer {
   @@index([vendorId])
   @@index([startDate, endDate])
   @@map("offers")
+}
+
+model Tournament {
+  id                      String    @id @map("id") @db.VarChar(255)
+  turfId                  String?   @map("turf_id") @db.VarChar(255)
+  turf                    Turf?     @relation(fields: [turfId], references: [id], onDelete: SetNull)
+  vendorId                String?   @map("vendor_id") @db.VarChar(255)
+  vendor                  Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  name                    String    @map("name") @db.VarChar(255)
+  description             String?   @map("description") @db.Text
+  sport                   String    @map("sport") @db.VarChar(64)
+  venueName               String?   @map("venue_name") @db.VarChar(255)
+  city                    String?   @map("city") @db.VarChar(128)
+  venueLocation           Json?     @map("venue_location")
+  startDate               String    @map("start_date") @db.VarChar(32)
+  endDate                 String    @map("end_date") @db.VarChar(32)
+  registrationStartDate   String?   @map("registration_start_date") @db.VarChar(32)
+  registrationEndDate     String?   @map("registration_end_date") @db.VarChar(32)
+  entryFee                Decimal   @default(0.00) @map("entry_fee") @db.Decimal(10, 2)
+  prizePool               Decimal?  @default(0.00) @map("prize_pool") @db.Decimal(10, 2)
+  prizeDetails            Json?     @map("prize_details")
+  participantCapacity     Int       @default(16) @map("participant_capacity")
+  format                  String    @default("knockout") @map("format") @db.VarChar(64)
+  rules                   String?   @map("rules") @db.Text
+  bannerUrl               String?   @map("banner_url") @db.Text
+  status                  String    @default("draft") @map("status") @db.VarChar(32)
+  currentParticipantsCount Int      @default(0) @map("current_participants_count")
+  contactPhone            String?   @map("contact_phone") @db.VarChar(32)
+  contactEmail            String?   @map("contact_email") @db.VarChar(255)
+  createdBy               String?   @map("created_by") @db.VarChar(255)
+  numberOfTeams           Int?      @map("number_of_teams")
+  playersPerTeam          Int?      @map("players_per_team")
+  oversPerTeam            Int?      @map("overs_per_team")
+  shareableIdentifier     String?   @map("shareable_identifier") @db.VarChar(255)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([sport])
+  @@index([turfId])
+  @@index([vendorId])
+  @@index([startDate, endDate])
+  @@map("tournaments")
 }
 

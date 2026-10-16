@@ -13,6 +13,8 @@ import {
   LogOut,
   ChevronRight,
   X,
+  Zap,
+  Swords,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import appLogoSm from '../assets/logosm.png';
@@ -42,15 +44,16 @@ export const Sidebar = ({
         { id: 'kyc', label: 'KYC & Approvals', icon: ShieldCheck, badge: pendingKycCount },
         { id: 'turfs', label: 'All Turfs', icon: Building2 },
         { id: 'vendors', label: 'Turf Partners', icon: UserCheck },
-        { id: 'subscriptions', label: 'Partner Plans', icon: Trophy },
+        { id: 'subscriptions', label: 'Partner Plans', icon: Zap },
       ],
     },
     {
       title: 'COMMUNITY & FEEDBACK',
       items: [
+        { id: 'tournaments', label: 'Tournaments', icon: Trophy },
+        { id: 'matches', label: 'Matches & Scores', icon: Swords },
         { id: 'reviews', label: 'Turf Reviews', icon: Star },
         { id: 'users', label: 'Players Directory', icon: Users },
-        { id: 'matches', label: 'Matches & Scores', icon: Trophy },
       ],
     },
     {

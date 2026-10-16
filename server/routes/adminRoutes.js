@@ -35,6 +35,15 @@ router.get('/bookings', adminController.getAllBookings);
 router.get('/matches', adminController.getAllMatches);
 router.get('/reviews', adminController.getAllReviews);
 
+// Tournaments Management (Super Admin Exclusive)
+const tournamentController = require('../controllers/tournamentController');
+router.get('/tournaments', tournamentController.getAllTournaments);
+router.get('/tournaments/:id', tournamentController.getTournamentById);
+router.post('/tournaments', tournamentController.createTournament);
+router.put('/tournaments/:id', tournamentController.updateTournament);
+router.patch('/tournaments/:id/status', tournamentController.updateTournamentStatus);
+router.delete('/tournaments/:id', tournamentController.deleteTournament);
+
 // Issue Reports & Support
 router.get('/reports', adminController.getAllReports);
 router.patch('/reports/:id', adminController.updateReportStatus);
