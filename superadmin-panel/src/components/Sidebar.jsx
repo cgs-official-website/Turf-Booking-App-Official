@@ -15,6 +15,7 @@ import {
   X,
   Zap,
   Swords,
+  Key,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import appLogoSm from '../assets/logosm.png';
@@ -73,6 +74,12 @@ export const Sidebar = ({
           badge: openReportsCount,
           badgeColor: 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800',
         },
+      ],
+    },
+    {
+      title: 'SETTINGS & SYSTEM',
+      items: [
+        { id: 'integrations', label: 'API Integrations', icon: Key },
       ],
     },
   ];

@@ -137,9 +137,9 @@ const bookingController = {
         },
       }).catch((e) => console.warn('⚠️ Payment record creation warning:', e.message));
 
-      const activeKeyId = process.env.RAZORPAY_KEY_ID;
+      const activeKeyId = (await razorpayService.getActiveKeyId()) || process.env.RAZORPAY_KEY_ID;
       if (!activeKeyId || activeKeyId.includes('xxxx') || activeKeyId.includes('your_razorpay')) {
-        return sendError(res, 'Razorpay API Key is missing or invalid in server/.env. Please configure active RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.', 400, 'RAZORPAY_KEY_MISSING');
+        return sendError(res, 'Razorpay API Key is missing or invalid. Please configure active Razorpay credentials in Super Admin.', 400, 'RAZORPAY_KEY_MISSING');
       }
 
       return sendSuccess(res, {

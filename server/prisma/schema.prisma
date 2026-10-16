@@ -597,3 +597,17 @@ model Tournament {
   @@map("tournaments")
 }
 
+model ApiIntegration {
+  provider       String    @id @map("provider") @db.VarChar(64)
+  isEnabled      Boolean   @default(true) @map("is_enabled")
+  config         Json      @default("{}") @map("config")
+  status         String    @default("not_configured") @map("status") @db.VarChar(32)
+  lastTestAt     DateTime? @map("last_test_at") @db.Timestamptz(6)
+  lastError      String?   @map("last_error") @db.Text
+  lastSuccessAt  DateTime? @map("last_success_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@map("api_integrations")
+}

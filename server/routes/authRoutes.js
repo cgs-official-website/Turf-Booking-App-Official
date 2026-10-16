@@ -20,6 +20,11 @@ router.post('/verify-otp', authController.verifyPhoneOtp); // Alias for mobile a
 router.post('/otp/send-email', otpRateLimiter, authController.sendEmailOtp);
 router.post('/otp/verify-email', authController.verifyEmailOtp);
 
+// MSG91 OTP Widget Authentication (Public Safe Endpoints)
+const integrationController = require('../controllers/integrationController');
+router.get('/msg91-widget/config', integrationController.getWidgetConfig);
+router.post('/msg91-widget/verify', otpRateLimiter, integrationController.verifyWidgetOtp);
+
 // Password Reset Endpoints
 router.post('/forgot-password', otpRateLimiter, authController.forgotPassword);
 router.post('/verify-reset-otp', authController.verifyResetOtp);

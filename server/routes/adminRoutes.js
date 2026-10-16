@@ -54,4 +54,12 @@ router.post('/notifications/send-test', adminController.sendTestNotification);
 // Bootstrap Custom Admin Claim
 router.post('/set-admin-claim', adminController.setAdminClaim);
 
+// Centralized API Integrations & Usage Monitoring
+const integrationController = require('../controllers/integrationController');
+router.get('/integrations', integrationController.getAllIntegrations);
+router.put('/integrations/:provider', integrationController.updateIntegration);
+router.post('/integrations/:provider/test', integrationController.testIntegration);
+router.get('/integrations/:provider/usage', integrationController.getUsage);
+router.post('/integrations/:provider/refresh-usage', integrationController.getUsage);
+
 module.exports = router;

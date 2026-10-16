@@ -19,6 +19,7 @@ import { InquiriesView } from './views/InquiriesView';
 import { SubscriptionsView } from './views/SubscriptionsView';
 import { ReviewsView } from './views/ReviewsView';
 import { TournamentsView } from './views/TournamentsView';
+import { IntegrationsView } from './views/IntegrationsView';
 import { NotFoundView } from './views/NotFoundView';
 import { Landing } from './pages/Landing/Landing';
 
@@ -135,8 +136,9 @@ function DashboardApp() {
           {activeTab === 'inquiries' && <InquiriesView onUpdateStats={fetchStats} />}
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
+          {activeTab === 'integrations' && <IntegrationsView />}
 
-          {!['overview', 'kyc', 'turfs', 'tournaments', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions'].includes(activeTab) && (
+          {!['overview', 'kyc', 'turfs', 'tournaments', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions', 'integrations'].includes(activeTab) && (
             <NotFoundView onNavigateHome={() => setActiveTab('overview')} />
           )}
         </main>

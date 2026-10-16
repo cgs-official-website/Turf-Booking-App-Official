@@ -224,7 +224,6 @@ class AdminApiClient {
       method: 'DELETE',
     });
   }
-
   // Tournaments Management
   getAllTournaments(status, sport, search, turfId) {
     const params = new URLSearchParams();
@@ -264,6 +263,35 @@ class AdminApiClient {
   deleteTournament(id, force = false) {
     return this.request(`/admin/tournaments/${id}${force ? '?force=true' : ''}`, {
       method: 'DELETE',
+    });
+  }
+
+  // Centralized API Integrations & Usage Monitoring
+  getIntegrations() {
+    return this.request('/admin/integrations');
+  }
+
+  updateIntegration(provider, data) {
+    return this.request(`/admin/integrations/${provider}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  testIntegration(provider, credentials = null) {
+    return this.request(`/admin/integrations/${provider}/test`, {
+      method: 'POST',
+      body: JSON.stringify({ credentials }),
+    });
+  }
+
+  getIntegrationUsage(provider) {
+    return this.request(`/admin/integrations/${provider}/usage`);
+  }
+
+  refreshIntegrationUsage(provider) {
+    return this.request(`/admin/integrations/${provider}/refresh-usage`, {
+      method: 'POST',
     });
   }
 }
