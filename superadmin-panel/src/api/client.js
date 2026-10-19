@@ -245,14 +245,39 @@ class AdminApiClient {
     });
   }
   // Tournaments Management
-  getAllTournaments(status, sport, search, turfId) {
+  getAllTournaments(optionsOrStatus, sport, search, turfId, cursor, limit) {
     const params = new URLSearchParams();
-    if (status && status !== 'all') params.set('status', status);
-    if (sport && sport !== 'all') params.set('sport', sport);
-    if (search) params.set('search', search);
-    if (turfId) params.set('turfId', turfId);
+    if (typeof optionsOrStatus === 'object' && optionsOrStatus !== null) {
+      const { status, sport: sp, search: sc, turfId: tid, cursor: cur, limit: lim } = optionsOrStatus;
+      if (status && status !== 'all') params.set('status', status);
+      if (sp && sp !== 'all') params.set('sport', sp);
+      if (sc) params.set('search', sc);
+      if (tid) params.set('turfId', tid);
+      if (cur) params.set('cursor', cur);
+      if (lim) params.set('limit', String(lim));
+    } else {
+      if (optionsOrStatus && optionsOrStatus !== 'all') params.set('status', optionsOrStatus);
+      if (sport && sport !== 'all') params.set('sport', sport);
+      if (search) params.set('search', search);
+      if (turfId) params.set('turfId', turfId);
+      if (cursor) params.set('cursor', cursor);
+      if (limit) params.set('limit', String(limit));
+    }
     const qs = params.toString();
     return this.request(`/admin/tournaments${qs ? `?${qs}` : ''}`);
+  }
+
+  getTournamentHistory(params = {}) {
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.cursor) query.set('cursor', params.cursor);
+    const qs = query.toString();
+    return this.request(`/admin/tournaments/history${qs ? `?${qs}` : ''}`);
+  }
+
+  getTournamentLiveScore(id) {
+    return this.request(`/admin/tournaments/${id}/live`);
   }
 
   getTournamentById(id) {

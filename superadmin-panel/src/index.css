@@ -1,5 +1,22 @@
-/* src/index.css */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+:root {
+  --theme-primary: #10b981;
+  --theme-primary-hover: #059669;
+  --theme-primary-light: #ecfdf5;
+  --theme-primary-border: #a7f3d0;
+  --theme-primary-text: #047857;
+  --theme-accent-ring: rgba(16, 185, 129, 0.4);
+}
+
+html.dark {
+  --theme-primary: #10b981;
+  --theme-primary-hover: #059669;
+  --theme-primary-light: rgba(16, 185, 129, 0.15);
+  --theme-primary-border: rgba(16, 185, 129, 0.35);
+  --theme-primary-text: #34d399;
+  --theme-accent-ring: rgba(52, 211, 153, 0.4);
+}
 
 html,
 body,

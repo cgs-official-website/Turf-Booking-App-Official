@@ -39,13 +39,29 @@ router.delete('/matches/:id', adminController.deleteAdminMatch);
 router.get('/reviews', adminController.getAllReviews);
 
 // Tournaments Management (Super Admin Exclusive)
+const tournamentAdminController = require('../controllers/tournamentAdminController');
 const tournamentController = require('../controllers/tournamentController');
-router.get('/tournaments', tournamentController.getAllTournaments);
-router.get('/tournaments/:id', tournamentController.getTournamentById);
-router.post('/tournaments', tournamentController.createTournament);
-router.put('/tournaments/:id', tournamentController.updateTournament);
-router.patch('/tournaments/:id/status', tournamentController.updateTournamentStatus);
-router.delete('/tournaments/:id', tournamentController.deleteTournament);
+
+router.get('/tournaments/history', tournamentAdminController.getTournamentHistory);
+router.get('/tournaments', tournamentAdminController.getAllTournaments);
+router.get('/tournaments/:id/live', tournamentAdminController.getTournamentLiveScore);
+router.get('/tournaments/:id', tournamentAdminController.getTournamentById);
+router.post('/tournaments', async (req, res, next) => {
+  await tournamentAdminController.invalidateAdminTournamentCache();
+  return tournamentController.createTournament(req, res, next);
+});
+router.put('/tournaments/:id', async (req, res, next) => {
+  await tournamentAdminController.invalidateAdminTournamentCache();
+  return tournamentController.updateTournament(req, res, next);
+});
+router.patch('/tournaments/:id/status', async (req, res, next) => {
+  await tournamentAdminController.invalidateAdminTournamentCache();
+  return tournamentController.updateTournamentStatus(req, res, next);
+});
+router.delete('/tournaments/:id', async (req, res, next) => {
+  await tournamentAdminController.invalidateAdminTournamentCache();
+  return tournamentController.deleteTournament(req, res, next);
+});
 
 // Issue Reports & Support
 router.get('/reports', adminController.getAllReports);

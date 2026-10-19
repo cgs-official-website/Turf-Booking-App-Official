@@ -41,7 +41,6 @@ function formatTournament(t, reqUser = null) {
     (currentUserId === userId || currentUserId === vendorId)
   );
 
-<<<<<<< HEAD
   const totalTeams = t.numberOfTeams !== null && t.numberOfTeams !== undefined
     ? Number(t.numberOfTeams)
     : (t.participantCapacity || 16);
@@ -107,7 +106,7 @@ function formatTournament(t, reqUser = null) {
       };
     }
   }
-=======
+
   let teams = [];
   if (Array.isArray(t.teams)) {
     teams = t.teams;
@@ -123,19 +122,11 @@ function formatTournament(t, reqUser = null) {
     }));
   }
 
-  // Permissions:
-  // - Admin can edit/delete
-  // - User creator can edit/delete their own tournament
-  // - Vendor creator can edit/delete their own tournament
-  // - Vendor CANNOT edit/delete user-created tournaments
-  // - User CANNOT edit/delete vendor-created tournaments or another user's tournaments
-  const isAdmin = reqUser ? reqUser.role === 'admin' || reqUser.role === 'superadmin' : false;
   const canEdit = Boolean(
     isAdmin ||
     (isCommunity && currentUserId && currentUserId === userId) ||
     (!isCommunity && currentUserId && currentUserId === vendorId)
   );
->>>>>>> 4d1ada6 (Describe your changes)
 
   return {
     id: t.id,
@@ -222,12 +213,9 @@ function formatTournament(t, reqUser = null) {
       ? `https://turfbookingapp.com/tournament/${shareId}${turfId ? `?turfId=${turfId}` : ''}`
       : null,
     isOwner,
-<<<<<<< HEAD
     registrations: (isOwner || isAdmin) ? registrationsList : undefined,
-=======
     canEdit,
     canDelete: canEdit,
->>>>>>> 4d1ada6 (Describe your changes)
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
@@ -360,13 +348,10 @@ const tournamentController = {
               pricePerHour: true,
             },
           },
-<<<<<<< HEAD
           registrations: true,
-=======
           user: {
             select: { id: true, name: true, avatar: true },
           },
->>>>>>> 4d1ada6 (Describe your changes)
         },
         orderBy: [{ startDate: 'asc' }, { createdAt: 'desc' }],
       });
@@ -475,13 +460,10 @@ const tournamentController = {
           turf: {
             select: { id: true, name: true, city: true, images: true, logo: true, location: true },
           },
-<<<<<<< HEAD
           registrations: true,
-=======
           user: {
             select: { id: true, name: true, avatar: true, phone: true },
           },
->>>>>>> 4d1ada6 (Describe your changes)
         },
         orderBy: { createdAt: 'desc' },
       });
