@@ -132,6 +132,13 @@ export const fcmHelper = {
       navigate('BookingDetail', { bookingId, id: bookingId });
     } else if (type === 'match' && matchId) {
       navigate('Match', { matchId });
+    } else if (type === 'tournament' || payload.screen === 'TournamentDetail') {
+      const tournamentId = payload.tournamentId || payload.id;
+      if (tournamentId) {
+        navigate('TournamentDetail', { tournamentId, id: tournamentId });
+      } else {
+        navigate('Tournament');
+      }
     } else if (payload.screen === 'Bookings') {
       navigate('Main', { screen: 'Bookings' });
     } else {
@@ -168,8 +175,9 @@ export const fcmHelper = {
     };
 
     const showNotificationAlert = ({ title, body, data }) => {
-      const notifTitle = cleanText(title) || 'Booking Update';
-      const notifBody = cleanText(body) || 'You have an update on your turf booking.';
+      const isTournament = data?.type === 'tournament' || data?.screen === 'TournamentDetail';
+      const notifTitle = cleanText(title) || (isTournament ? 'Tournament Update' : 'Booking Update');
+      const notifBody = cleanText(body) || (isTournament ? 'You have an update on your tournament.' : 'You have an update on your turf booking.');
 
       // Mobile level system notification with logo.png (shown in background/quit or heads-up)
       triggerSystemNotification({ title: notifTitle, body: notifBody, data });
@@ -182,7 +190,7 @@ export const fcmHelper = {
           [
             { text: 'Dismiss', style: 'cancel' },
             {
-              text: 'View Booking',
+              text: isTournament ? 'View Tournament' : 'View Booking',
               onPress: () => this.handleNotificationNavigation(navigationRef, data),
             },
           ],
@@ -237,16 +245,29 @@ export const fcmHelper = {
         const list = res?.data?.notifications || res?.notifications || [];
         const now = Date.now();
 
-        // Check for fresh unread booking notifications in last 90 seconds
+        // Check for fresh unread booking or tournament notifications in last 90 seconds
         for (const notif of list) {
-          if (!notif.isRead && !notif.read && (notif.type === 'booking' || notif.data?.type === 'booking')) {
+          const isTargetType =
+            notif.type === 'booking' ||
+            notif.data?.type === 'booking' ||
+            notif.type === 'tournament' ||
+            notif.data?.type === 'tournament' ||
+            notif.type === 'general';
+
+          if (!notif.isRead && !notif.read && isTargetType) {
             const notifTime = new Date(notif.createdAt).getTime();
             if (now - notifTime < 90000 && !shownNotificationIds.has(notif.id)) {
               shownNotificationIds.add(notif.id);
               showNotificationAlert({
                 title: notif.title,
                 body: notif.body,
-                data: notif.data || { bookingId: notif.data?.bookingId, screen: 'BookingDetail', type: 'booking' },
+                data: notif.data || {
+                  id: notif.data?.tournamentId || notif.data?.bookingId,
+                  tournamentId: notif.data?.tournamentId,
+                  bookingId: notif.data?.bookingId,
+                  screen: notif.data?.tournamentId ? 'TournamentDetail' : 'BookingDetail',
+                  type: notif.type || notif.data?.type,
+                },
               });
               break;
             }

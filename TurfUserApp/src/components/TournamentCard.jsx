@@ -33,6 +33,8 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
   const isPublished = tournament.status === 'published';
   const isDraft = tournament.status === 'draft';
   const isCancelled = tournament.status === 'cancelled';
+  const isPendingApproval = tournament.status === 'pending_approval' || tournament.approvalStatus === 'pending';
+  const isRejected = tournament.status === 'rejected' || tournament.approvalStatus === 'rejected';
 
   const totalTeams = tournament.numberOfTeams || tournament.totalTeams || 16;
   const acceptedTeamsCount = tournament.acceptedTeamsCount !== undefined ? tournament.acceptedTeamsCount : 0;
@@ -40,39 +42,47 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
     ? tournament.remainingSlots
     : Math.max(0, totalTeams - acceptedTeamsCount);
 
-  const lifecycleStatus = tournament.lifecycleStatus || (
-    isCancelled ? 'cancelled' :
-    remainingSlots === 0 ? 'full' :
-    isPublished ? 'published' : 'draft'
-  );
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const startStr = tournament?.startDate ? String(tournament.startDate).slice(0, 10) : '';
+  const endStr = tournament?.endDate ? String(tournament.endDate).slice(0, 10) : '';
+  const regStartStr = tournament?.registrationStartDate ? String(tournament.registrationStartDate).slice(0, 10) : '';
+  const regEndStr = tournament?.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : '';
 
-  let statusBadgeText = 'PUBLISHED';
-  let statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
+  let statusBadgeText = 'TOURNAMENT UPCOMING';
+  let statusBadgeBg = 'rgba(99, 102, 241, 0.95)';
 
-  if (lifecycleStatus === 'cancelled') {
+  if (isCancelled) {
     statusBadgeText = 'CANCELLED';
     statusBadgeBg = 'rgba(239, 68, 68, 0.95)';
-  } else if (lifecycleStatus === 'completed') {
-    statusBadgeText = 'COMPLETED';
-    statusBadgeBg = 'rgba(100, 116, 139, 0.95)';
-  } else if (lifecycleStatus === 'ongoing') {
-    statusBadgeText = 'ONGOING';
-    statusBadgeBg = 'rgba(2, 132, 199, 0.95)';
-  } else if (lifecycleStatus === 'full') {
-    statusBadgeText = `FULL • ${acceptedTeamsCount}/${totalTeams}`;
+  } else if (isRejected) {
+    statusBadgeText = 'REJECTED';
+    statusBadgeBg = 'rgba(239, 68, 68, 0.95)';
+  } else if (isPendingApproval) {
+    statusBadgeText = 'PENDING APPROVAL';
     statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
-  } else if (lifecycleStatus === 'registration_closed') {
-    statusBadgeText = 'REGISTRATION CLOSED';
-    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
-  } else if (lifecycleStatus === 'registration_open') {
-    statusBadgeText = remainingSlots > 0 ? `OPEN • ${remainingSlots} SLOTS` : 'REGISTRATION OPEN';
-    statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
-  } else if (lifecycleStatus === 'published') {
-    statusBadgeText = 'UPCOMING';
-    statusBadgeBg = 'rgba(99, 102, 241, 0.95)';
-  } else {
+  } else if (isDraft) {
     statusBadgeText = 'DRAFT';
     statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  } else if (endStr && todayStr > endStr) {
+    statusBadgeText = 'TOURNAMENT COMPLETED';
+    statusBadgeBg = 'rgba(100, 116, 139, 0.95)';
+  } else if (startStr && todayStr >= startStr && (!endStr || todayStr <= endStr)) {
+    // "Ongoing" must be based only on the Tournament Schedule
+    statusBadgeText = 'TOURNAMENT ONGOING';
+    statusBadgeBg = 'rgba(2, 132, 199, 0.95)';
+  } else if (remainingSlots === 0) {
+    statusBadgeText = 'REGISTRATION CLOSED';
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  } else if (regEndStr && todayStr > regEndStr) {
+    statusBadgeText = 'REGISTRATION CLOSED';
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  } else if (regStartStr && todayStr < regStartStr) {
+    statusBadgeText = 'TOURNAMENT UPCOMING';
+    statusBadgeBg = 'rgba(99, 102, 241, 0.95)';
+  } else {
+    // Within registration open window
+    statusBadgeText = remainingSlots > 0 ? `REGISTRATION OPEN • ${remainingSlots} SLOTS` : 'REGISTRATION OPEN';
+    statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
   }
 
   const turfImage =
@@ -243,13 +253,15 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
             <Feather name="chevron-right" size={14} color="#FFFFFF" style={{ marginLeft: 3 }} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.shareIconBtn, { borderColor: C.border, backgroundColor: C.card }]}
-            onPress={handleShare}
-            activeOpacity={0.7}
-          >
-            <Feather name="share-2" size={15} color={C.text} />
-          </TouchableOpacity>
+          {isPublished && (
+            <TouchableOpacity
+              style={[styles.shareIconBtn, { borderColor: C.border, backgroundColor: C.card }]}
+              onPress={handleShare}
+              activeOpacity={0.7}
+            >
+              <Feather name="share-2" size={15} color={C.text} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>

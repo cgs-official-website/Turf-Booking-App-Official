@@ -15,9 +15,10 @@ const optionalAuth = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret_change_in_production');
+    const userId = decoded.id || decoded.uid || decoded.userId;
     req.user = {
-      uid: decoded.uid,
-      id: decoded.uid,
+      id: userId,
+      uid: userId,
       role: decoded.role || 'user',
       phone: decoded.phone,
       email: decoded.email,

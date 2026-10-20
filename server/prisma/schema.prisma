@@ -583,6 +583,9 @@ model Tournament {
   oversPerTeam             Int?      @map("overs_per_team")
   teams                    Json?     @default("[]") @map("teams")
   shareableIdentifier      String?   @unique @map("shareable_identifier") @db.VarChar(255)
+  approvalStatus           String?   @default("approved") @map("approval_status") @db.VarChar(32)
+  rejectionReason          String?   @map("rejection_reason") @db.Text
+  bracket                  Json?     @default("{}") @map("bracket")
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

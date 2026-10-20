@@ -70,3 +70,23 @@ export const rejectRegistrationApi = (tournamentId, registrationId, reason) => {
   });
 };
 
+/**
+ * Vendor approves a user-created tournament request
+ */
+export const approveTournamentApi = (tournamentId) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/approve`, {
+    method: 'POST',
+  });
+};
+
+/**
+ * Vendor rejects a user-created tournament request with reason
+ */
+export const rejectTournamentApi = (tournamentId, reason) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+};
+
+

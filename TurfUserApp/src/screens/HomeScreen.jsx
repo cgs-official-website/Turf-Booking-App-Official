@@ -503,12 +503,8 @@ export default function HomeScreen({ navigation }) {
             />
           </View>
 
-          {/* ── Quick Action Cards ── */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickActionScroll}
-          >
+          {/* ── Quick Action Cards (5 Verified Actions) ── */}
+          <View style={styles.quickActionContainer}>
             <TouchableOpacity
               style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
               onPress={() => navigation.navigate('Explore')}
@@ -587,20 +583,7 @@ export default function HomeScreen({ navigation }) {
                 History
               </Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}
-              onPress={() => navigation.navigate('Bookings')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.quickIconWrap, { backgroundColor: '#DBEAFE' }]}>
-                <Feather name="bookmark" size={16} color="#2563EB" />
-              </View>
-              <Text style={[styles.quickTitle, { color: C.text }]} numberOfLines={1} adjustsFontSizeToFit>
-                My Pass
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
+          </View>
 
           {/* ── Premium Dark-Green-and-Gold "Turf Deals" Promotional Banner ── */}
           <TouchableOpacity
@@ -877,17 +860,22 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  quickActionScroll: {
+  quickActionContainer: {
     paddingHorizontal: SPACING.md || 14,
     marginTop: 14,
-    gap: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   quickCard: {
-    width: 68,
+    flex: 1,
+    minWidth: 58,
+    maxWidth: 72,
+    marginHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     borderRadius: RADIUS.xl,
     borderWidth: 1.5,
   },

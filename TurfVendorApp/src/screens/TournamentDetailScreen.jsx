@@ -23,6 +23,8 @@ import {
   getTournamentRegistrationsApi,
   acceptRegistrationApi,
   rejectRegistrationApi,
+  approveTournamentApi,
+  rejectTournamentApi,
 } from '../api/tournaments';
 
 const formatDate = (dateStr) => {
@@ -51,6 +53,10 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [rejectingTournament, setRejectingTournament] = useState(false);
+  const [rejectTournamentModalVisible, setRejectTournamentModalVisible] = useState(false);
+  const [tournamentRejectionReason, setTournamentRejectionReason] = useState('');
   const [processingRegId, setProcessingRegId] = useState(null);
   const [expandedRegs, setExpandedRegs] = useState(new Set());
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
@@ -262,6 +268,59 @@ const TournamentDetailScreen = ({ route, navigation }) => {
     );
   };
 
+  const handleApproveTournament = async () => {
+    Alert.alert(
+      'Approve Tournament',
+      `Approve "${tournament.name}"? The tournament will immediately become publicly visible in the UserApp, and the creator will receive an FCM notification.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Approve & Publish',
+          style: 'default',
+          onPress: async () => {
+            setApproving(true);
+            try {
+              const res = await approveTournamentApi(tournamentId);
+              const updated = res?.data?.tournament || res?.tournament;
+              if (updated) {
+                setTournament(updated);
+              } else {
+                loadDetails();
+              }
+              Alert.alert('Tournament Approved! 🎉', 'The tournament has been approved and published! The organizer has been notified via FCM.');
+            } catch (err) {
+              console.error('Failed to approve tournament:', err);
+              Alert.alert('Approval Failed', err.message || 'Unable to approve tournament.');
+            } finally {
+              setApproving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleConfirmRejectTournament = async () => {
+    setRejectingTournament(true);
+    try {
+      const reason = tournamentRejectionReason.trim() || 'Turf is unavailable on the requested schedule';
+      const res = await rejectTournamentApi(tournamentId, reason);
+      const updated = res?.data?.tournament || res?.tournament;
+      if (updated) {
+        setTournament(updated);
+      } else {
+        loadDetails();
+      }
+      setRejectTournamentModalVisible(false);
+      Alert.alert('Tournament Request Declined', 'The tournament request was rejected and the creator has been notified.');
+    } catch (err) {
+      console.error('Failed to decline tournament:', err);
+      Alert.alert('Decline Failed', err.message || 'Unable to decline tournament.');
+    } finally {
+      setRejectingTournament(false);
+    }
+  };
+
   const handleShare = async (data = tournament) => {
     if (!data) return;
     const turfName = data.turfName || data.turf?.name || 'our turf arena';
@@ -444,24 +503,180 @@ const TournamentDetailScreen = ({ route, navigation }) => {
 
           <Text style={[styles.tournamentTitle, { color: colors.text }]}>{tournament.name}</Text>
 
-          {/* User Creator Info Note if Community Tournament */}
-          {isUserCreated && (
+          {/* ── Pending Turf Owner Approval Card ── */}
+          {isUserCreated && (tournament.status === 'pending_approval' || tournament.approvalStatus === 'pending') && (
+            <View
+              style={[
+                styles.approvalRequestCard,
+                {
+                  backgroundColor: isDark ? '#1C1917' : '#FFFBEB',
+                  borderColor: isDark ? '#78350F' : '#FCD34D',
+                },
+                SHADOWS.sm,
+              ]}
+            >
+              <View style={styles.approvalHeaderRow}>
+                <View style={[styles.approvalIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                  <Feather name="clock" size={20} color="#D97706" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.approvalBadgeText, { color: '#B45309' }]}>
+                    HOSTING REQUEST • PENDING APPROVAL
+                  </Text>
+                  <Text style={[styles.approvalTitle, { color: colors.text }]}>
+                    Review Tournament Request
+                  </Text>
+                  <Text style={[styles.approvalSub, { color: colors.textSecondary }]}>
+                    A community athlete requested to host this tournament at your venue.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Structured Summary Breakdown */}
+              <View style={[styles.approvalSummaryBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF', borderColor: colors.border }]}>
+                {/* Creator Details */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="user" size={14} color="#7C3AED" style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Requested By:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>
+                    {tournament.creatorName || tournament.user?.name || 'Community Member'}
+                    {tournament.user?.phone ? ` (${tournament.user.phone})` : ''}
+                  </Text>
+                </View>
+
+                {/* Tournament Name */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="award" size={14} color={colors.primary} style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Tournament:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>{tournament.name}</Text>
+                </View>
+
+                {/* Sport */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="activity" size={14} color={colors.primary} style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Sport Category:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>
+                    {tournament.sport ? tournament.sport.toUpperCase() : 'SPORTS'}
+                  </Text>
+                </View>
+
+                {/* Tournament Dates */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="calendar" size={14} color="#0284C7" style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Tournament Schedule:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>
+                    {formatDate(tournament.startDate)} - {formatDate(tournament.endDate)}
+                  </Text>
+                </View>
+
+                {/* Registration Period */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="clock" size={14} color="#D97706" style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Registration Period:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>
+                    {tournament.registrationStartDate ? formatDate(tournament.registrationStartDate) : 'Open Now'} to {tournament.registrationEndDate ? formatDate(tournament.registrationEndDate) : 'Start Date'}
+                  </Text>
+                </View>
+
+                {/* Number of Teams & Players */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="users" size={14} color="#10B981" style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Teams & Squad:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>
+                    {tournament.numberOfTeams} Teams • {tournament.playersPerTeam} Players / Team
+                  </Text>
+                </View>
+
+                {/* Selected Turf */}
+                <View style={styles.approvalDetailRow}>
+                  <Feather name="map-pin" size={14} color="#EA580C" style={{ width: 20 }} />
+                  <Text style={[styles.approvalDetailLabel, { color: colors.textSecondary }]}>Selected Turf:</Text>
+                  <Text style={[styles.approvalDetailValue, { color: colors.text }]}>
+                    {turfName} ({turfCity})
+                  </Text>
+                </View>
+              </View>
+
+              {/* Accept / Reject Buttons */}
+              <View style={styles.approvalBtnRow}>
+                <TouchableOpacity
+                  style={[styles.approvalRejectBtn, { borderColor: '#EF4444' }]}
+                  onPress={() => {
+                    setTournamentRejectionReason('');
+                    setRejectTournamentModalVisible(true);
+                  }}
+                  disabled={approving || rejectingTournament}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="x-circle" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                  <Text style={[styles.approvalRejectBtnText, { color: '#EF4444' }]}>Reject</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.approvalAcceptBtn, { backgroundColor: '#10B981' }]}
+                  onPress={handleApproveTournament}
+                  disabled={approving || rejectingTournament}
+                  activeOpacity={0.85}
+                >
+                  {approving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Feather name="check-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.approvalAcceptBtnText}>Accept</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* User Creator Info Note if Rejected */}
+          {isUserCreated && (tournament.status === 'rejected' || tournament.approvalStatus === 'rejected') && (
+            <View
+              style={[
+                styles.rejectedStatusCard,
+                {
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                  borderColor: isDark ? '#991B1B' : '#FCA5A5',
+                },
+              ]}
+            >
+              <Feather name="slash" size={20} color="#DC2626" style={{ marginTop: 2, marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rejectedTitle, { color: '#DC2626' }]}>
+                  Tournament Request Declined
+                </Text>
+                <Text style={[styles.rejectedSub, { color: colors.textSecondary }]}>
+                  This user-created tournament request was declined and is not publicly visible.
+                </Text>
+                {tournament.rejectionReason ? (
+                  <Text style={[styles.rejectedReasonText, { color: colors.text }]}>
+                    Reason: <Text style={{ fontWeight: '700' }}>{tournament.rejectionReason}</Text>
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          {/* User Creator Info Note if Live & Approved */}
+          {isUserCreated && tournament.status === 'published' && (
             <View
               style={[
                 styles.creatorBannerBox,
                 {
-                  backgroundColor: isDark ? 'rgba(124, 58, 237, 0.12)' : '#F5F3FF',
-                  borderColor: isDark ? 'rgba(124, 58, 237, 0.3)' : '#DDD6FE',
+                  backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#F0FDF4',
+                  borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#BBF7D0',
                 },
               ]}
             >
-              <Feather name="info" size={15} color="#7C3AED" style={{ marginRight: 8, marginTop: 1 }} />
+              <Feather name="check-circle" size={16} color="#10B981" style={{ marginRight: 8, marginTop: 1 }} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.creatorBannerTitle, { color: isDark ? '#DDD6FE' : '#6D28D9' }]}>
-                  User-Created Community Tournament
+                <Text style={[styles.creatorBannerTitle, { color: isDark ? '#6EE7B7' : '#047857' }]}>
+                  Approved & Publicly Live
                 </Text>
-                <Text style={[styles.creatorBannerSub, { color: isDark ? '#A78BFA' : '#5B21B6' }]}>
-                  Organized by {tournament.creatorName || tournament.creator || 'Community Athlete'}. This tournament is conducted at your turf venue.
+                <Text style={[styles.creatorBannerSub, { color: isDark ? '#A7F3D0' : '#065F46' }]}>
+                  Created by {tournament.creatorName || tournament.creator || 'Community Athlete'} and hosted at your facility.
                 </Text>
               </View>
             </View>
@@ -1045,7 +1260,38 @@ const TournamentDetailScreen = ({ route, navigation }) => {
 
         {/* Bottom Actions */}
         <View style={styles.bottomActions}>
-          {!isUserCreated && (tournament.canEdit !== false) && (
+          {isUserCreated && (tournament.status === 'pending_approval' || tournament.approvalStatus === 'pending') ? (
+            <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+              <TouchableOpacity
+                style={[styles.editBtn, { borderColor: '#EF4444', flex: 1 }]}
+                onPress={() => {
+                  setTournamentRejectionReason('');
+                  setRejectTournamentModalVisible(true);
+                }}
+                disabled={approving || rejectingTournament}
+                activeOpacity={0.8}
+              >
+                <Feather name="x-circle" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                <Text style={[styles.editBtnText, { color: '#EF4444' }]}>Reject</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.publishActionBtn, { backgroundColor: '#10B981', flex: 2 }]}
+                onPress={handleApproveTournament}
+                disabled={approving || rejectingTournament}
+                activeOpacity={0.85}
+              >
+                {approving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.publishActionBtnText}>Accept & Publish</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : !isUserCreated && (tournament.canEdit !== false) ? (
             <TouchableOpacity
               style={[styles.editBtn, { borderColor: colors.primary }]}
               onPress={() => navigation.navigate('EditTournament', { tournamentId: tournament.id })}
@@ -1054,33 +1300,36 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               <Feather name="edit" size={16} color={colors.primary} style={{ marginRight: 6 }} />
               <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Details</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
-          {!isPublished && !isUserCreated ? (
-            <TouchableOpacity
-              style={[styles.publishActionBtn, { backgroundColor: colors.primary }]}
-              onPress={handlePublish}
-              disabled={publishing}
-              activeOpacity={0.85}
-            >
-              {publishing ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Feather name="upload-cloud" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.publishActionBtnText}>Publish Tournament</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.publishActionBtn, { backgroundColor: colors.primary }]}
-              onPress={() => handleShare()}
-              activeOpacity={0.85}
-            >
-              <Feather name="share-2" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.publishActionBtnText}>Share</Text>
-            </TouchableOpacity>
+          {/* Regular publish or share for non-pending */}
+          {!(isUserCreated && (tournament.status === 'pending_approval' || tournament.approvalStatus === 'pending')) && (
+            !isPublished && !isUserCreated ? (
+              <TouchableOpacity
+                style={[styles.publishActionBtn, { backgroundColor: colors.primary }]}
+                onPress={handlePublish}
+                disabled={publishing}
+                activeOpacity={0.85}
+              >
+                {publishing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="upload-cloud" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.publishActionBtnText}>Publish Tournament</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : isPublished ? (
+              <TouchableOpacity
+                style={[styles.publishActionBtn, { backgroundColor: colors.primary }]}
+                onPress={() => handleShare()}
+                activeOpacity={0.85}
+              >
+                <Feather name="share-2" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.publishActionBtnText}>Share</Text>
+              </TouchableOpacity>
+            ) : null
           )}
         </View>
       </ScrollView>
@@ -1127,6 +1376,99 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                 activeOpacity={0.85}
               >
                 <Text style={styles.modalConfirmText}>Reject Team</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reject Tournament Request Modal */}
+      <Modal
+        visible={rejectTournamentModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRejectTournamentModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+              <Feather name="alert-triangle" size={20} color="#EF4444" />
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Decline Tournament Request</Text>
+            </View>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+              Please select or enter the reason for declining "{tournament.name}". The creator will be notified via mobile push notification.
+            </Text>
+
+            {/* Quick reason chips */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 10 }}>
+              {[
+                'Turf unavailable on selected dates',
+                'Slot reserved for another event',
+                'Facility under scheduled maintenance',
+                'Requested timing conflict',
+              ].map((rText) => {
+                const isSelected = tournamentRejectionReason === rText;
+                return (
+                  <TouchableOpacity
+                    key={rText}
+                    style={[
+                      styles.reasonChip,
+                      {
+                        backgroundColor: isSelected
+                          ? (isDark ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2')
+                          : (isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9'),
+                        borderColor: isSelected ? '#EF4444' : colors.border,
+                      },
+                    ]}
+                    onPress={() => setTournamentRejectionReason(rText)}
+                    activeOpacity={0.75}
+                  >
+                    <Text
+                      style={[
+                        styles.reasonChipText,
+                        { color: isSelected ? '#DC2626' : colors.textSecondary },
+                      ]}
+                    >
+                      {rText}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TextInput
+              style={[
+                styles.modalTextInput,
+                { backgroundColor: colors.inputBg || (isDark ? '#0F172A' : '#F8FAFC'), borderColor: colors.border, color: colors.text },
+              ]}
+              placeholder="Or type a custom rejection reason..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+              value={tournamentRejectionReason}
+              onChangeText={setTournamentRejectionReason}
+            />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: colors.border }]}
+                onPress={() => setRejectTournamentModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: '#EF4444' }]}
+                onPress={handleConfirmRejectTournament}
+                disabled={rejectingTournament}
+                activeOpacity={0.85}
+              >
+                {rejectingTournament ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>Decline Request</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1745,6 +2087,121 @@ const styles = StyleSheet.create({
   },
   playerNameText: {
     fontSize: SIZES.xs + 1,
+    fontWeight: '600',
+  },
+  // Approval Workflow Styles
+  approvalRequestCard: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 6,
+  },
+  approvalHeaderRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  approvalIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  approvalBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  approvalTitle: {
+    fontSize: SIZES.md + 1,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  approvalSub: {
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  approvalSummaryBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    gap: 8,
+    marginBottom: 14,
+  },
+  approvalDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  approvalDetailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    width: 140,
+  },
+  approvalDetailValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  approvalBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  approvalRejectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  approvalRejectBtnText: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
+  approvalAcceptBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  approvalAcceptBtnText: {
+    color: '#FFFFFF',
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+  },
+  rejectedStatusCard: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    padding: 14,
+    marginBottom: 6,
+  },
+  rejectedTitle: {
+    fontSize: SIZES.sm + 1,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  rejectedSub: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  rejectedReasonText: {
+    fontSize: 12,
+    marginTop: 6,
+  },
+  reasonChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  reasonChipText: {
+    fontSize: 11,
     fontWeight: '600',
   },
 });

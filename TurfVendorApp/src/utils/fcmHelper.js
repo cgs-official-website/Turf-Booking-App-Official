@@ -149,6 +149,12 @@ export const fcmHelper = {
         } else {
           return nav('TurfUnderReview');
         }
+      } else if (type === 'tournament' || payload.screen === 'TournamentDetail') {
+        const tournamentId = payload.tournamentId || payload.id;
+        if (tournamentId) {
+          return nav('TournamentDetail', { tournamentId, id: tournamentId });
+        }
+        return nav('Tournaments');
       } else {
         return nav('Notifications');
       }
@@ -199,9 +205,10 @@ export const fcmHelper = {
       }
     };
 
-    const showBookingPopup = ({ title, body, data }) => {
-      const popupTitle = cleanText(title) || 'New Booking';
-      const popupBody = cleanText(body) || 'Tap View Booking to check details.';
+    const showVendorPopup = ({ title, body, data }) => {
+      const isTournament = data?.type === 'tournament' || data?.screen === 'TournamentDetail';
+      const popupTitle = cleanText(title) || (isTournament ? 'Tournament Request' : 'New Notification');
+      const popupBody = cleanText(body) || (isTournament ? 'A user requested to host a tournament at your turf.' : 'Tap to check details.');
 
       // Mobile level system notification with logo.png (shown in background/quit or heads-up)
       triggerSystemNotification({ title: popupTitle, body: popupBody, data });
@@ -214,7 +221,7 @@ export const fcmHelper = {
           [
             { text: 'Dismiss', style: 'cancel' },
             {
-              text: 'View Booking',
+              text: isTournament ? 'Review Request' : 'View Booking',
               onPress: () => this.handleNotificationNavigation(navigationRef, data),
             },
           ],
@@ -235,7 +242,7 @@ export const fcmHelper = {
         remoteMessage?.notification?.title ||
         data.notificationText ||
         data.title ||
-        'New Booking';
+        (data.type === 'tournament' ? 'Tournament Request' : 'New Booking');
       const body =
         remoteMessage?.notification?.body ||
         data.notificationText ||
@@ -243,7 +250,7 @@ export const fcmHelper = {
         data.message ||
         '';
 
-      showBookingPopup({ title, body, data });
+      showVendorPopup({ title, body, data });
     });
 
     // 2. Notification opened app while in background
@@ -275,16 +282,28 @@ export const fcmHelper = {
         const list = res?.data?.notifications || res?.notifications || [];
         const now = Date.now();
 
-        // Check for fresh unread booking notifications in last 90 seconds
+        // Check for fresh unread booking or tournament notifications in last 90 seconds
         for (const notif of list) {
-          if (!notif.isRead && !notif.read && (notif.type === 'booking' || notif.data?.type === 'booking')) {
+          const isTargetType =
+            notif.type === 'booking' ||
+            notif.data?.type === 'booking' ||
+            notif.type === 'tournament' ||
+            notif.data?.type === 'tournament';
+
+          if (!notif.isRead && !notif.read && isTargetType) {
             const notifTime = new Date(notif.createdAt).getTime();
             if (now - notifTime < 90000 && !shownNotificationIds.has(notif.id)) {
               shownNotificationIds.add(notif.id);
-              showBookingPopup({
+              showVendorPopup({
                 title: notif.title,
                 body: notif.body,
-                data: notif.data || { bookingId: notif.data?.bookingId, screen: 'BookingDetail', type: 'booking' },
+                data: notif.data || {
+                  id: notif.data?.tournamentId || notif.data?.bookingId,
+                  tournamentId: notif.data?.tournamentId,
+                  bookingId: notif.data?.bookingId,
+                  screen: notif.data?.tournamentId ? 'TournamentDetail' : 'BookingDetail',
+                  type: notif.type || notif.data?.type,
+                },
               });
               break;
             }

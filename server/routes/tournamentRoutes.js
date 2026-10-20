@@ -14,6 +14,16 @@ router.post('/:id/publish', verifySessionToken, tournamentController.publishTour
 router.patch('/:id/publish', verifySessionToken, tournamentController.publishTournament);
 router.post('/:id/cancel', verifySessionToken, tournamentController.cancelTournament);
 router.delete('/:id', verifySessionToken, tournamentController.cancelTournament);
+router.post('/:id/approve', verifySessionToken, tournamentController.approveTournament);
+router.patch('/:id/approve', verifySessionToken, tournamentController.approveTournament);
+router.post('/:id/reject', verifySessionToken, tournamentController.rejectTournament);
+router.patch('/:id/reject', verifySessionToken, tournamentController.rejectTournament);
+
+// Tournament Bracket & Match Management (Creator Only)
+router.post('/:id/bracket/generate', verifySessionToken, tournamentController.generateBracket);
+router.post('/:id/matches/:matchId/toss', verifySessionToken, tournamentController.conductMatchToss);
+router.post('/:id/matches/:matchId/score', verifySessionToken, tournamentController.updateMatchScore);
+router.post('/:id/matches/:matchId/winner', verifySessionToken, tournamentController.confirmMatchWinner);
 
 // Shared identifier resolution (Public)
 router.get('/share/:shareIdentifier', tournamentController.getPublicTournamentByShareId);

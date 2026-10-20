@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
@@ -51,7 +52,8 @@ const TournamentListScreen = ({ navigation }) => {
   const [tournaments, setTournaments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // 'all' | 'turf_hosted' | 'user_created' | 'draft'
+  const [filter, setFilter] = useState('all'); // 'all' | 'pending' | 'turf_hosted' | 'user_created' | 'draft'
+  const [selectedTurfFilter, setSelectedTurfFilter] = useState('all'); // 'all' | specific turfId
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -83,7 +85,8 @@ const TournamentListScreen = ({ navigation }) => {
 
   const loadTournaments = useCallback(async () => {
     try {
-      const res = await getTournamentsApi(activeTurfId);
+      const turfIdParam = selectedTurfFilter !== 'all' ? selectedTurfFilter : undefined;
+      const res = await getTournamentsApi(turfIdParam);
       const list = res?.data?.tournaments || res?.tournaments || [];
       setTournaments(list);
     } catch (err) {
@@ -92,7 +95,7 @@ const TournamentListScreen = ({ navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTurfId]);
+  }, [selectedTurfFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,8 +108,19 @@ const TournamentListScreen = ({ navigation }) => {
     loadTournaments();
   };
 
+  const pendingRequestsCount = tournaments.filter(
+    (t) => t.status === 'pending_approval' || t.approvalStatus === 'pending'
+  ).length;
+
   const filteredTournaments = tournaments.filter((t) => {
+    if (selectedTurfFilter !== 'all') {
+      const matchTurf = (t.turfId && t.turfId === selectedTurfFilter) ||
+                        (t.turf && (t.turf.id === selectedTurfFilter || t.turf._id === selectedTurfFilter));
+      if (!matchTurf) return false;
+    }
     const isUser = t.creatorType === 'USER' || t.source === 'USER CREATED';
+    const isPending = t.status === 'pending_approval' || t.approvalStatus === 'pending';
+    if (filter === 'pending') return isPending;
     if (filter === 'turf_hosted') return !isUser;
     if (filter === 'user_created') return isUser;
     if (filter === 'draft') return t.status === 'draft';
@@ -196,6 +210,14 @@ const TournamentListScreen = ({ navigation }) => {
                 badgeBg = isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2';
                 badgeBorder = isDark ? 'rgba(239, 68, 68, 0.4)' : '#FCA5A5';
                 badgeColor = '#EF4444';
+              } else if (lifecycleStatus === 'rejected') {
+                badgeBg = isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2';
+                badgeBorder = isDark ? 'rgba(239, 68, 68, 0.4)' : '#FCA5A5';
+                badgeColor = '#EF4444';
+              } else if (lifecycleStatus === 'pending_approval') {
+                badgeBg = isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7';
+                badgeBorder = isDark ? 'rgba(245, 158, 11, 0.4)' : '#FDE68A';
+                badgeColor = '#D97706';
               } else if (lifecycleStatus === 'completed') {
                 badgeBg = isDark ? 'rgba(100, 116, 139, 0.15)' : '#F1F5F9';
                 badgeBorder = isDark ? 'rgba(100, 116, 139, 0.4)' : '#CBD5E1';
@@ -270,19 +292,36 @@ const TournamentListScreen = ({ navigation }) => {
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
             <Feather name="user" size={12} color="#8B5CF6" style={{ marginRight: 5 }} />
             <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-              Created by <Text style={{ fontWeight: '700', color: colors.text }}>{item.creatorName || item.creator || 'Community Member'}</Text>
+              Requested by <Text style={{ fontWeight: '700', color: colors.text }}>{item.creatorName || item.creator || item.user?.name || item.createdBy || 'User'}</Text>
             </Text>
           </View>
         )}
 
-        {item.turfName || activeTurf?.name ? (
+        {(item.turf?.name || item.turfName || item.venueName || activeTurf?.name) ? (
           <View style={styles.turfNameRow}>
             <Feather name="map-pin" size={13} color={colors.textSecondary} />
             <Text style={[styles.turfNameText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {item.turfName || activeTurf?.name}
+              {item.turf?.name || item.turfName || item.venueName || activeTurf?.name}
             </Text>
           </View>
         ) : null}
+
+        {(item.status === 'pending_approval' || item.approvalStatus === 'pending') && (
+          <View
+            style={[
+              styles.pendingApprovalBanner,
+              {
+                backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7',
+                borderColor: isDark ? 'rgba(245, 158, 11, 0.4)' : '#FDE68A',
+              },
+            ]}
+          >
+            <Feather name="bell" size={14} color="#D97706" style={{ marginRight: 6 }} />
+            <Text style={[styles.pendingApprovalBannerText, { color: isDark ? '#FBBF24' : '#B45309' }]}>
+              New Request: Tap to review & approve
+            </Text>
+          </View>
+        )}
 
         <View style={styles.dateRow}>
           <Feather name="calendar" size={13} color={colors.primary} />
@@ -323,8 +362,49 @@ const TournamentListScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Active Turf Context Bar */}
-      {activeTurf && (
+      {/* Turf Selector / Context Bar */}
+      {Array.isArray(turfs) && turfs.length > 1 ? (
+        <View style={[styles.turfSelectorContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.turfSelectorScroll}>
+            <TouchableOpacity
+              style={[
+                styles.turfFilterChip,
+                { backgroundColor: colors.background, borderColor: colors.border },
+                selectedTurfFilter === 'all' && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+              onPress={() => setSelectedTurfFilter('all')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.turfFilterChipText, { color: selectedTurfFilter === 'all' ? '#FFFFFF' : colors.text }]}>
+                All My Turfs ({tournaments.length})
+              </Text>
+            </TouchableOpacity>
+            {turfs.map((t) => {
+              const tId = t.id || t._id;
+              const isSelected = selectedTurfFilter === tId;
+              const countForTurf = tournaments.filter(
+                (x) => x.turfId === tId || x.turf?.id === tId || x.turf?._id === tId
+              ).length;
+              return (
+                <TouchableOpacity
+                  key={tId}
+                  style={[
+                    styles.turfFilterChip,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    isSelected && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => setSelectedTurfFilter(tId)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.turfFilterChipText, { color: isSelected ? '#FFFFFF' : colors.text }]}>
+                    {t.name} ({countForTurf})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : activeTurf ? (
         <View style={[styles.turfContextBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.turfContextLeft}>
             <Feather name="shield" size={15} color={colors.primary} />
@@ -336,12 +416,13 @@ const TournamentListScreen = ({ navigation }) => {
             <Text style={[styles.turfPillText, { color: colors.primary }]}>Active Turf</Text>
           </View>
         </View>
-      )}
+      ) : null}
 
       {/* Tabs Filter Bar */}
       <View style={styles.filterBar}>
         {[
           { key: 'all', label: 'All' },
+          { key: 'pending', label: pendingRequestsCount > 0 ? `Requests (${pendingRequestsCount})` : 'Requests' },
           { key: 'turf_hosted', label: 'Turf Hosted' },
           { key: 'user_created', label: 'User Created' },
           { key: 'draft', label: 'Draft' },
@@ -441,6 +522,39 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: SIZES.xs + 1,
     fontWeight: '700',
+  },
+  turfSelectorContainer: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  turfSelectorScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  turfFilterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  turfFilterChipText: {
+    fontSize: SIZES.xs,
+    fontWeight: '700',
+  },
+  pendingApprovalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  pendingApprovalBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
   },
   turfContextBar: {
     flexDirection: 'row',

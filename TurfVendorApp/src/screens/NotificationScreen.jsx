@@ -10,8 +10,9 @@ import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { notificationsApi } from '../api/notifications';
 
-const FILTERS = ['All', 'Bookings', 'Subscription', 'Unread'];
+const FILTERS = ['All', 'Tournaments', 'Bookings', 'Subscription', 'Unread'];
 
 const dayLabel = (date) => {
   if (!date) return 'Earlier';
@@ -101,35 +102,97 @@ const buildSubscriptionNotifications = (mySubscription, colors) => {
   return list;
 };
 
+const buildServerNotifications = (serverNotifs = [], colors) => (Array.isArray(serverNotifs) ? serverNotifs : []).map((n) => {
+  const isTournament =
+    n.type === 'tournament' ||
+    n.data?.screen === 'TournamentDetail' ||
+    n.data?.type === 'tournament' ||
+    n.data?.action?.startsWith?.('tournament_') ||
+    n.data?.tournamentId ||
+    (n.title && n.title.toLowerCase().includes('tournament'));
+  const isApproved = n.data?.action === 'tournament_approved';
+  const isRejected = n.data?.action === 'tournament_rejected';
+
+  let icon = 'award';
+  let iconBg = 'rgba(245, 158, 11, 0.15)';
+  let iconColor = '#F59E0B';
+
+  if (isApproved) {
+    icon = 'check-circle';
+    iconBg = 'rgba(16, 185, 129, 0.12)';
+    iconColor = '#10B981';
+  } else if (isRejected) {
+    icon = 'x-circle';
+    iconBg = 'rgba(239, 68, 68, 0.12)';
+    iconColor = '#EF4444';
+  } else if (isTournament) {
+    icon = 'award';
+    iconBg = 'rgba(139, 92, 246, 0.15)';
+    iconColor = '#8B5CF6';
+  }
+
+  return {
+    id: n.id,
+    type: isTournament ? 'tournament' : (n.type || 'general'),
+    title: n.title,
+    body: n.body,
+    icon,
+    iconBg,
+    iconColor,
+    date: n.createdAt || new Date(),
+    read: Boolean(n.read || n.isRead),
+    data: n.data || {},
+    raw: n,
+  };
+});
+
 const NotificationScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const { bookings, mySubscription, loading } = useSelector((s) => s.vendor);
   const { colors, isDark } = useTheme();
 
   const [activeFilter, setActiveFilter] = useState('All');
+  const [serverNotifications, setServerNotifications] = useState([]);
+  const [serverLoading, setServerLoading] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
+  const loadServerNotifications = async () => {
+    try {
+      setServerLoading(true);
+      const res = await notificationsApi.getAll();
+      const list = res?.data?.notifications || res?.notifications || [];
+      setServerNotifications(list);
+    } catch (err) {
+      console.warn('Failed to load server notifications:', err.message);
+    } finally {
+      setServerLoading(false);
+    }
+  };
+
   useEffect(() => {
     dispatch(fetchBookings());
     dispatch(fetchMySubscription());
+    loadServerNotifications();
   }, []);
 
   const notifications = useMemo(() => {
     const combined = [
+      ...buildServerNotifications(serverNotifications, colors),
       ...buildBookingNotifications(bookings, colors),
       ...buildSubscriptionNotifications(mySubscription, colors),
     ];
 
     let sorted = combined.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+    if (activeFilter === 'Tournaments') return sorted.filter((n) => n.type === 'tournament');
     if (activeFilter === 'Bookings') return sorted.filter((n) => n.type === 'booking');
     if (activeFilter === 'Subscription') return sorted.filter((n) => n.type === 'subscription');
     if (activeFilter === 'Unread') return sorted.filter((n) => !n.read);
     return sorted;
-  }, [bookings, mySubscription, activeFilter, colors]);
+  }, [serverNotifications, bookings, mySubscription, activeFilter, colors]);
 
   const sections = useMemo(() => {
     const map = new Map();
@@ -141,8 +204,24 @@ const NotificationScreen = ({ navigation }) => {
     return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
   }, [notifications]);
 
-  const handlePressNotification = (item) => {
-    if (item.type === 'booking') {
+  const handlePressNotification = async (item) => {
+    if (!item.read && item.id && !String(item.id).startsWith('booking-') && !String(item.id).startsWith('sub-')) {
+      try {
+        await notificationsApi.markRead(item.id);
+        setServerNotifications((prev) =>
+          prev.map((n) => (n.id === item.id ? { ...n, isRead: true, read: true } : n))
+        );
+      } catch (_) {}
+    }
+
+    if (item.type === 'tournament' || item.data?.screen === 'TournamentDetail' || item.raw?.data?.screen === 'TournamentDetail') {
+      const tournamentId = item.data?.tournamentId || item.data?.id || item.raw?.data?.tournamentId || item.raw?.data?.id;
+      if (tournamentId) {
+        navigation.navigate('TournamentDetail', { tournamentId });
+      } else {
+        navigation.navigate('TournamentList');
+      }
+    } else if (item.type === 'booking') {
       const bookingId = item.raw?._id || item.raw?.id;
       if (bookingId) {
         navigation.navigate('BookingDetail', { bookingId });
@@ -198,10 +277,11 @@ const NotificationScreen = ({ navigation }) => {
         keyExtractor={(s) => s.label}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        refreshing={loading}
+        refreshing={loading || serverLoading}
         onRefresh={() => {
           dispatch(fetchBookings());
           dispatch(fetchMySubscription());
+          loadServerNotifications();
         }}
         ListEmptyComponent={(
           <View style={styles.emptyWrap}>

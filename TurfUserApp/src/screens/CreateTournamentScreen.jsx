@@ -94,13 +94,18 @@ export default function CreateTournamentScreen({ route, navigation }) {
   const [selectedSport, setSelectedSport] = useState('Cricket');
   const [customSport, setCustomSport] = useState('');
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const nextWeek = new Date();
-  nextWeek.setDate(tomorrow.getDate() + 4);
+  const today = new Date();
+  const regCloseDefault = new Date(today);
+  regCloseDefault.setDate(regCloseDefault.getDate() + 2);
+  const tournStartDefault = new Date(today);
+  tournStartDefault.setDate(tournStartDefault.getDate() + 3);
+  const tournEndDefault = new Date(today);
+  tournEndDefault.setDate(tournEndDefault.getDate() + 7);
 
-  const [startDate, setStartDate] = useState(toDateString(tomorrow));
-  const [endDate, setEndDate] = useState(toDateString(nextWeek));
+  const [registrationStartDate, setRegistrationStartDate] = useState(toDateString(today));
+  const [registrationEndDate, setRegistrationEndDate] = useState(toDateString(regCloseDefault));
+  const [startDate, setStartDate] = useState(toDateString(tournStartDefault));
+  const [endDate, setEndDate] = useState(toDateString(tournEndDefault));
   const [numberOfTeams, setNumberOfTeams] = useState('8');
   const [playersPerTeam, setPlayersPerTeam] = useState('11');
   const [oversPerTeam, setOversPerTeam] = useState('10');
@@ -108,9 +113,9 @@ export default function CreateTournamentScreen({ route, navigation }) {
   const [rules, setRules] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
   const [selectedBannerModal, setSelectedBannerModal] = useState(false);
-  const [datePickerTarget, setDatePickerTarget] = useState(null); // 'start' | 'end' | null
-  const [calendarViewYear, setCalendarViewYear] = useState(tomorrow.getFullYear());
-  const [calendarViewMonth, setCalendarViewMonth] = useState(tomorrow.getMonth());
+  const [datePickerTarget, setDatePickerTarget] = useState(null); // 'regStart' | 'regEnd' | 'tournStart' | 'tournEnd' | null
+  const [calendarViewYear, setCalendarViewYear] = useState(today.getFullYear());
+  const [calendarViewMonth, setCalendarViewMonth] = useState(today.getMonth());
   const [tempDate, setTempDate] = useState('');
 
   // ── Step 3: Team and Player Management State ──
@@ -138,12 +143,12 @@ export default function CreateTournamentScreen({ route, navigation }) {
       try {
         setLoadingTurfs(true);
         const res = await turfsApi.getTurfs({ take: 50 });
-        const list = res?.turfs || res?.data?.turfs || [];
+        const list = res?.turfs || res?.items || res?.data?.turfs || res?.data?.items || (Array.isArray(res) ? res : []);
         if (mounted) {
           setTurfsList(list);
           // If a turfId was passed via route params, match it
           if (route.params?.turfId && !selectedTurf) {
-            const match = list.find((t) => t.id === route.params.turfId);
+            const match = list.find((t) => (t.id || t._id) === route.params.turfId);
             if (match) {
               setSelectedTurf(match);
               setCurrentStep(2);
@@ -217,16 +222,32 @@ export default function CreateTournamentScreen({ route, navigation }) {
 
     const todayStr = toDateString(new Date());
 
+    // 1. Registration Period Validation
+    if (!registrationStartDate) {
+      errs.registrationStartDate = 'Registration open date is required';
+    } else if (registrationStartDate < todayStr) {
+      errs.registrationStartDate = 'Registration open date cannot be in the past';
+    }
+
+    if (!registrationEndDate) {
+      errs.registrationEndDate = 'Registration close date is required';
+    } else if (registrationEndDate < registrationStartDate) {
+      errs.registrationEndDate = 'Registration close date cannot be earlier than open date';
+    }
+
+    // 2. Tournament Schedule Validation
     if (!startDate) {
-      errs.startDate = 'Start date is required';
+      errs.startDate = 'Tournament start date is required';
     } else if (startDate < todayStr) {
-      errs.startDate = 'Start date cannot be in the past';
+      errs.startDate = 'Tournament start date cannot be in the past';
+    } else if (registrationEndDate && startDate < registrationEndDate) {
+      errs.startDate = 'Tournament start date cannot be earlier than registration close date';
     }
 
     if (!endDate) {
-      errs.endDate = 'End date is required';
+      errs.endDate = 'Tournament end date is required';
     } else if (endDate < startDate) {
-      errs.endDate = 'End date cannot be earlier than start date';
+      errs.endDate = 'Tournament end date cannot be earlier than tournament start date';
     }
 
     const teamsNum = parseInt(numberOfTeams, 10);
@@ -262,11 +283,16 @@ export default function CreateTournamentScreen({ route, navigation }) {
   // ── Interactive Date Picker Handlers ──
   const handleOpenDatePicker = (target) => {
     setDatePickerTarget(target);
-    const initialVal = target === 'start' ? startDate : endDate;
-    const baseDate = parseYMD(initialVal || (target === 'start' ? toDateString(new Date()) : startDate || toDateString(new Date())));
+    let initialVal = '';
+    if (target === 'regStart') initialVal = registrationStartDate;
+    else if (target === 'regEnd') initialVal = registrationEndDate;
+    else if (target === 'tournStart') initialVal = startDate;
+    else if (target === 'tournEnd') initialVal = endDate;
+
+    const baseDate = parseYMD(initialVal || toDateString(new Date()));
     setCalendarViewYear(baseDate.getFullYear());
     setCalendarViewMonth(baseDate.getMonth());
-    setTempDate(initialVal || (target === 'start' ? toDateString(new Date()) : startDate || toDateString(new Date())));
+    setTempDate(initialVal || toDateString(new Date()));
   };
 
   const handleConfirmDate = () => {
@@ -276,20 +302,67 @@ export default function CreateTournamentScreen({ route, navigation }) {
     }
     const todayStr = toDateString(new Date());
 
-    if (datePickerTarget === 'start') {
+    if (datePickerTarget === 'regStart') {
+      if (tempDate < todayStr) {
+        Alert.alert('Invalid Date', 'Registration open date cannot be in the past.');
+        return;
+      }
+      setRegistrationStartDate(tempDate);
+      // Auto-bump later dates if needed
+      if (registrationEndDate && registrationEndDate < tempDate) {
+        setRegistrationEndDate(tempDate);
+      }
+      if (startDate && startDate < tempDate) {
+        setStartDate(tempDate);
+      }
+      if (endDate && endDate < tempDate) {
+        setEndDate(tempDate);
+      }
+      setErrors((prev) => ({
+        ...prev,
+        registrationStartDate: null,
+        registrationEndDate: null,
+        startDate: null,
+        endDate: null,
+      }));
+    } else if (datePickerTarget === 'regEnd') {
+      if (tempDate < (registrationStartDate || todayStr)) {
+        Alert.alert('Invalid Date', 'Registration close date cannot be earlier than registration open date.');
+        return;
+      }
+      setRegistrationEndDate(tempDate);
+      // Ensure tournament start is on or after registration close
+      if (startDate && startDate < tempDate) {
+        setStartDate(tempDate);
+      }
+      if (endDate && endDate < tempDate) {
+        setEndDate(tempDate);
+      }
+      setErrors((prev) => ({
+        ...prev,
+        registrationEndDate: null,
+        startDate: null,
+      }));
+    } else if (datePickerTarget === 'tournStart') {
       if (tempDate < todayStr) {
         Alert.alert('Invalid Date', 'Tournament start date cannot be in the past.');
         return;
       }
+      if (registrationEndDate && tempDate < registrationEndDate) {
+        Alert.alert(
+          'Invalid Date',
+          `Tournament start date cannot be earlier than registration close date (${registrationEndDate}).`
+        );
+        return;
+      }
       setStartDate(tempDate);
-      // Auto-bump end date safely if end date became earlier than start date
       if (endDate && endDate < tempDate) {
         setEndDate(tempDate);
       }
       setErrors((prev) => ({ ...prev, startDate: null, endDate: null }));
-    } else if (datePickerTarget === 'end') {
+    } else if (datePickerTarget === 'tournEnd') {
       if (tempDate < (startDate || todayStr)) {
-        Alert.alert('Invalid Date', 'End date cannot be earlier than start date.');
+        Alert.alert('Invalid Date', 'Tournament end date cannot be earlier than tournament start date.');
         return;
       }
       setEndDate(tempDate);
@@ -319,18 +392,46 @@ export default function CreateTournamentScreen({ route, navigation }) {
   const getPresets = () => {
     const today = new Date();
     const todayStr = toDateString(today);
-    if (datePickerTarget === 'start') {
+    if (datePickerTarget === 'regStart') {
       const tomorrowDate = new Date(today);
       tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-      const in3Days = new Date(today);
-      in3Days.setDate(in3Days.getDate() + 3);
+      const in2Days = new Date(today);
+      in2Days.setDate(in2Days.getDate() + 2);
       const in1Week = new Date(today);
       in1Week.setDate(in1Week.getDate() + 7);
       return [
         { label: 'Today', value: todayStr },
         { label: 'Tomorrow', value: toDateString(tomorrowDate) },
-        { label: '+3 Days', value: toDateString(in3Days) },
+        { label: '+2 Days', value: toDateString(in2Days) },
         { label: '+1 Week', value: toDateString(in1Week) },
+      ];
+    } else if (datePickerTarget === 'regEnd') {
+      const base = parseYMD(registrationStartDate || todayStr);
+      const in1 = new Date(base);
+      in1.setDate(in1.getDate() + 1);
+      const in2 = new Date(base);
+      in2.setDate(in2.getDate() + 2);
+      const in5 = new Date(base);
+      in5.setDate(in5.getDate() + 5);
+      return [
+        { label: 'Same Day', value: registrationStartDate || todayStr },
+        { label: '+1 Day', value: toDateString(in1) },
+        { label: '+2 Days', value: toDateString(in2) },
+        { label: '+5 Days', value: toDateString(in5) },
+      ];
+    } else if (datePickerTarget === 'tournStart') {
+      const base = parseYMD(registrationEndDate || todayStr);
+      const in1 = new Date(base);
+      in1.setDate(in1.getDate() + 1);
+      const in3 = new Date(base);
+      in3.setDate(in3.getDate() + 3);
+      const in7 = new Date(base);
+      in7.setDate(in7.getDate() + 7);
+      return [
+        { label: 'Reg Close Day', value: registrationEndDate || todayStr },
+        { label: '+1 Day', value: toDateString(in1) },
+        { label: '+3 Days', value: toDateString(in3) },
+        { label: '+1 Week', value: toDateString(in7) },
       ];
     } else {
       const base = parseYMD(startDate || todayStr);
@@ -372,9 +473,13 @@ export default function CreateTournamentScreen({ route, navigation }) {
       const isToday = dateStr === todayStr;
 
       let isDisabled = false;
-      if (datePickerTarget === 'start') {
+      if (datePickerTarget === 'regStart') {
         if (dateStr < todayStr) isDisabled = true;
-      } else if (datePickerTarget === 'end') {
+      } else if (datePickerTarget === 'regEnd') {
+        if (dateStr < (registrationStartDate || todayStr)) isDisabled = true;
+      } else if (datePickerTarget === 'tournStart') {
+        if (dateStr < todayStr || (registrationEndDate && dateStr < registrationEndDate)) isDisabled = true;
+      } else if (datePickerTarget === 'tournEnd') {
         if (dateStr < (startDate || todayStr)) isDisabled = true;
       }
 
@@ -468,9 +573,11 @@ export default function CreateTournamentScreen({ route, navigation }) {
     try {
       setSubmitting(true);
       const payload = {
-        turfId: selectedTurf.id,
+        turfId: selectedTurf?.id || selectedTurf?._id,
         name: name.trim(),
         sport: effectiveSport,
+        registrationStartDate,
+        registrationEndDate,
         startDate,
         endDate,
         numberOfTeams: parseInt(numberOfTeams, 10),
@@ -505,7 +612,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
 
       await Share.share({
         title: createdTournamentResult.name,
-        message: `🏆 Check out "${createdTournamentResult.name}" (${createdTournamentResult.sport}) at ${selectedTurf?.name || 'our local turf'}!\n\n📅 Dates: ${createdTournamentResult.startDate} to ${createdTournamentResult.endDate}\n👥 Teams: ${createdTournamentResult.numberOfTeams} (${createdTournamentResult.playersPerTeam} players/team)${isCricket && createdTournamentResult.oversPerTeam ? `\n🏏 Overs: ${createdTournamentResult.oversPerTeam}` : ''}\n\nView details and participate:\n${shareUrl}`,
+        message: `🏆 Check out "${createdTournamentResult.name}" (${createdTournamentResult.sport}) at ${selectedTurf?.name || 'our local turf'}!\n\n📝 Registration: ${createdTournamentResult.registrationStartDate || registrationStartDate} to ${createdTournamentResult.registrationEndDate || registrationEndDate}\n📅 Tournament Dates: ${createdTournamentResult.startDate} to ${createdTournamentResult.endDate}\n👥 Teams: ${createdTournamentResult.numberOfTeams} (${createdTournamentResult.playersPerTeam} players/team)${isCricket && createdTournamentResult.oversPerTeam ? `\n🏏 Overs: ${createdTournamentResult.oversPerTeam}` : ''}\n\nView details and participate:\n${shareUrl}`,
       });
     } catch (_) { }
   };
@@ -562,7 +669,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
             keyExtractor={(item) => String(item.id || item._id)}
             scrollEnabled={false}
             renderItem={({ item }) => {
-              const isSelected = selectedTurf?.id === item.id;
+              const isSelected = (selectedTurf?.id || selectedTurf?._id) === (item.id || item._id);
               const turfImg = item.images?.[0] || item.image || item.logo || 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800';
               const locationStr = item.address || item.city || item.location?.address || item.location?.city || 'Verified Arena';
 
@@ -777,42 +884,113 @@ export default function CreateTournamentScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* 3. Dates: Start & End */}
-        <View style={styles.rowInputs}>
-          <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-            <Text style={[styles.inputLabel, { color: C.text }]}>
-              Start Date <Text style={{ color: C.error }}>*</Text>
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                { backgroundColor: C.card, borderColor: errors.startDate ? C.error : C.border },
-              ]}
-              onPress={() => handleOpenDatePicker('start')}
-              activeOpacity={0.8}
-            >
-              <Feather name="calendar" size={15} color={C.primary} style={{ marginRight: 6 }} />
-              <Text style={[styles.dateButtonText, { color: C.text }]}>{startDate}</Text>
-            </TouchableOpacity>
-            {errors.startDate ? <Text style={styles.errorText}>{errors.startDate}</Text> : null}
+        {/* ── CARD 1: REGISTRATION PERIOD ── */}
+        <View style={[styles.dateSectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <View style={styles.dateCardHeader}>
+            <View style={[styles.dateCardIconCircle, { backgroundColor: dark ? 'rgba(15, 118, 110, 0.22)' : '#CCFBF1' }]}>
+              <Feather name="user-check" size={16} color="#0F766E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateCardTitle, { color: C.text }]}>REGISTRATION PERIOD</Text>
+              <Text style={[styles.dateCardSubtitle, { color: C.subtext }]}>
+                When users are allowed to apply and register their teams
+              </Text>
+            </View>
           </View>
 
-          <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-            <Text style={[styles.inputLabel, { color: C.text }]}>
-              End Date <Text style={{ color: C.error }}>*</Text>
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.dateButton,
-                { backgroundColor: C.card, borderColor: errors.endDate ? C.error : C.border },
-              ]}
-              onPress={() => handleOpenDatePicker('end')}
-              activeOpacity={0.8}
-            >
-              <Feather name="calendar" size={15} color={C.primary} style={{ marginRight: 6 }} />
-              <Text style={[styles.dateButtonText, { color: C.text }]}>{endDate}</Text>
-            </TouchableOpacity>
-            {errors.endDate ? <Text style={styles.errorText}>{errors.endDate}</Text> : null}
+          <View style={styles.rowInputs}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={[styles.inputLabel, { color: C.text }]}>
+                Registration Opens <Text style={{ color: C.error }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateButton,
+                  { backgroundColor: C.bgSoft, borderColor: errors.registrationStartDate ? C.error : C.border },
+                ]}
+                onPress={() => handleOpenDatePicker('regStart')}
+                activeOpacity={0.8}
+              >
+                <Feather name="calendar" size={15} color="#0F766E" style={{ marginRight: 6 }} />
+                <Text style={[styles.dateButtonText, { color: C.text }]}>{registrationStartDate}</Text>
+              </TouchableOpacity>
+              {errors.registrationStartDate ? (
+                <Text style={styles.errorText}>{errors.registrationStartDate}</Text>
+              ) : null}
+            </View>
+
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={[styles.inputLabel, { color: C.text }]}>
+                Registration Closes <Text style={{ color: C.error }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateButton,
+                  { backgroundColor: C.bgSoft, borderColor: errors.registrationEndDate ? C.error : C.border },
+                ]}
+                onPress={() => handleOpenDatePicker('regEnd')}
+                activeOpacity={0.8}
+              >
+                <Feather name="clock" size={15} color="#D97706" style={{ marginRight: 6 }} />
+                <Text style={[styles.dateButtonText, { color: C.text }]}>{registrationEndDate}</Text>
+              </TouchableOpacity>
+              {errors.registrationEndDate ? (
+                <Text style={styles.errorText}>{errors.registrationEndDate}</Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {/* ── CARD 2: TOURNAMENT SCHEDULE ── */}
+        <View style={[styles.dateSectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+          <View style={styles.dateCardHeader}>
+            <View style={[styles.dateCardIconCircle, { backgroundColor: dark ? 'rgba(2, 132, 199, 0.22)' : '#E0F2FE' }]}>
+              <Feather name="play-circle" size={16} color="#0284C7" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dateCardTitle, { color: C.text }]}>TOURNAMENT SCHEDULE</Text>
+              <Text style={[styles.dateCardSubtitle, { color: C.subtext }]}>
+                When the tournament games and matches take place
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.rowInputs}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={[styles.inputLabel, { color: C.text }]}>
+                Tournament Starts <Text style={{ color: C.error }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateButton,
+                  { backgroundColor: C.bgSoft, borderColor: errors.startDate ? C.error : C.border },
+                ]}
+                onPress={() => handleOpenDatePicker('tournStart')}
+                activeOpacity={0.8}
+              >
+                <Feather name="calendar" size={15} color="#0284C7" style={{ marginRight: 6 }} />
+                <Text style={[styles.dateButtonText, { color: C.text }]}>{startDate}</Text>
+              </TouchableOpacity>
+              {errors.startDate ? <Text style={styles.errorText}>{errors.startDate}</Text> : null}
+            </View>
+
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={[styles.inputLabel, { color: C.text }]}>
+                Tournament Ends <Text style={{ color: C.error }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateButton,
+                  { backgroundColor: C.bgSoft, borderColor: errors.endDate ? C.error : C.border },
+                ]}
+                onPress={() => handleOpenDatePicker('tournEnd')}
+                activeOpacity={0.8}
+              >
+                <Feather name="flag" size={15} color="#059669" style={{ marginRight: 6 }} />
+                <Text style={[styles.dateButtonText, { color: C.text }]}>{endDate}</Text>
+              </TouchableOpacity>
+              {errors.endDate ? <Text style={styles.errorText}>{errors.endDate}</Text> : null}
+            </View>
           </View>
         </View>
 
@@ -1188,8 +1366,17 @@ export default function CreateTournamentScreen({ route, navigation }) {
             {/* Key Metrics */}
             <View style={styles.summaryMetricsGrid}>
               <View style={[styles.summaryMetricItem, { backgroundColor: C.bgSoft }]}>
-                <Feather name="calendar" size={13} color={C.primary} style={{ marginRight: 4 }} />
-                <Text style={[styles.summaryMetricVal, { color: C.text }]}>{startDate} to {endDate}</Text>
+                <Feather name="user-check" size={13} color="#0F766E" style={{ marginRight: 4 }} />
+                <Text style={[styles.summaryMetricVal, { color: C.text }]}>
+                  Registration: {registrationStartDate} → {registrationEndDate}
+                </Text>
+              </View>
+
+              <View style={[styles.summaryMetricItem, { backgroundColor: C.bgSoft }]}>
+                <Feather name="calendar" size={13} color="#0284C7" style={{ marginRight: 4 }} />
+                <Text style={[styles.summaryMetricVal, { color: C.text }]}>
+                  Schedule: {startDate} → {endDate}
+                </Text>
               </View>
 
               <View style={[styles.summaryMetricItem, { backgroundColor: C.bgSoft }]}>
@@ -1353,12 +1540,22 @@ export default function CreateTournamentScreen({ route, navigation }) {
             <View style={[styles.modalHeader, { borderBottomColor: C.border }]}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={[styles.modalTitle, { color: C.text }]}>
-                  {datePickerTarget === 'start' ? 'Select Start Date' : 'Select End Date'}
+                  {datePickerTarget === 'regStart'
+                    ? 'Registration Opens'
+                    : datePickerTarget === 'regEnd'
+                    ? 'Registration Closes'
+                    : datePickerTarget === 'tournStart'
+                    ? 'Tournament Starts'
+                    : 'Tournament Ends'}
                 </Text>
                 <Text style={[styles.modalSubtitleText, { color: C.subtext }]}>
-                  {datePickerTarget === 'start'
-                    ? 'Tournaments must start today or later'
-                    : `Must be on or after ${startDate || 'start date'}`}
+                  {datePickerTarget === 'regStart'
+                    ? 'When users are allowed to apply and register their teams'
+                    : datePickerTarget === 'regEnd'
+                    ? `Must be on or after ${registrationStartDate || 'Registration Opens'}`
+                    : datePickerTarget === 'tournStart'
+                    ? `Must be on or after ${registrationEndDate || 'Registration Closes'}`
+                    : `Must be on or after ${startDate || 'Tournament Starts'}`}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1550,25 +1747,67 @@ export default function CreateTournamentScreen({ route, navigation }) {
         </View>
       </Modal>
 
-      {/* ── Success & Native Share Dialog Modal ── */}
+      {/* ── Success & Approval Status Modal ── */}
       <Modal visible={showSuccessModal} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
           <View style={[styles.successModalCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
-            <View style={[styles.successIconCircle, { backgroundColor: '#DCFCE7' }]}>
-              <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+            <View
+              style={[
+                styles.successIconCircle,
+                {
+                  backgroundColor:
+                    createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
+                      ? '#FEF3C7'
+                      : createdTournamentResult?.status === 'published'
+                      ? '#DCFCE7'
+                      : '#F1F5F9',
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
+                    ? 'hourglass'
+                    : createdTournamentResult?.status === 'published'
+                    ? 'checkmark-circle'
+                    : 'document-text'
+                }
+                size={44}
+                color={
+                  createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
+                    ? '#D97706'
+                    : createdTournamentResult?.status === 'published'
+                    ? '#10B981'
+                    : '#64748B'
+                }
+              />
             </View>
 
             <Text style={[styles.successModalTitle, { color: C.text }]}>
-              {createdTournamentResult?.status === 'published'
+              {createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
+                ? 'Submitted for Turf Approval! 🎉'
+                : createdTournamentResult?.status === 'published'
                 ? 'Tournament Published!'
                 : 'Tournament Saved as Draft!'}
             </Text>
 
             <Text style={[styles.successModalSubtitle, { color: C.subtext }]}>
-              "{createdTournamentResult?.name}" has been created and associated with {selectedTurf?.name}.
+              {createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
+                ? `"${createdTournamentResult?.name}" has been requested at ${selectedTurf?.name || 'the selected turf'}. The turf owner has been notified and will review your request.`
+                : `"${createdTournamentResult?.name}" has been saved.`}
             </Text>
 
-            {createdTournamentResult?.shareableUrl ? (
+            {/* Pending Approval Notice Pill */}
+            {(createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending') && (
+              <View style={[styles.pendingNoticePill, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                <Feather name="shield" size={14} color="#D97706" style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#B45309' }}>
+                  Awaiting Turf Owner Response
+                </Text>
+              </View>
+            )}
+
+            {createdTournamentResult?.status === 'published' && createdTournamentResult?.shareableUrl ? (
               <View style={[styles.shareBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
                 <Text style={[styles.shareBoxLabel, { color: C.subtext }]}>Unique Shareable Link:</Text>
                 <Text style={[styles.shareBoxUrl, { color: C.primary }]} numberOfLines={1}>
@@ -1580,11 +1819,17 @@ export default function CreateTournamentScreen({ route, navigation }) {
             <View style={styles.successModalActions}>
               <TouchableOpacity
                 style={[styles.nativeShareBtn, { backgroundColor: '#0F766E' }]}
-                onPress={handleNativeShare}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  navigation.navigate('TournamentDetail', {
+                    tournamentId: createdTournamentResult?.id,
+                    id: createdTournamentResult?.id,
+                  });
+                }}
                 activeOpacity={0.85}
               >
-                <Feather name="share-2" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.nativeShareBtnText}>Share Tournament</Text>
+                <Feather name="eye" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.nativeShareBtnText}>View Tournament Details</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1801,6 +2046,35 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   sportSelectChipText: { fontSize: 13, fontWeight: '600' },
+  dateSectionCard: {
+    padding: 14,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1.5,
+    marginBottom: 14,
+  },
+  dateCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  dateCardIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  dateCardTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  dateCardSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
   rowInputs: { flexDirection: 'row', alignItems: 'center' },
   dateButton: {
     height: 46,
@@ -2110,5 +2384,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  pendingNoticePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    marginTop: 6,
+    marginBottom: 6,
   },
 });

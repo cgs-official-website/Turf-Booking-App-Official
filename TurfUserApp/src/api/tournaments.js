@@ -78,3 +78,31 @@ export const registerTournamentTeamApi = (tournamentId, data) => {
 export const getMyTournamentRegistrationApi = (tournamentId) => {
   return client.get(`/tournaments/${tournamentId}/my-registration`);
 };
+
+/**
+ * Generate tournament bracket using accepted teams (Creator only)
+ */
+export const generateBracketApi = (tournamentId, data = {}) => {
+  return client.post(`/tournaments/${tournamentId}/bracket/generate`, data);
+};
+
+/**
+ * Conduct coin toss for a tournament match (Creator only)
+ */
+export const conductMatchTossApi = (tournamentId, matchId, data) => {
+  return client.post(`/tournaments/${tournamentId}/matches/${matchId}/toss`, data);
+};
+
+/**
+ * Enter or update score for a tournament match (Creator only)
+ */
+export const updateMatchScoreApi = (tournamentId, matchId, data) => {
+  return client.post(`/tournaments/${tournamentId}/matches/${matchId}/score`, data);
+};
+
+/**
+ * Confirm winner, advance to next round, or declare champion (Creator only)
+ */
+export const confirmMatchWinnerApi = (tournamentId, matchId, data) => {
+  return client.post(`/tournaments/${tournamentId}/matches/${matchId}/winner`, data);
+};

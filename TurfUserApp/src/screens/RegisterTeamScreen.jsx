@@ -51,6 +51,33 @@ export default function RegisterTeamScreen({ route, navigation }) {
       Alert.alert('Error', 'Tournament details not available', [
         { text: 'Go Back', onPress: () => navigation.goBack() },
       ]);
+      return;
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const startStr = tournament.startDate ? String(tournament.startDate).slice(0, 10) : '';
+    const endStr = tournament.endDate ? String(tournament.endDate).slice(0, 10) : '';
+    const regStartStr = tournament.registrationStartDate ? String(tournament.registrationStartDate).slice(0, 10) : '';
+    const regEndStr = tournament.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : '';
+
+    if (endStr && todayStr > endStr) {
+      Alert.alert('Tournament Completed', 'This tournament has already ended. Registrations are closed.', [
+        { text: 'Go Back', onPress: () => navigation.goBack() },
+      ]);
+    } else if (startStr && todayStr >= startStr) {
+      Alert.alert('Tournament Ongoing', 'This tournament is already ongoing. Registrations are closed.', [
+        { text: 'Go Back', onPress: () => navigation.goBack() },
+      ]);
+    } else if (regEndStr && todayStr > regEndStr) {
+      Alert.alert('Registration Closed', 'The registration period for this tournament has ended.', [
+        { text: 'Go Back', onPress: () => navigation.goBack() },
+      ]);
+    } else if (regStartStr && todayStr < regStartStr) {
+      Alert.alert(
+        'Registration Not Open',
+        `Registration for this tournament opens on ${tournament.registrationStartDate}. Please check back then.`,
+        [{ text: 'Go Back', onPress: () => navigation.goBack() }]
+      );
     }
   }, [tournament, navigation]);
 
@@ -129,6 +156,32 @@ export default function RegisterTeamScreen({ route, navigation }) {
   };
 
   const handleSubmit = async () => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const startStr = tournament?.startDate ? String(tournament.startDate).slice(0, 10) : '';
+    const endStr = tournament?.endDate ? String(tournament.endDate).slice(0, 10) : '';
+    const regStartStr = tournament?.registrationStartDate ? String(tournament.registrationStartDate).slice(0, 10) : '';
+    const regEndStr = tournament?.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : '';
+
+    if (endStr && todayStr > endStr) {
+      Alert.alert('Tournament Completed', 'This tournament has already completed. Registrations are closed.');
+      return;
+    }
+    if (startStr && todayStr >= startStr) {
+      Alert.alert('Tournament Ongoing', 'This tournament is already ongoing. New team registrations are closed.');
+      return;
+    }
+    if (regEndStr && todayStr > regEndStr) {
+      Alert.alert('Registration Closed', 'The registration period for this tournament has ended.');
+      return;
+    }
+    if (regStartStr && todayStr < regStartStr) {
+      Alert.alert(
+        'Registration Not Open',
+        `Registration for this tournament opens on ${tournament.registrationStartDate}. Please check back then.`
+      );
+      return;
+    }
+
     if (!validate()) {
       Alert.alert('Validation Error', 'Please check the form and fill all required fields correctly.');
       return;
