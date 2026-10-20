@@ -52,6 +52,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/v1', v1Routes);
 app.use('/api', v1Routes); // Legacy compatibility for mobile apps
 
+// ── Public shareable pages (tournament invite links) ───────────────────────
+app.use('/', require('./routes/publicPages'));
+
 // Root fallback (redirects to /admin)
 app.get('/', (req, res) => {
   res.redirect('/admin');

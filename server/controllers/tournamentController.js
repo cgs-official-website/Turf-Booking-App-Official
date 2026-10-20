@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
+const { tournamentShareUrl } = require('../utils/shareUrl');
 
 const VALID_STATUSES = ['draft', 'published', 'ongoing', 'completed', 'cancelled'];
 const VALID_FORMATS = ['knockout', 'round_robin', 'group_knockout', 'double_elimination', 'league'];
@@ -20,6 +21,53 @@ function generateShareableIdentifier() {
   const randomHex = crypto.randomBytes(6).toString('hex');
   const timestamp = Date.now().toString(36);
   return `trnt_${timestamp}_${randomHex}`;
+}
+
+
+/**
+ * Duplicate-create protection.
+ * A flaky network makes the app retry a POST that the server already processed, which
+ * created the same tournament twice. We treat the same creator + turf + name + dates
+ * created within the last 10 minutes as the same request and return the existing row.
+ * The in-memory lock covers two identical requests arriving at the same moment.
+ */
+const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+const inFlightCreates = new Map();
+
+async function findRecentDuplicate({ creatorType, ownerId, turfId, name, startDate, endDate }) {
+  if (!name || !startDate || !endDate) return null;
+  return prisma.tournament.findFirst({
+    where: {
+      creatorType,
+      ...(creatorType === 'USER' ? { userId: ownerId } : { vendorId: ownerId || null }),
+      turfId: turfId || null,
+      name: { equals: String(name).trim(), mode: 'insensitive' },
+      startDate: String(startDate).slice(0, 32),
+      endDate: String(endDate).slice(0, 32),
+      status: { not: 'cancelled' },
+      createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+    },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      turf: { select: { id: true, name: true, city: true, images: true, logo: true, location: true } },
+      user: { select: { id: true, name: true, avatar: true } },
+    },
+  });
+}
+
+async function withCreateLock(key, fn) {
+  if (inFlightCreates.has(key)) {
+    // Wait for the first request, then let the caller re-check the DB for its result
+    try { await inFlightCreates.get(key); } catch (_) { /* ignore */ }
+    return { waited: true };
+  }
+  const promise = fn();
+  inFlightCreates.set(key, promise);
+  try {
+    return { waited: false, value: await promise };
+  } finally {
+    inFlightCreates.delete(key);
+  }
 }
 
 /**
@@ -162,33 +210,33 @@ function formatTournament(t, reqUser = null) {
     turfName: t.turf?.name || t.venueName || undefined,
     turf: t.turf
       ? {
-          id: t.turf.id,
-          name: t.turf.name,
-          city: t.turf.city,
-          address: t.turf.location?.address || t.turf.city || '',
-          images: t.turf.images || [],
-          logo: t.turf.logo || null,
-        }
+        id: t.turf.id,
+        name: t.turf.name,
+        city: t.turf.city,
+        address: t.turf.location?.address || t.turf.city || '',
+        images: t.turf.images || [],
+        logo: t.turf.logo || null,
+      }
       : undefined,
     vendorId,
     vendor: t.vendor
       ? {
-          id: t.vendor.id,
-          name: t.vendor.name,
-          phone: t.vendor.phone,
-          email: t.vendor.email,
-        }
+        id: t.vendor.id,
+        name: t.vendor.name,
+        phone: t.vendor.phone,
+        email: t.vendor.email,
+      }
       : undefined,
     vendorName: t.vendor?.name || null,
     turfOwner: t.vendor?.name || null,
     userId,
     user: t.user
       ? {
-          id: t.user.id,
-          name: t.user.name,
-          avatar: t.user.avatar || null,
-          phone: t.user.phone || null,
-        }
+        id: t.user.id,
+        name: t.user.name,
+        avatar: t.user.avatar || null,
+        phone: t.user.phone || null,
+      }
       : undefined,
     creatorName: isCommunity
       ? (t.user?.name || 'Community Member')
@@ -240,9 +288,7 @@ function formatTournament(t, reqUser = null) {
     contactEmail: t.contactEmail || null,
     createdBy: t.createdBy || null,
     shareableIdentifier: shareId,
-    shareableUrl: shareId
-      ? `https://turfbookingapp.com/tournament/${shareId}${turfId ? `?turfId=${turfId}` : ''}`
-      : null,
+    shareableUrl: tournamentShareUrl(shareId, turfId),
     isOwner,
     registrations: (isOwner || isAdmin) ? registrationsList : undefined,
     canEdit,
@@ -671,11 +717,11 @@ const tournamentController = {
           name: (tm.name || `Team ${idx + 1}`).trim(),
           players: Array.isArray(tm.players)
             ? tm.players.slice(0, playersCount).map((p, pIdx) => ({
-                id: p.id || `p_${Date.now()}_${pIdx}`,
-                name: (p.name || `Player ${pIdx + 1}`).trim(),
-                phone: p.phone ? String(p.phone).trim() : '',
-                isInvited: Boolean(p.isInvited || p.phone),
-              }))
+              id: p.id || `p_${Date.now()}_${pIdx}`,
+              name: (p.name || `Player ${pIdx + 1}`).trim(),
+              phone: p.phone ? String(p.phone).trim() : '',
+              isInvited: Boolean(p.isInvited || p.phone),
+            }))
             : [],
         }));
       } else {
@@ -686,42 +732,55 @@ const tournamentController = {
         }));
       }
 
-      const shareableIdentifier = generateShareableIdentifier();
       const initialStatus = (publishNow === true || req.body?.status === 'published') ? 'published' : 'draft';
+      const dupQuery = { creatorType: 'USER', ownerId: userId, turfId: turf.id, name, startDate, endDate };
+      const dupKey = ['USER', userId, turf.id, name.trim().toLowerCase(), startDate, endDate].join('|');
 
-      const tournament = await prisma.tournament.create({
-        data: {
-          creatorType: 'USER',
-          userId,
-          turfId: turf.id,
-          vendorId: turf.vendorId, // Associated with the turf's vendor!
-          venueName: turf.name,
-          city: turf.city,
-          venueLocation: turf.location,
-          name: name.trim(),
-          sport: effectiveSport,
-          startDate: String(startDate).slice(0, 32),
-          endDate: String(endDate).slice(0, 32),
-          numberOfTeams: teamsCount,
-          playersPerTeam: playersCount,
-          oversPerTeam: parsedOvers,
-          teams: initialTeams,
-          description: description ? description.trim() : null,
-          rules: rules ? rules.trim() : null,
-          bannerUrl: bannerUrl ? bannerUrl.trim() : null,
-          status: initialStatus,
-          shareableIdentifier,
-          createdBy: req.user?.name || req.user?.phone || 'User',
-        },
-        include: {
-          turf: {
-            select: { id: true, name: true, city: true, images: true, logo: true, location: true },
+      const locked = await withCreateLock(dupKey, async () => {
+        const existing = await findRecentDuplicate(dupQuery);
+        if (existing) return { existing };
+        const shareableIdentifier = generateShareableIdentifier();
+        const created = await prisma.tournament.create({
+          data: {
+            creatorType: 'USER',
+            userId,
+            turfId: turf.id,
+            vendorId: turf.vendorId, // Associated with the turf's vendor!
+            venueName: turf.name,
+            city: turf.city,
+            venueLocation: turf.location,
+            name: name.trim(),
+            sport: effectiveSport,
+            startDate: String(startDate).slice(0, 32),
+            endDate: String(endDate).slice(0, 32),
+            numberOfTeams: teamsCount,
+            playersPerTeam: playersCount,
+            oversPerTeam: parsedOvers,
+            teams: initialTeams,
+            description: description ? description.trim() : null,
+            rules: rules ? rules.trim() : null,
+            bannerUrl: bannerUrl ? bannerUrl.trim() : null,
+            status: initialStatus,
+            shareableIdentifier,
+            createdBy: req.user?.name || req.user?.phone || 'User',
           },
-          user: {
-            select: { id: true, name: true, avatar: true },
+          include: {
+            turf: {
+              select: { id: true, name: true, city: true, images: true, logo: true, location: true },
+            },
+            user: {
+              select: { id: true, name: true, avatar: true },
+            },
           },
-        },
+        });
+        return { created };
       });
+
+      let tournament = locked.value?.created || locked.value?.existing || null;
+      if (!tournament && locked.waited) tournament = await findRecentDuplicate(dupQuery);
+      if (!tournament) {
+        return sendError(res, 'Failed to create tournament', 500, 'CREATE_FAILED');
+      }
 
       const formatted = formatTournament(tournament, req.user);
 
@@ -985,45 +1044,86 @@ const tournamentController = {
         }
       }
 
-      const shareableIdentifier = generateShareableIdentifier();
+      const requestedStatus =
+        status && VALID_STATUSES.includes(status.toLowerCase()) ? status.toLowerCase() : 'draft';
+      const dupQuery = {
+        creatorType: 'VENDOR',
+        ownerId: resolvedVendorId,
+        turfId,
+        name,
+        startDate,
+        endDate,
+      };
+      const dupKey = ['VENDOR', resolvedVendorId, turfId, String(name).trim().toLowerCase(), startDate, endDate].join('|');
 
-      const newTournament = await prisma.tournament.create({
-        data: {
-          creatorType: 'VENDOR',
-          name: name.trim(),
-          description: description ? description.trim() : null,
-          sport: effectiveSport,
-          turfId: turfId || null,
-          vendorId: resolvedVendorId,
-          venueName: resolvedVenue || 'TBD',
-          city: resolvedCity,
-          venueLocation: venueLocation || null,
-          registrationStartDate: String(registrationStartDate).slice(0, 32),
-          registrationEndDate: String(registrationEndDate).slice(0, 32),
-          startDate: String(startDate).slice(0, 32),
-          endDate: String(endDate).slice(0, 32),
-          numberOfTeams: teamsCount,
-          participantCapacity: teamsCount,
-          playersPerTeam: playersCount,
-          oversPerTeam: parsedOvers,
-          entryFee: entryFee !== undefined && entryFee !== '' ? Number(entryFee) : 0,
-          prizePool: prizePool !== undefined && prizePool !== '' ? Number(prizePool) : 0,
-          prizeDetails: prizeDetails || null,
-          format: format ? String(format).trim().toLowerCase() : 'knockout',
-          rules: rules ? rules.trim() : null,
-          bannerUrl: bannerUrl ? bannerUrl.trim() : null,
-          status: status && VALID_STATUSES.includes(status.toLowerCase()) ? status.toLowerCase() : 'draft',
-          contactPhone: contactPhone ? contactPhone.trim() : null,
-          contactEmail: contactEmail ? contactEmail.trim().toLowerCase() : null,
-          createdBy: req.user?.id || req.user?.uid || req.vendor?.id || 'vendor',
-          shareableIdentifier,
-        },
-        include: {
-          turf: {
-            select: { id: true, name: true, city: true },
+      const sendExisting = async (existing) => {
+        let t = existing;
+        // Retry of "Create & Publish" after the first attempt saved a draft -> publish it
+        if (requestedStatus === 'published' && t.status === 'draft') {
+          t = await prisma.tournament.update({
+            where: { id: t.id },
+            data: { status: 'published' },
+            include: { turf: { select: { id: true, name: true, city: true, images: true, logo: true, location: true } } },
+          });
+        }
+        return sendSuccess(res, { tournament: formatTournament(t, req.user), duplicate: true }, 200);
+      };
+
+      const locked = await withCreateLock(dupKey, async () => {
+        const existing = await findRecentDuplicate(dupQuery);
+        if (existing) return { existing };
+
+        const shareableIdentifier = generateShareableIdentifier();
+        const created = await prisma.tournament.create({
+          data: {
+            creatorType: 'VENDOR',
+            name: name.trim(),
+            description: description ? description.trim() : null,
+            sport: effectiveSport,
+            turfId: turfId || null,
+            vendorId: resolvedVendorId,
+            venueName: resolvedVenue || 'TBD',
+            city: resolvedCity,
+            venueLocation: venueLocation || null,
+            registrationStartDate: String(registrationStartDate).slice(0, 32),
+            registrationEndDate: String(registrationEndDate).slice(0, 32),
+            startDate: String(startDate).slice(0, 32),
+            endDate: String(endDate).slice(0, 32),
+            numberOfTeams: teamsCount,
+            participantCapacity: teamsCount,
+            playersPerTeam: playersCount,
+            oversPerTeam: parsedOvers,
+            entryFee: entryFee !== undefined && entryFee !== '' ? Number(entryFee) : 0,
+            prizePool: prizePool !== undefined && prizePool !== '' ? Number(prizePool) : 0,
+            prizeDetails: prizeDetails || null,
+            format: format ? String(format).trim().toLowerCase() : 'knockout',
+            rules: rules ? rules.trim() : null,
+            bannerUrl: bannerUrl ? bannerUrl.trim() : null,
+            status: status && VALID_STATUSES.includes(status.toLowerCase()) ? status.toLowerCase() : 'draft',
+            contactPhone: contactPhone ? contactPhone.trim() : null,
+            contactEmail: contactEmail ? contactEmail.trim().toLowerCase() : null,
+            createdBy: req.user?.id || req.user?.uid || req.vendor?.id || 'vendor',
+            shareableIdentifier,
           },
-        },
+          include: {
+            turf: {
+              select: { id: true, name: true, city: true },
+            },
+          },
+        });
+        return { created };
       });
+
+      if (locked.waited) {
+        const existing = await findRecentDuplicate(dupQuery);
+        if (existing) return sendExisting(existing);
+      } else if (locked.value?.existing) {
+        return sendExisting(locked.value.existing);
+      }
+      const newTournament = locked.value?.created;
+      if (!newTournament) {
+        return sendError(res, 'Failed to create tournament', 500, 'CREATE_TOURNAMENT_FAILED');
+      }
 
       return sendSuccess(res, { tournament: formatTournament(newTournament, req.user) }, 201);
     } catch (err) {
@@ -1055,7 +1155,7 @@ const tournamentController = {
       const isOwner = Boolean(
         currentUserId &&
         ((existing.userId && existing.userId === currentUserId) ||
-         (existing.vendorId && existing.vendorId === currentUserId))
+          (existing.vendorId && existing.vendorId === currentUserId))
       );
 
       if (!isOwner && !isAdmin) {
@@ -1181,11 +1281,11 @@ const tournamentController = {
           name: (tm.name || `Team ${idx + 1}`).trim(),
           players: Array.isArray(tm.players)
             ? tm.players.slice(0, maxPlayers).map((p, pIdx) => ({
-                id: p.id || `p_${Date.now()}_${pIdx}`,
-                name: (p.name || `Player ${pIdx + 1}`).trim(),
-                phone: p.phone ? String(p.phone).trim() : '',
-                isInvited: Boolean(p.isInvited || p.phone),
-              }))
+              id: p.id || `p_${Date.now()}_${pIdx}`,
+              name: (p.name || `Player ${pIdx + 1}`).trim(),
+              phone: p.phone ? String(p.phone).trim() : '',
+              isInvited: Boolean(p.isInvited || p.phone),
+            }))
             : [],
         }));
       }
@@ -1236,7 +1336,7 @@ const tournamentController = {
       const isOwner = Boolean(
         currentUserId &&
         ((existing.userId && existing.userId === currentUserId) ||
-         (existing.vendorId && existing.vendorId === currentUserId))
+          (existing.vendorId && existing.vendorId === currentUserId))
       );
 
       if (!isOwner && !isAdmin) {

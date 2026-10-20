@@ -64,6 +64,7 @@ export const updateTournamentTeamsApi = (id, teams) => {
 export const getPublicTournamentByShareIdApi = (shareIdentifier) => {
   return client.get(`/tournaments/share/${shareIdentifier}`);
 };
+
 /**
  * Register a team for a tournament
  */

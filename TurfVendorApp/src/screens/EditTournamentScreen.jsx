@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DatePickerModal from '../components/DatePickerModal';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { getTournamentByIdApi, updateTournamentApi } from '../api/tournaments';
@@ -217,47 +217,43 @@ const EditTournamentScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleRegStartDateChange = (event, selected) => {
-    setShowRegStartDatePicker(Platform.OS === 'ios');
-    if (selected) {
-      const formatted = toDateString(selected);
-      setRegistrationStartDate(formatted);
-      if (registrationEndDate && registrationEndDate < formatted) {
-        setRegistrationEndDate(formatted);
+  const handleRegStartDateChange = (dateStr) => {
+    setShowRegStartDatePicker(false);
+    if (dateStr) {
+      setRegistrationStartDate(dateStr);
+      if (registrationEndDate && registrationEndDate < dateStr) {
+        setRegistrationEndDate(dateStr);
       }
       setErrors((prev) => ({ ...prev, registrationStartDate: null, registrationDates: null }));
     }
   };
 
-  const handleRegEndDateChange = (event, selected) => {
-    setShowRegEndDatePicker(Platform.OS === 'ios');
-    if (selected) {
-      const formatted = toDateString(selected);
-      setRegistrationEndDate(formatted);
-      if (startDate && startDate < formatted) {
-        setStartDate(formatted);
+  const handleRegEndDateChange = (dateStr) => {
+    setShowRegEndDatePicker(false);
+    if (dateStr) {
+      setRegistrationEndDate(dateStr);
+      if (startDate && startDate < dateStr) {
+        setStartDate(dateStr);
       }
       setErrors((prev) => ({ ...prev, registrationEndDate: null, registrationDates: null, tournamentStartDate: null }));
     }
   };
 
-  const handleStartDateChange = (event, selected) => {
-    setShowStartDatePicker(Platform.OS === 'ios');
-    if (selected) {
-      const formatted = toDateString(selected);
-      setStartDate(formatted);
-      if (endDate && endDate < formatted) {
-        setEndDate(formatted);
+  const handleStartDateChange = (dateStr) => {
+    setShowStartDatePicker(false);
+    if (dateStr) {
+      setStartDate(dateStr);
+      if (endDate && endDate < dateStr) {
+        setEndDate(dateStr);
       }
       setErrors((prev) => ({ ...prev, startDate: null, tournamentStartDate: null, tournamentDates: null }));
     }
   };
 
-  const handleEndDateChange = (event, selected) => {
-    setShowEndDatePicker(Platform.OS === 'ios');
-    if (selected) {
-      const formatted = toDateString(selected);
-      setEndDate(formatted);
+  const handleEndDateChange = (dateStr) => {
+    setShowEndDatePicker(false);
+    if (dateStr) {
+      setEndDate(dateStr);
       setErrors((prev) => ({ ...prev, endDate: null, tournamentDates: null }));
     }
   };
@@ -457,25 +453,23 @@ const EditTournamentScreen = ({ navigation, route }) => {
           ) : null}
 
           {/* Registration Date Pickers */}
-          {showRegStartDatePicker && (
-            <DateTimePicker
-              value={new Date(registrationStartDate || Date.now())}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleRegStartDateChange}
-              minimumDate={new Date()}
-            />
-          )}
+          <DatePickerModal
+            visible={showRegStartDatePicker}
+            title="Registration Opens"
+            selectedDate={registrationStartDate}
+            minDate={toDateString(new Date())}
+            onSelectDate={handleRegStartDateChange}
+            onClose={() => setShowRegStartDatePicker(false)}
+          />
 
-          {showRegEndDatePicker && (
-            <DateTimePicker
-              value={new Date(registrationEndDate || registrationStartDate || Date.now())}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleRegEndDateChange}
-              minimumDate={new Date(registrationStartDate || Date.now())}
-            />
-          )}
+          <DatePickerModal
+            visible={showRegEndDatePicker}
+            title="Registration Closes"
+            selectedDate={registrationEndDate}
+            minDate={registrationStartDate || toDateString(new Date())}
+            onSelectDate={handleRegEndDateChange}
+            onClose={() => setShowRegEndDatePicker(false)}
+          />
         </View>
 
         {/* Section: Tournament Schedule */}
@@ -542,25 +536,23 @@ const EditTournamentScreen = ({ navigation, route }) => {
           ) : null}
 
           {/* Tournament Date Pickers */}
-          {showStartDatePicker && (
-            <DateTimePicker
-              value={new Date(startDate || registrationEndDate || Date.now())}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleStartDateChange}
-              minimumDate={new Date(registrationEndDate || Date.now())}
-            />
-          )}
+          <DatePickerModal
+            visible={showStartDatePicker}
+            title="Tournament Starts"
+            selectedDate={startDate}
+            minDate={registrationEndDate || toDateString(new Date())}
+            onSelectDate={handleStartDateChange}
+            onClose={() => setShowStartDatePicker(false)}
+          />
 
-          {showEndDatePicker && (
-            <DateTimePicker
-              value={new Date(endDate || startDate || Date.now())}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleEndDateChange}
-              minimumDate={new Date(startDate || Date.now())}
-            />
-          )}
+          <DatePickerModal
+            visible={showEndDatePicker}
+            title="Tournament Ends"
+            selectedDate={endDate}
+            minDate={startDate || toDateString(new Date())}
+            onSelectDate={handleEndDateChange}
+            onClose={() => setShowEndDatePicker(false)}
+          />
         </View>
 
         {/* Section: Teams & Format */}

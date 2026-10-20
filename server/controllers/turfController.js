@@ -5,6 +5,23 @@ const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getChunkPrice, getHourlyRate, resolveBestOffer } = require('../utils/pricing');
 const { formatSlotsLabel } = require('../utils/slotLabel');
 
+const { tournamentShareUrl } = require('../utils/shareUrl');
+
+const toTournamentSummary = (trn, turfId) => ({
+  id: trn.id,
+  name: trn.name,
+  sport: trn.sport,
+  category: trn.sport,
+  startDate: trn.startDate,
+  endDate: trn.endDate,
+  numberOfTeams: Number(trn.numberOfTeams),
+  playersPerTeam: Number(trn.playersPerTeam),
+  oversPerTeam: trn.oversPerTeam ? Number(trn.oversPerTeam) : null,
+  status: trn.status,
+  shareableIdentifier: trn.shareableIdentifier,
+  shareableUrl: tournamentShareUrl(trn.shareableIdentifier, turfId),
+});
+
 /**
  * Standardize turf entity shape across UserApp, VendorApp, and AdminPanel
  */
@@ -111,6 +128,9 @@ function formatTurf(t) {
     };
   }
 
+  const activeTournaments = (Array.isArray(t.tournaments) ? t.tournaments : []).filter(
+    (trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)
+  );
   return {
     id: t.id,
     _id: t.id,
@@ -169,36 +189,10 @@ function formatTurf(t) {
     offerPrice: activeOffer ? activeOffer.offerPrice : null,
     offerDiscount: activeOffer ? activeOffer.discountLabel : null,
     eligibleSlotLabel: activeOffer ? activeOffer.eligibleSlotLabel : null,
-    hasTournament: Array.isArray(t.tournaments) && t.tournaments.some((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)),
-    tournamentAvailable: Array.isArray(t.tournaments) && t.tournaments.some((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)),
-    activeTournament: (Array.isArray(t.tournaments) ? t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)) : null) ? {
-      id: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).id,
-      name: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).name,
-      sport: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).sport,
-      category: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).sport,
-      startDate: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).startDate,
-      endDate: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).endDate,
-      numberOfTeams: Number(t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).numberOfTeams),
-      playersPerTeam: Number(t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).playersPerTeam),
-      oversPerTeam: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).oversPerTeam ? Number(t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).oversPerTeam) : null,
-      status: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).status,
-      shareableIdentifier: t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).shareableIdentifier,
-      shareableUrl: `https://turfbookingapp.com/tournament/${t.tournaments.find((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)).shareableIdentifier}?turfId=${t.id}`,
-    } : null,
-    tournaments: (Array.isArray(t.tournaments) ? t.tournaments.filter((trn) => trn && trn.status === 'published' && (!trn.endDate || String(trn.endDate).slice(0, 10) >= todayStr)) : []).map((trn) => ({
-      id: trn.id,
-      name: trn.name,
-      sport: trn.sport,
-      category: trn.sport,
-      startDate: trn.startDate,
-      endDate: trn.endDate,
-      numberOfTeams: Number(trn.numberOfTeams),
-      playersPerTeam: Number(trn.playersPerTeam),
-      oversPerTeam: trn.oversPerTeam ? Number(trn.oversPerTeam) : null,
-      status: trn.status,
-      shareableIdentifier: trn.shareableIdentifier,
-      shareableUrl: `https://turfbookingapp.com/tournament/${trn.shareableIdentifier}?turfId=${t.id}`,
-    })),
+    hasTournament: activeTournaments.length > 0,
+    tournamentAvailable: activeTournaments.length > 0,
+    activeTournament: activeTournaments[0] ? toTournamentSummary(activeTournaments[0], t.id) : null,
+    tournaments: activeTournaments.map((trn) => toTournamentSummary(trn, t.id)),
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
   };
