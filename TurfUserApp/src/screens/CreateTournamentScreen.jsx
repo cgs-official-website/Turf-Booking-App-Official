@@ -57,6 +57,21 @@ const SAMPLE_BANNERS = [
 const pad = (n) => String(n).padStart(2, '0');
 const toDateString = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+const parseYMD = (str) => {
+  if (!str) return new Date();
+  const parts = String(str).split('-').map(Number);
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  return new Date();
+};
+
 export default function CreateTournamentScreen({ route, navigation }) {
   const { C, dark } = useTheme();
 
@@ -93,7 +108,10 @@ export default function CreateTournamentScreen({ route, navigation }) {
   const [rules, setRules] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
   const [selectedBannerModal, setSelectedBannerModal] = useState(false);
-  const [datePickerTarget, setDatePickerTarget] = useState(null);
+  const [datePickerTarget, setDatePickerTarget] = useState(null); // 'start' | 'end' | null
+  const [calendarViewYear, setCalendarViewYear] = useState(tomorrow.getFullYear());
+  const [calendarViewMonth, setCalendarViewMonth] = useState(tomorrow.getMonth());
+  const [tempDate, setTempDate] = useState('');
 
   // ── Step 3: Team and Player Management State ──
   // Array of { id, name, players: [ { id, name, phone, isInvited } ] }
@@ -197,14 +215,17 @@ export default function CreateTournamentScreen({ route, navigation }) {
       errs.sport = 'Please select or enter a sport';
     }
 
+    const todayStr = toDateString(new Date());
+
     if (!startDate) {
       errs.startDate = 'Start date is required';
-    }
-    if (!endDate) {
-      errs.endDate = 'End date is required';
+    } else if (startDate < todayStr) {
+      errs.startDate = 'Start date cannot be in the past';
     }
 
-    if (startDate && endDate && endDate < startDate) {
+    if (!endDate) {
+      errs.endDate = 'End date is required';
+    } else if (endDate < startDate) {
       errs.endDate = 'End date cannot be earlier than start date';
     }
 
@@ -236,6 +257,154 @@ export default function CreateTournamentScreen({ route, navigation }) {
     }
     initializeTeams(numberOfTeams, playersPerTeam);
     setCurrentStep(3);
+  };
+
+  // ── Interactive Date Picker Handlers ──
+  const handleOpenDatePicker = (target) => {
+    setDatePickerTarget(target);
+    const initialVal = target === 'start' ? startDate : endDate;
+    const baseDate = parseYMD(initialVal || (target === 'start' ? toDateString(new Date()) : startDate || toDateString(new Date())));
+    setCalendarViewYear(baseDate.getFullYear());
+    setCalendarViewMonth(baseDate.getMonth());
+    setTempDate(initialVal || (target === 'start' ? toDateString(new Date()) : startDate || toDateString(new Date())));
+  };
+
+  const handleConfirmDate = () => {
+    if (!tempDate) {
+      setDatePickerTarget(null);
+      return;
+    }
+    const todayStr = toDateString(new Date());
+
+    if (datePickerTarget === 'start') {
+      if (tempDate < todayStr) {
+        Alert.alert('Invalid Date', 'Tournament start date cannot be in the past.');
+        return;
+      }
+      setStartDate(tempDate);
+      // Auto-bump end date safely if end date became earlier than start date
+      if (endDate && endDate < tempDate) {
+        setEndDate(tempDate);
+      }
+      setErrors((prev) => ({ ...prev, startDate: null, endDate: null }));
+    } else if (datePickerTarget === 'end') {
+      if (tempDate < (startDate || todayStr)) {
+        Alert.alert('Invalid Date', 'End date cannot be earlier than start date.');
+        return;
+      }
+      setEndDate(tempDate);
+      setErrors((prev) => ({ ...prev, endDate: null }));
+    }
+    setDatePickerTarget(null);
+  };
+
+  const handlePrevMonth = () => {
+    if (calendarViewMonth === 0) {
+      setCalendarViewMonth(11);
+      setCalendarViewYear((y) => y - 1);
+    } else {
+      setCalendarViewMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (calendarViewMonth === 11) {
+      setCalendarViewMonth(0);
+      setCalendarViewYear((y) => y + 1);
+    } else {
+      setCalendarViewMonth((m) => m + 1);
+    }
+  };
+
+  const getPresets = () => {
+    const today = new Date();
+    const todayStr = toDateString(today);
+    if (datePickerTarget === 'start') {
+      const tomorrowDate = new Date(today);
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const in3Days = new Date(today);
+      in3Days.setDate(in3Days.getDate() + 3);
+      const in1Week = new Date(today);
+      in1Week.setDate(in1Week.getDate() + 7);
+      return [
+        { label: 'Today', value: todayStr },
+        { label: 'Tomorrow', value: toDateString(tomorrowDate) },
+        { label: '+3 Days', value: toDateString(in3Days) },
+        { label: '+1 Week', value: toDateString(in1Week) },
+      ];
+    } else {
+      const base = parseYMD(startDate || todayStr);
+      const plus1 = new Date(base);
+      plus1.setDate(plus1.getDate() + 1);
+      const plus3 = new Date(base);
+      plus3.setDate(plus3.getDate() + 3);
+      const plus7 = new Date(base);
+      plus7.setDate(plus7.getDate() + 7);
+      return [
+        { label: 'Same Day', value: startDate || todayStr },
+        { label: '+1 Day', value: toDateString(plus1) },
+        { label: '+3 Days', value: toDateString(plus3) },
+        { label: '+1 Week', value: toDateString(plus7) },
+      ];
+    }
+  };
+
+  const handleSelectPreset = (val) => {
+    setTempDate(val);
+    const d = parseYMD(val);
+    setCalendarViewYear(d.getFullYear());
+    setCalendarViewMonth(d.getMonth());
+  };
+
+  const renderCalendarDays = () => {
+    const todayStr = toDateString(new Date());
+    const daysInMonth = new Date(calendarViewYear, calendarViewMonth + 1, 0).getDate();
+    const firstDayIndex = new Date(calendarViewYear, calendarViewMonth, 1).getDay();
+
+    const cells = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      cells.push(<View key={`empty-${i}`} style={styles.calendarDayCellEmpty} />);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${calendarViewYear}-${pad(calendarViewMonth + 1)}-${pad(day)}`;
+      const isSelected = tempDate === dateStr;
+      const isToday = dateStr === todayStr;
+
+      let isDisabled = false;
+      if (datePickerTarget === 'start') {
+        if (dateStr < todayStr) isDisabled = true;
+      } else if (datePickerTarget === 'end') {
+        if (dateStr < (startDate || todayStr)) isDisabled = true;
+      }
+
+      cells.push(
+        <TouchableOpacity
+          key={`day-${day}`}
+          style={[
+            styles.calendarDayCell,
+            isSelected && { backgroundColor: '#0F766E' },
+            isToday && !isSelected && { borderColor: C.primary, borderWidth: 1.5 },
+            isDisabled && { opacity: 0.28 },
+          ]}
+          disabled={isDisabled}
+          onPress={() => setTempDate(dateStr)}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.calendarDayText,
+              { color: isSelected ? '#FFFFFF' : isDisabled ? C.subtext : C.text },
+              isSelected && { fontWeight: '800' },
+            ]}
+          >
+            {day}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return cells;
   };
 
   // Add / Edit Player in active team
@@ -412,40 +581,56 @@ export default function CreateTournamentScreen({ route, navigation }) {
                   onPress={() => setSelectedTurf(item)}
                   activeOpacity={0.8}
                 >
+                  {/* Left: Turf Image */}
                   <Image source={{ uri: turfImg }} style={styles.turfPickerThumb} />
-                  <View style={styles.turfPickerInfo}>
-                    <View style={styles.turfPickerHeader}>
-                      <Text style={[styles.turfPickerName, { color: C.text }]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      {isSelected ? (
-                        <View style={[styles.checkCircle, { backgroundColor: C.primary }]}>
-                          <Feather name="check" size={13} color="#FFFFFF" />
-                        </View>
-                      ) : (
-                        <View style={[styles.uncheckCircle, { borderColor: C.border }]} />
-                      )}
-                    </View>
+
+                  {/* Middle: Venue Details */}
+                  <View style={styles.turfPickerMiddle}>
+                    <Text style={[styles.turfPickerName, { color: C.text }]} numberOfLines={2}>
+                      {item.name}
+                    </Text>
 
                     <View style={styles.turfPickerMetaRow}>
-                      <Feather name="map-pin" size={12} color={C.primary} style={{ marginRight: 4 }} />
+                      <Feather name="map-pin" size={12} color={C.primary} style={{ marginRight: 4, flexShrink: 0 }} />
                       <Text style={[styles.turfPickerLocation, { color: C.subtext }]} numberOfLines={1}>
                         {locationStr}
                       </Text>
                     </View>
 
-                    <View style={styles.turfPickerBadgeRow}>
+                    <View style={styles.turfPickerSportsWrap}>
                       <View style={[styles.sportPillSm, { backgroundColor: C.bgSoft }]}>
-                        <Text style={[styles.sportPillSmText, { color: C.text }]}>
-                          {Array.isArray(item.sports) ? item.sports.join(', ') : 'All Sports'}
+                        <Text style={[styles.sportPillSmText, { color: C.text }]} numberOfLines={1}>
+                          {Array.isArray(item.sports) ? item.sports.join(', ') : (item.sports || 'All Sports')}
                         </Text>
                       </View>
-                      {item.pricePerHour ? (
+                    </View>
+                  </View>
+
+                  {/* Right: Selection Indicator & Hourly Price */}
+                  <View style={styles.turfPickerRight}>
+                    {isSelected ? (
+                      <View style={[styles.checkCircle, { backgroundColor: C.primary }]}>
+                        <Feather name="check" size={13} color="#FFFFFF" />
+                      </View>
+                    ) : (
+                      <View style={[styles.uncheckCircle, { borderColor: C.border }]} />
+                    )}
+
+                    {item.pricePerHour ? (
+                      <View
+                        style={[
+                          styles.turfPriceBadge,
+                          {
+                            backgroundColor: dark ? 'rgba(15, 118, 110, 0.2)' : '#E6FFFA',
+                            borderColor: dark ? 'rgba(15, 118, 110, 0.4)' : '#B2F5EA',
+                          },
+                        ]}
+                      >
                         <Text style={[styles.turfPriceText, { color: C.primary }]}>
                           ₹{item.pricePerHour}/hr
                         </Text>
-                      ) : null}
-                    </View>
+                      </View>
+                    ) : null}
                   </View>
                 </TouchableOpacity>
               );
@@ -603,12 +788,13 @@ export default function CreateTournamentScreen({ route, navigation }) {
                 styles.dateButton,
                 { backgroundColor: C.card, borderColor: errors.startDate ? C.error : C.border },
               ]}
-              onPress={() => setDatePickerTarget('start')}
+              onPress={() => handleOpenDatePicker('start')}
               activeOpacity={0.8}
             >
               <Feather name="calendar" size={15} color={C.primary} style={{ marginRight: 6 }} />
               <Text style={[styles.dateButtonText, { color: C.text }]}>{startDate}</Text>
             </TouchableOpacity>
+            {errors.startDate ? <Text style={styles.errorText}>{errors.startDate}</Text> : null}
           </View>
 
           <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
@@ -620,15 +806,15 @@ export default function CreateTournamentScreen({ route, navigation }) {
                 styles.dateButton,
                 { backgroundColor: C.card, borderColor: errors.endDate ? C.error : C.border },
               ]}
-              onPress={() => setDatePickerTarget('end')}
+              onPress={() => handleOpenDatePicker('end')}
               activeOpacity={0.8}
             >
               <Feather name="calendar" size={15} color={C.primary} style={{ marginRight: 6 }} />
               <Text style={[styles.dateButtonText, { color: C.text }]}>{endDate}</Text>
             </TouchableOpacity>
+            {errors.endDate ? <Text style={styles.errorText}>{errors.endDate}</Text> : null}
           </View>
         </View>
-        {errors.endDate ? <Text style={styles.errorText}>{errors.endDate}</Text> : null}
 
         {/* 4. Teams & Players Counts */}
         <View style={styles.rowInputs}>
@@ -937,25 +1123,14 @@ export default function CreateTournamentScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Navigation Controls */}
-        <View style={styles.stepButtonsRow}>
-          <TouchableOpacity
-            style={[styles.backStepBtn, { backgroundColor: C.card, borderColor: C.border }]}
-            onPress={() => setCurrentStep(2)}
-            activeOpacity={0.8}
-          >
-            <Feather name="arrow-left" size={16} color={C.text} style={{ marginRight: 6 }} />
-            <Text style={[styles.backStepBtnText, { color: C.text }]}>Back</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.continuePrimaryBtn, { flex: 1, marginLeft: 10, backgroundColor: '#0F766E' }, SHADOW.card]}
-            onPress={() => setCurrentStep(4)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.continuePrimaryBtnText}>Review & Publish →</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Bottom Primary Action (Top Back button provides previous step navigation) */}
+        <TouchableOpacity
+          style={[styles.continuePrimaryBtn, { backgroundColor: '#0F766E' }, SHADOW.card]}
+          onPress={() => setCurrentStep(4)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.continuePrimaryBtnText}>Review & Publish →</Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -1114,6 +1289,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
       <View style={[styles.headerRow, { borderBottomColor: C.border }]}>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
           onPress={() => {
             if (currentStep > 1) {
               setCurrentStep(currentStep - 1);
@@ -1168,6 +1344,129 @@ export default function CreateTournamentScreen({ route, navigation }) {
         {currentStep === 3 && renderStep3TeamsAndPlayers()}
         {currentStep === 4 && renderStep4SummaryAndConfirm()}
       </ScrollView>
+
+      {/* ── Interactive Calendar Date Picker Modal ── */}
+      <Modal visible={Boolean(datePickerTarget)} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.datePickerModalCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+            {/* Header */}
+            <View style={[styles.modalHeader, { borderBottomColor: C.border }]}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={[styles.modalTitle, { color: C.text }]}>
+                  {datePickerTarget === 'start' ? 'Select Start Date' : 'Select End Date'}
+                </Text>
+                <Text style={[styles.modalSubtitleText, { color: C.subtext }]}>
+                  {datePickerTarget === 'start'
+                    ? 'Tournaments must start today or later'
+                    : `Must be on or after ${startDate || 'start date'}`}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDatePickerTarget(null)}
+                style={styles.modalCloseBtn}
+                activeOpacity={0.7}
+              >
+                <Feather name="x" size={20} color={C.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Presets Chips */}
+            <View style={styles.datePresetsRow}>
+              {getPresets().map((preset) => {
+                const isSelected = tempDate === preset.value;
+                return (
+                  <TouchableOpacity
+                    key={preset.label}
+                    style={[
+                      styles.datePresetChip,
+                      {
+                        backgroundColor: isSelected ? (dark ? 'rgba(15, 118, 110, 0.25)' : '#E6FFFA') : C.bgSoft,
+                        borderColor: isSelected ? C.primary : C.border,
+                      },
+                    ]}
+                    onPress={() => handleSelectPreset(preset.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.datePresetChipText,
+                        { color: isSelected ? C.primary : C.text, fontWeight: isSelected ? '700' : '500' },
+                      ]}
+                    >
+                      {preset.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Month & Year Navigation */}
+            <View style={styles.calendarMonthNav}>
+              <TouchableOpacity
+                style={[styles.calNavBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                onPress={handlePrevMonth}
+                activeOpacity={0.7}
+              >
+                <Feather name="chevron-left" size={18} color={C.text} />
+              </TouchableOpacity>
+
+              <Text style={[styles.calendarMonthTitle, { color: C.text }]}>
+                {MONTH_NAMES[calendarViewMonth]} {calendarViewYear}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.calNavBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                onPress={handleNextMonth}
+                activeOpacity={0.7}
+              >
+                <Feather name="chevron-right" size={18} color={C.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Day of Week Labels */}
+            <View style={styles.calendarWeekRow}>
+              {DAY_LABELS.map((label, idx) => (
+                <View key={idx} style={styles.calendarWeekLabelCell}>
+                  <Text style={[styles.calendarWeekLabelText, { color: C.subtext }]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Days Grid */}
+            <View style={styles.calendarGrid}>
+              {renderCalendarDays()}
+            </View>
+
+            {/* Selected Date Summary & Modal Actions */}
+            <View style={[styles.datePickerFooter, { borderTopColor: C.border }]}>
+              <View style={styles.selectedDateBadge}>
+                <Feather name="calendar" size={13} color={C.primary} style={{ marginRight: 5 }} />
+                <Text style={[styles.selectedDateBadgeText, { color: C.text }]}>
+                  {tempDate || 'None'}
+                </Text>
+              </View>
+
+              <View style={styles.datePickerActionButtons}>
+                <TouchableOpacity
+                  style={[styles.datePickerCancelBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                  onPress={() => setDatePickerTarget(null)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.datePickerCancelBtnText, { color: C.text }]}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.datePickerConfirmBtn, { backgroundColor: '#0F766E' }]}
+                  onPress={handleConfirmDate}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.datePickerConfirmBtnText}>Confirm Date</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Add / Edit Player Modal ── */}
       <Modal visible={playerModalOpen} transparent animationType="slide">
@@ -1318,7 +1617,7 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 38,
     height: 38,
-    borderRadius: RADIUS.full,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1372,25 +1671,86 @@ const styles = StyleSheet.create({
   emptyTurfSubtitle: { fontSize: 13, marginTop: 4, textAlign: 'center' },
   turfPickerCard: {
     flexDirection: 'row',
-    padding: 10,
-    borderRadius: RADIUS.md,
-    marginBottom: 10,
+    padding: 12,
+    borderRadius: RADIUS.lg,
+    marginBottom: 12,
+    alignItems: 'center',
   },
-  turfPickerThumb: { width: 72, height: 72, borderRadius: RADIUS.sm },
-  turfPickerInfo: { flex: 1, marginLeft: 10, justifyContent: 'center' },
-  turfPickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  turfPickerName: { fontSize: 15, fontWeight: '700', flex: 1, marginRight: 6 },
-  checkCircle: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  uncheckCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5 },
-  turfPickerMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  turfPickerLocation: { fontSize: 12 },
-  turfPickerBadgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
-  sportPillSm: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: RADIUS.xs },
-  sportPillSmText: { fontSize: 11, fontWeight: '600' },
-  turfPriceText: { fontSize: 12, fontWeight: '700' },
+  turfPickerThumb: {
+    width: 76,
+    height: 76,
+    borderRadius: RADIUS.md,
+    flexShrink: 0,
+  },
+  turfPickerMiddle: {
+    flex: 1,
+    minWidth: 0,
+    marginHorizontal: 12,
+    justifyContent: 'center',
+  },
+  turfPickerName: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  turfPickerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  turfPickerLocation: {
+    fontSize: 12,
+    flexShrink: 1,
+  },
+  turfPickerSportsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sportPillSm: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.xs,
+    maxWidth: '100%',
+  },
+  sportPillSmText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  turfPickerRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 76,
+    flexShrink: 0,
+  },
+  turfPriceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  turfPriceText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uncheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
   continuePrimaryBtn: {
     height: 48,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 18,
@@ -1410,7 +1770,7 @@ const styles = StyleSheet.create({
   venueBannerTag: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   venueBannerName: { fontSize: 15, fontWeight: '700', marginTop: 1 },
   venueBannerLocation: { fontSize: 12, marginTop: 1 },
-  changeTurfBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.sm, borderWidth: 1 },
+  changeTurfBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.lg, borderWidth: 1 },
   changeTurfBtnText: { fontSize: 12, fontWeight: '700' },
   inputGroup: { marginBottom: 14 },
   inputLabel: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
@@ -1444,7 +1804,7 @@ const styles = StyleSheet.create({
   rowInputs: { flexDirection: 'row', alignItems: 'center' },
   dateButton: {
     height: 46,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1458,7 +1818,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 46,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
   },
   selectBannerBtnText: { fontSize: 14, fontWeight: '700' },
@@ -1479,7 +1839,7 @@ const styles = StyleSheet.create({
   teamTabChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: RADIUS.full,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     marginRight: 8,
     flexDirection: 'row',
@@ -1500,9 +1860,9 @@ const styles = StyleSheet.create({
   addPlayerTriggerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: RADIUS.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: RADIUS.lg,
   },
   addPlayerTriggerBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   emptyRosterCard: { padding: 20, alignItems: 'center', borderRadius: RADIUS.sm },
@@ -1521,7 +1881,7 @@ const styles = StyleSheet.create({
   backStepBtn: {
     height: 48,
     paddingHorizontal: 16,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1565,7 +1925,7 @@ const styles = StyleSheet.create({
   saveDraftBtn: {
     flex: 1,
     height: 48,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1575,7 +1935,7 @@ const styles = StyleSheet.create({
   publishTournamentBtn: {
     flex: 1.3,
     height: 48,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1593,7 +1953,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 16, fontWeight: '700' },
   modalBody: { padding: 14 },
-  savePlayerBtn: { height: 44, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
+  savePlayerBtn: { height: 46, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
   savePlayerBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   bannerModalCard: { width: '100%', maxWidth: 380, maxHeight: '80%', borderRadius: RADIUS.md, borderWidth: 1, overflow: 'hidden' },
   bannerSampleItem: { position: 'relative', height: 90, borderRadius: RADIUS.sm, overflow: 'hidden', marginBottom: 10 },
@@ -1615,8 +1975,140 @@ const styles = StyleSheet.create({
   shareBoxLabel: { fontSize: 11, fontWeight: '600' },
   shareBoxUrl: { fontSize: 12, fontWeight: '700', marginTop: 2 },
   successModalActions: { width: '100%', marginTop: 18, gap: 10 },
-  nativeShareBtn: { height: 46, borderRadius: RADIUS.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  nativeShareBtn: { height: 46, borderRadius: RADIUS.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   nativeShareBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  doneSuccessBtn: { height: 46, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
+  doneSuccessBtn: { height: 46, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center' },
   doneSuccessBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+
+  /* ── Interactive Date Picker Modal Styles ── */
+  datePickerModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  modalSubtitleText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  datePresetsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    marginBottom: 10,
+    gap: 6,
+  },
+  datePresetChip: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePresetChipText: {
+    fontSize: 11,
+  },
+  calendarMonthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  calNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarMonthTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  calendarWeekLabelCell: {
+    width: '14.28%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarWeekLabelText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  calendarDayCell: {
+    width: '14.28%',
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
+    marginVertical: 2,
+  },
+  calendarDayCellEmpty: {
+    width: '14.28%',
+    height: 36,
+    marginVertical: 2,
+  },
+  calendarDayText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  datePickerFooter: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectedDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedDateBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  datePickerActionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  datePickerCancelBtn: {
+    paddingHorizontal: 12,
+    height: 38,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePickerCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  datePickerConfirmBtn: {
+    paddingHorizontal: 14,
+    height: 38,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  datePickerConfirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });

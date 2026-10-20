@@ -890,7 +890,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
               // Registration is Open!
               return (
                 <TouchableOpacity
-                  style={[styles.registerBigBtn, { backgroundColor: C.primary }, SHADOW.floating]}
+                  style={[styles.registerBigBtn, { backgroundColor: '#0F766E' }, SHADOW.floating]}
                   onPress={() => navigation.navigate('RegisterTeam', { tournament })}
                   activeOpacity={0.88}
                 >
@@ -1742,6 +1742,7 @@ const styles = StyleSheet.create({
   blockedCtaText: {
     fontSize: 13,
     fontFamily: FONT.bold,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

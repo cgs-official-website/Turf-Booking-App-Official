@@ -140,6 +140,12 @@ function formatTournament(t, reqUser = null) {
     }));
   }
 
+  // Permissions:
+  // - Admin can edit/delete
+  // - User creator can edit/delete their own tournament
+  // - Vendor creator can edit/delete their own tournament
+  // - Vendor CANNOT edit/delete user-created tournaments
+  // - User CANNOT edit/delete vendor-created tournaments or another user's tournaments
   const canEdit = Boolean(
     isAdmin ||
     (isCommunity && currentUserId && currentUserId === userId) ||

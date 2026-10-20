@@ -131,6 +131,7 @@ export const RADIUS = {
   xl: 20,
   xxl: 28,
   round: 999,
+  full: 999,
 };
 
 export const FONT = {

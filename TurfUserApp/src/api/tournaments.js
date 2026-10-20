@@ -64,8 +64,6 @@ export const updateTournamentTeamsApi = (id, teams) => {
 export const getPublicTournamentByShareIdApi = (shareIdentifier) => {
   return client.get(`/tournaments/share/${shareIdentifier}`);
 };
-
-<<<<<<< HEAD
 /**
  * Register a team for a tournament
  */
@@ -79,6 +77,3 @@ export const registerTournamentTeamApi = (tournamentId, data) => {
 export const getMyTournamentRegistrationApi = (tournamentId) => {
   return client.get(`/tournaments/${tournamentId}/my-registration`);
 };
-
-=======
->>>>>>> 4d1ada6 (Describe your changes)

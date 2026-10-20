@@ -660,7 +660,6 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
-<<<<<<< HEAD
         {/* ── Team Registrations Section (Part 3) ── */}
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <View style={styles.regSectionHeaderRow}>
@@ -962,7 +961,8 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               })()}
             </View>
           )}
-=======
+        </View>
+
         {/* Teams & Squad Rosters Card */}
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Teams & Squad Rosters</Text>
@@ -1041,7 +1041,6 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               </View>
             );
           })}
->>>>>>> 4d1ada6 (Describe your changes)
         </View>
 
         {/* Bottom Actions */}
@@ -1402,7 +1401,6 @@ const styles = StyleSheet.create({
     fontSize: SIZES.sm + 1,
     fontWeight: '700',
   },
-<<<<<<< HEAD
 
   // ── Team Registrations Styles ──
   regSectionHeaderRow: {
@@ -1506,15 +1504,16 @@ const styles = StyleSheet.create({
   },
   regStatusBadge: {
     paddingHorizontal: 8,
-=======
-  sourceTag: {
-    paddingHorizontal: 7,
->>>>>>> 4d1ada6 (Describe your changes)
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
   },
-<<<<<<< HEAD
+  sourceTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
   regStatusBadgeText: {
     fontSize: 10,
     fontWeight: '800',
@@ -1688,7 +1687,6 @@ const styles = StyleSheet.create({
     fontSize: SIZES.xs + 1,
     fontWeight: '700',
   },
-=======
   sourceTagText: {
     fontSize: 9,
     fontWeight: '800',
@@ -1749,7 +1747,6 @@ const styles = StyleSheet.create({
     fontSize: SIZES.xs + 1,
     fontWeight: '600',
   },
->>>>>>> 4d1ada6 (Describe your changes)
 });
 
 export default TournamentDetailScreen;

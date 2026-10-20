@@ -379,23 +379,13 @@ export default function TurfDetailScreen({ route, navigation }) {
                 },
                 SHADOW.card,
               ]}
-<<<<<<< HEAD
               onPress={() =>
                 navigation.navigate('TournamentDetail', {
                   tournamentId: turf.activeTournament.id,
                   tournament: turf.activeTournament,
                 })
               }
-              activeOpacity={0.85}
-=======
-              onPress={() => {
-                navigation.navigate('TournamentDetail', {
-                  tournamentId: turf.activeTournament.id,
-                  tournament: turf.activeTournament,
-                });
-              }}
               activeOpacity={0.88}
->>>>>>> 4d1ada6 (Describe your changes)
             >
               <View style={styles.turfTournamentHeader}>
                 <View style={[styles.turfTournamentBadge, { backgroundColor: '#0F766E' }]}>
