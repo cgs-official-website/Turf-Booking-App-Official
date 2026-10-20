@@ -61,9 +61,15 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
   } else if (lifecycleStatus === 'full') {
     statusBadgeText = `FULL • ${acceptedTeamsCount}/${totalTeams}`;
     statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
-  } else if (lifecycleStatus === 'published') {
+  } else if (lifecycleStatus === 'registration_closed') {
+    statusBadgeText = 'REGISTRATION CLOSED';
+    statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
+  } else if (lifecycleStatus === 'registration_open') {
     statusBadgeText = remainingSlots > 0 ? `OPEN • ${remainingSlots} SLOTS` : 'REGISTRATION OPEN';
     statusBadgeBg = 'rgba(16, 185, 129, 0.95)';
+  } else if (lifecycleStatus === 'published') {
+    statusBadgeText = 'UPCOMING';
+    statusBadgeBg = 'rgba(99, 102, 241, 0.95)';
   } else {
     statusBadgeText = 'DRAFT';
     statusBadgeBg = 'rgba(245, 158, 11, 0.95)';

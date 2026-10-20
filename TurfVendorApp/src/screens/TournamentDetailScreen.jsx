@@ -43,7 +43,7 @@ const formatDate = (dateStr) => {
 };
 
 const TournamentDetailScreen = ({ route, navigation }) => {
-  const { tournamentId } = route.params || {};
+  const tournamentId = route.params?.tournamentId || route.params?.id || route.params?.tournament?.id;
   const { colors, isDark } = useTheme();
 
   const [tournament, setTournament] = useState(null);
@@ -88,16 +88,39 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const loadDetails = useCallback(async () => {
     if (!tournamentId) return;
     try {
-      const [tournRes, regsRes] = await Promise.all([
-        getTournamentByIdApi(tournamentId),
-        getTournamentRegistrationsApi(tournamentId).catch(() => null),
-      ]);
-      const data = tournRes?.data?.tournament || tournRes?.tournament;
-      if (data) {
-        setTournament(data);
+      console.log(`📡 [TournamentDetail] Loading details for tournamentId: "${tournamentId}"`);
+      let tournData = null;
+      try {
+        const tournRes = await getTournamentByIdApi(tournamentId);
+        tournData = tournRes?.data?.tournament || tournRes?.tournament || tournRes;
+        if (tournData && tournData.id) {
+          setTournament(tournData);
+        }
+      } catch (tErr) {
+        console.warn('⚠️ [TournamentDetail] getTournamentByIdApi failed:', tErr);
       }
-      const regs = regsRes?.data?.registrations || regsRes?.registrations || data?.registrations || [];
-      setRegistrations(regs);
+
+      try {
+        const regsRes = await getTournamentRegistrationsApi(tournamentId);
+        console.log('📡 [TournamentDetail] getTournamentRegistrationsApi result:', regsRes);
+        const regs = Array.isArray(regsRes)
+          ? regsRes
+          : Array.isArray(regsRes?.registrations)
+          ? regsRes.registrations
+          : Array.isArray(regsRes?.data?.registrations)
+          ? regsRes.data.registrations
+          : Array.isArray(regsRes?.data)
+          ? regsRes.data
+          : Array.isArray(tournData?.registrations)
+          ? tournData.registrations
+          : [];
+        setRegistrations(regs);
+      } catch (rErr) {
+        console.warn('⚠️ [TournamentDetail] getTournamentRegistrationsApi failed, falling back to tournament registrations:', rErr);
+        if (Array.isArray(tournData?.registrations)) {
+          setRegistrations(tournData.registrations);
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch tournament detail:', err);
     } finally {
@@ -361,36 +384,62 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               </View>
             </View>
 
-            <View
-              style={[
-                styles.statusBadge,
-                {
-                  backgroundColor: isPublished
-                    ? isDark
-                      ? 'rgba(16, 185, 129, 0.15)'
-                      : '#DCFCE7'
-                    : isDark
-                    ? 'rgba(245, 158, 11, 0.15)'
-                    : '#FEF3C7',
-                  borderColor: isPublished ? '#10B981' : '#F59E0B',
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: isPublished ? '#10B981' : '#F59E0B' },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusBadgeText,
-                  { color: isPublished ? '#10B981' : '#D97706' },
-                ]}
-              >
-                {isPublished ? 'Published' : 'Draft'}
-              </Text>
-            </View>
+            {/* Dynamic Lifecycle Status Badge */}
+            {(() => {
+              const lifecycleStatus = tournament.lifecycleStatus || (isPublished ? 'published' : 'draft');
+              const lifecycleLabel = tournament.lifecycleLabel || (isPublished ? 'PUBLISHED' : 'DRAFT');
+
+              let badgeBg = isDark ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7';
+              let badgeBorder = '#10B981';
+              let badgeText = '#10B981';
+
+              if (lifecycleStatus === 'cancelled') {
+                badgeBg = isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2';
+                badgeBorder = '#EF4444';
+                badgeText = '#EF4444';
+              } else if (lifecycleStatus === 'completed') {
+                badgeBg = isDark ? 'rgba(100, 116, 139, 0.15)' : '#F1F5F9';
+                badgeBorder = '#64748B';
+                badgeText = '#64748B';
+              } else if (lifecycleStatus === 'ongoing') {
+                badgeBg = isDark ? 'rgba(2, 132, 199, 0.15)' : '#E0F2FE';
+                badgeBorder = '#0284C7';
+                badgeText = '#0284C7';
+              } else if (lifecycleStatus === 'registration_closed') {
+                badgeBg = isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7';
+                badgeBorder = '#F59E0B';
+                badgeText = '#D97706';
+              } else if (lifecycleStatus === 'registration_open') {
+                badgeBg = isDark ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7';
+                badgeBorder = '#10B981';
+                badgeText = '#10B981';
+              } else if (lifecycleStatus === 'published') {
+                badgeBg = isDark ? 'rgba(14, 165, 233, 0.15)' : '#E0F2FE';
+                badgeBorder = '#0EA5E9';
+                badgeText = '#0284C7';
+              } else {
+                badgeBg = isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7';
+                badgeBorder = '#F59E0B';
+                badgeText = '#D97706';
+              }
+
+              return (
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: badgeBg,
+                      borderColor: badgeBorder,
+                    },
+                  ]}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: badgeText }]} />
+                  <Text style={[styles.statusBadgeText, { color: badgeText }]}>
+                    {lifecycleLabel}
+                  </Text>
+                </View>
+              );
+            })()}
           </View>
 
           <Text style={[styles.tournamentTitle, { color: colors.text }]}>{tournament.name}</Text>
@@ -490,15 +539,50 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Schedule & Dates Card */}
+        {/* Registration Period Card */}
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
-          <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Schedule</Text>
+          <Text style={[styles.cardSectionTitle, { color: colors.text }]}>REGISTRATION PERIOD</Text>
+          <Text style={[styles.cardSectionSub, { color: colors.textSecondary }]}>
+            Window when players and teams are allowed to register
+          </Text>
 
           <View style={styles.scheduleRow}>
             <View style={styles.scheduleCol}>
-              <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>START DATE</Text>
+              <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>REGISTRATION OPENS</Text>
               <View style={styles.dateValueRow}>
                 <Feather name="calendar" size={14} color={colors.primary} />
+                <Text style={[styles.dateValue, { color: colors.text }]}>
+                  {formatDate(tournament.registrationStartDate || tournament.startDate)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.scheduleDivider, { backgroundColor: colors.border }]} />
+
+            <View style={styles.scheduleCol}>
+              <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>REGISTRATION CLOSES</Text>
+              <View style={styles.dateValueRow}>
+                <Feather name="calendar" size={14} color={colors.primary} />
+                <Text style={[styles.dateValue, { color: colors.text }]}>
+                  {formatDate(tournament.registrationEndDate || tournament.startDate)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Tournament Schedule Card */}
+        <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+          <Text style={[styles.cardSectionTitle, { color: colors.text }]}>TOURNAMENT SCHEDULE</Text>
+          <Text style={[styles.cardSectionSub, { color: colors.textSecondary }]}>
+            When actual match play and games take place
+          </Text>
+
+          <View style={styles.scheduleRow}>
+            <View style={styles.scheduleCol}>
+              <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>TOURNAMENT STARTS</Text>
+              <View style={styles.dateValueRow}>
+                <Feather name="play-circle" size={14} color={colors.primary} />
                 <Text style={[styles.dateValue, { color: colors.text }]}>
                   {formatDate(tournament.startDate)}
                 </Text>
@@ -508,9 +592,9 @@ const TournamentDetailScreen = ({ route, navigation }) => {
             <View style={[styles.scheduleDivider, { backgroundColor: colors.border }]} />
 
             <View style={styles.scheduleCol}>
-              <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>END DATE</Text>
+              <Text style={[styles.scheduleLabel, { color: colors.textSecondary }]}>TOURNAMENT ENDS</Text>
               <View style={styles.dateValueRow}>
-                <Feather name="calendar" size={14} color={colors.primary} />
+                <Feather name="flag" size={14} color={colors.primary} />
                 <Text style={[styles.dateValue, { color: colors.text }]}>
                   {formatDate(tournament.endDate)}
                 </Text>
@@ -622,35 +706,59 @@ const TournamentDetailScreen = ({ route, navigation }) => {
             })()}
           </View>
 
-          {/* Accepted Teams Count / Total Teams & Remaining Slots Bar */}
+          {/* Capacity Breakdown: Total Capacity, Accepted, Remaining, Pending, Rejected */}
           {(() => {
             const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
             const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+            const pendingCount = registrations.filter((r) => r.status === 'pending').length;
+            const rejectedCount = registrations.filter((r) => r.status === 'rejected').length;
             const slotsLeft = Math.max(0, totalTeams - acceptedCount);
+
             return (
               <View
                 style={[
-                  styles.capacitySummaryBox,
+                  styles.capacityGridWrap,
                   { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8FAFC', borderColor: colors.border },
                 ]}
               >
-                <View style={styles.capacityMetric}>
-                  <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>ACCEPTED TEAMS</Text>
-                  <Text style={[styles.capacityMetricVal, { color: colors.text }]}>
-                    {acceptedCount} / {totalTeams}
-                  </Text>
+                {/* Row 1: Capacity & Slot Summary */}
+                <View style={styles.capacityMetricRow}>
+                  <View style={styles.capacityMetric}>
+                    <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>TOTAL CAPACITY</Text>
+                    <Text style={[styles.capacityMetricVal, { color: colors.text }]}>{totalTeams}</Text>
+                  </View>
+                  <View style={[styles.capacityMetricDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.capacityMetric}>
+                    <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>ACCEPTED TEAMS</Text>
+                    <Text style={[styles.capacityMetricVal, { color: '#10B981' }]}>{acceptedCount}</Text>
+                  </View>
+                  <View style={[styles.capacityMetricDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.capacityMetric}>
+                    <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>REMAINING SLOTS</Text>
+                    <Text style={[styles.capacityMetricVal, { color: slotsLeft > 0 ? colors.primary : '#EF4444' }]}>
+                      {slotsLeft}
+                    </Text>
+                  </View>
                 </View>
-                <View style={[styles.capacityMetricDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.capacityMetric}>
-                  <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>REMAINING SLOTS</Text>
-                  <Text
-                    style={[
-                      styles.capacityMetricVal,
-                      { color: slotsLeft > 0 ? colors.primary : '#EF4444' },
-                    ]}
-                  >
-                    {slotsLeft}
-                  </Text>
+
+                {/* Sub Divider */}
+                <View style={[styles.capacitySubDivider, { backgroundColor: colors.border }]} />
+
+                {/* Row 2: Applications Status */}
+                <View style={styles.capacityMetricRow}>
+                  <View style={styles.capacityMetric}>
+                    <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>PENDING APPLICATIONS</Text>
+                    <Text style={[styles.capacityMetricVal, { color: pendingCount > 0 ? '#F59E0B' : colors.text }]}>
+                      {pendingCount}
+                    </Text>
+                  </View>
+                  <View style={[styles.capacityMetricDivider, { backgroundColor: colors.border }]} />
+                  <View style={styles.capacityMetric}>
+                    <Text style={[styles.capacityMetricLabel, { color: colors.textSecondary }]}>REJECTED APPLICATIONS</Text>
+                    <Text style={[styles.capacityMetricVal, { color: rejectedCount > 0 ? '#EF4444' : colors.textSecondary }]}>
+                      {rejectedCount}
+                    </Text>
+                  </View>
                 </View>
               </View>
             );
@@ -754,7 +862,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                         <View style={styles.regMetaItem}>
                           <Feather name="users" size={12} color={colors.textSecondary} />
                           <Text style={[styles.regMetaText, { color: colors.textSecondary }]}>
-                            {regPlayers.length || tournament.playersPerTeam} Players
+                            {regPlayers.length || tournament?.playersPerTeam || 11} Players
                           </Text>
                         </View>
 
@@ -787,7 +895,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                           activeOpacity={0.7}
                         >
                           <Text style={[styles.toggleRosterText, { color: colors.primary }]}>
-                            {isExpanded ? 'Hide Players Roster' : `View ${regPlayers.length} Players`}
+                            {isExpanded ? 'Hide Squad' : `View Squad (${regPlayers.length || 11})`}
                           </Text>
                           <Feather
                             name={isExpanded ? 'chevron-up' : 'chevron-down'}
@@ -1201,6 +1309,10 @@ const styles = StyleSheet.create({
   cardSectionTitle: {
     fontSize: SIZES.base,
     fontWeight: '800',
+    marginBottom: 4,
+  },
+  cardSectionSub: {
+    fontSize: SIZES.xs,
     marginBottom: 12,
   },
   scheduleRow: {
@@ -1312,6 +1424,23 @@ const styles = StyleSheet.create({
   capacityBadgeText: {
     fontSize: 10,
     fontWeight: '800',
+  },
+  capacityGridWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  capacityMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 2,
+  },
+  capacitySubDivider: {
+    height: 1,
+    marginVertical: 8,
   },
   capacitySummaryBox: {
     flexDirection: 'row',

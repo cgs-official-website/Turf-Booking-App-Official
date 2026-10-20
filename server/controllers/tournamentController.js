@@ -35,10 +35,11 @@ function formatTournament(t, reqUser = null) {
   const isCommunity = creatorType === 'USER' || Boolean(userId);
 
   const currentUserId = reqUser ? reqUser.id || reqUser.uid : null;
+  const currentVendorId = reqUser ? reqUser.vendorId || reqUser.id || reqUser.uid : null;
   const isAdmin = reqUser?.role === 'admin' || reqUser?.role === 'superadmin';
   const isOwner = Boolean(
-    currentUserId &&
-    (currentUserId === userId || currentUserId === vendorId)
+    (currentUserId && (currentUserId === userId || currentUserId === vendorId)) ||
+    (currentVendorId && (currentVendorId === vendorId || (t.turf?.vendorId && t.turf.vendorId === currentVendorId)))
   );
 
   const totalTeams = t.numberOfTeams !== null && t.numberOfTeams !== undefined
@@ -47,6 +48,8 @@ function formatTournament(t, reqUser = null) {
 
   const registrationsList = Array.isArray(t.registrations) ? t.registrations : [];
   const acceptedTeamsCount = registrationsList.filter((r) => r.status === 'accepted').length;
+  const pendingApplicationsCount = registrationsList.filter((r) => r.status === 'pending').length;
+  const rejectedApplicationsCount = registrationsList.filter((r) => r.status === 'rejected').length;
   const remainingSlots = Math.max(0, totalTeams - acceptedTeamsCount);
   const isFull = acceptedTeamsCount >= totalTeams;
 
@@ -54,7 +57,13 @@ function formatTournament(t, reqUser = null) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const startStr = String(t.startDate || '').slice(0, 10);
   const endStr = String(t.endDate || '').slice(0, 10);
-  const regDeadline = t.registrationEndDate ? String(t.registrationEndDate).slice(0, 10) : null;
+  const regStartStr = t.registrationStartDate ? String(t.registrationStartDate).slice(0, 10) : null;
+  const regEndStr = t.registrationEndDate ? String(t.registrationEndDate).slice(0, 10) : null;
+
+  const isRegistrationNotOpenYet = Boolean(regStartStr && todayStr < regStartStr);
+  const isRegistrationEnded = Boolean(regEndStr && todayStr > regEndStr);
+  const isTournamentStarted = Boolean(startStr && todayStr >= startStr);
+  const isTournamentCompleted = Boolean(endStr && todayStr > endStr);
 
   let lifecycleStatus = 'draft';
   let lifecycleLabel = 'DRAFT';
@@ -62,18 +71,27 @@ function formatTournament(t, reqUser = null) {
   if (t.status === 'cancelled') {
     lifecycleStatus = 'cancelled';
     lifecycleLabel = 'CANCELLED';
-  } else if (endStr && todayStr > endStr) {
+  } else if (isTournamentCompleted) {
     lifecycleStatus = 'completed';
     lifecycleLabel = 'COMPLETED';
-  } else if (startStr && todayStr >= startStr) {
+  } else if (isTournamentStarted) {
     lifecycleStatus = 'ongoing';
     lifecycleLabel = 'ONGOING';
-  } else if (isFull) {
-    lifecycleStatus = 'full';
-    lifecycleLabel = 'FULL';
   } else if (t.status === 'published') {
-    lifecycleStatus = 'published';
-    lifecycleLabel = 'REGISTRATION OPEN';
+    if (isFull) {
+      lifecycleStatus = 'registration_closed';
+      lifecycleLabel = 'TEAMS FULL';
+    } else if (isRegistrationEnded) {
+      lifecycleStatus = 'registration_closed';
+      lifecycleLabel = 'REGISTRATION CLOSED';
+    } else if (isRegistrationNotOpenYet) {
+      lifecycleStatus = 'published';
+      lifecycleLabel = 'UPCOMING';
+    } else {
+      // Within registration open window (regStart <= today <= regEnd)
+      lifecycleStatus = 'registration_open';
+      lifecycleLabel = 'REGISTRATION OPEN';
+    }
   } else {
     lifecycleStatus = t.status || 'draft';
     lifecycleLabel = String(lifecycleStatus).toUpperCase();
@@ -81,12 +99,12 @@ function formatTournament(t, reqUser = null) {
 
   // Registration blocked flag
   const isRegistrationBlocked =
+    t.status !== 'published' ||
     isFull ||
-    lifecycleStatus === 'completed' ||
-    lifecycleStatus === 'cancelled' ||
-    lifecycleStatus === 'ongoing' ||
-    lifecycleStatus === 'draft' ||
-    Boolean(regDeadline && todayStr > regDeadline);
+    isRegistrationNotOpenYet ||
+    isRegistrationEnded ||
+    isTournamentStarted ||
+    isTournamentCompleted;
 
   // Authenticated user's own registration
   let myRegistration = null;
@@ -177,6 +195,8 @@ function formatTournament(t, reqUser = null) {
     category: t.sport,
     startDate: t.startDate,
     endDate: t.endDate,
+    registrationStartDate: t.registrationStartDate || null,
+    registrationEndDate: t.registrationEndDate || null,
     numberOfTeams: totalTeams,
     playersPerTeam: t.playersPerTeam !== null && t.playersPerTeam !== undefined ? Number(t.playersPerTeam) : null,
     oversPerTeam: t.oversPerTeam !== null && t.oversPerTeam !== undefined ? Number(t.oversPerTeam) : null,
@@ -185,11 +205,18 @@ function formatTournament(t, reqUser = null) {
     lifecycleStatus,
     lifecycleLabel,
     acceptedTeamsCount,
+    pendingApplicationsCount,
+    rejectedApplicationsCount,
     totalTeams,
     remainingSlots,
     isFull,
+    isRegistrationOpen: !isRegistrationBlocked,
     isRegistrationBlocked,
-    registrationDeadline: regDeadline,
+    isRegistrationNotOpenYet,
+    isRegistrationEnded,
+    isTournamentStarted,
+    isTournamentCompleted,
+    registrationDeadline: regEndStr,
     myRegistration,
     description: t.description || '',
     rules: t.rules || '',
@@ -197,8 +224,6 @@ function formatTournament(t, reqUser = null) {
     venueName: t.venueName || t.turf?.name || null,
     city: t.city || t.turf?.city || null,
     venueLocation: t.venueLocation || t.turf?.location || null,
-    registrationStartDate: t.registrationStartDate || null,
-    registrationEndDate: t.registrationEndDate || null,
     entryFee: t.entryFee !== undefined && t.entryFee !== null ? Number(t.entryFee) : 0,
     prizePool: t.prizePool !== undefined && t.prizePool !== null ? Number(t.prizePool) : 0,
     prizeDetails: t.prizeDetails || null,
@@ -421,8 +446,8 @@ const tournamentController = {
    */
   async getVendorTournaments(req, res) {
     try {
-      const vendorId = req.vendor?.id || req.user?.id || req.user?.uid;
-      const { turfId } = req.query;
+      const vendorId = req.vendor?.id || req.user?.id || req.user?.uid || req.user?.vendorId;
+      const turfId = req.params?.turfId || req.query?.turfId;
 
       if (!vendorId) {
         return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
@@ -438,7 +463,13 @@ const tournamentController = {
         if (!turf || turf.vendorId !== vendorId) {
           return sendError(res, 'Turf not found or does not belong to vendor', 403, 'FORBIDDEN');
         }
-        where = { turfId };
+        where = {
+          turfId,
+          OR: [
+            { vendorId },
+            { turf: { vendorId } },
+          ],
+        };
       } else {
         // Query all turfs belonging to vendor
         const vendorTurfs = await prisma.turf.findMany({
@@ -450,6 +481,7 @@ const tournamentController = {
           OR: [
             { turfId: { in: turfIds } },
             { vendorId: vendorId },
+            { turf: { vendorId } },
           ],
         };
       }
@@ -458,7 +490,7 @@ const tournamentController = {
         where,
         include: {
           turf: {
-            select: { id: true, name: true, city: true, images: true, logo: true, location: true },
+            select: { id: true, name: true, city: true, images: true, logo: true, location: true, vendorId: true },
           },
           registrations: true,
           user: {
@@ -487,7 +519,7 @@ const tournamentController = {
    */
   async getTournamentById(req, res) {
     try {
-      const id = req.params?.id || req.params?.tournamentId;
+      const id = (req.params?.id || req.params?.tournamentId || '').trim();
       if (!id) {
         return sendError(res, 'Tournament ID is required', 400, 'MISSING_ID');
       }
@@ -505,6 +537,7 @@ const tournamentController = {
               location: true,
               sports: true,
               pricePerHour: true,
+              vendorId: true,
             },
           },
           user: {
@@ -713,6 +746,8 @@ const tournamentController = {
         name,
         sport,
         category,
+        registrationStartDate,
+        registrationEndDate,
         startDate,
         endDate,
         numberOfTeams,
@@ -721,6 +756,8 @@ const tournamentController = {
         description,
         rules,
         bannerUrl,
+        status,
+        publishNow,
       } = req.body;
 
       const effectiveSport = (sport || category || '').trim();
@@ -735,14 +772,28 @@ const tournamentController = {
       if (!effectiveSport) {
         errors.sport = 'Sport category is required';
       }
+      if (!registrationStartDate) {
+        errors.registrationStartDate = 'Registration opening date is required';
+      }
+      if (!registrationEndDate) {
+        errors.registrationEndDate = 'Registration closing date is required';
+      }
       if (!startDate) {
-        errors.startDate = 'Start date is required';
+        errors.startDate = 'Tournament start date is required';
       }
       if (!endDate) {
-        errors.endDate = 'End date is required';
+        errors.endDate = 'Tournament end date is required';
       }
-      if (startDate && endDate && endDate < startDate) {
-        errors.dateRange = 'End date cannot be earlier than start date';
+
+      // 4-Date sequence validation
+      if (registrationStartDate && registrationEndDate && !validateDateStrings(registrationStartDate, registrationEndDate)) {
+        errors.registrationDates = 'Registration closing date must be on or after registration opening date';
+      }
+      if (registrationEndDate && startDate && !validateDateStrings(registrationEndDate, startDate)) {
+        errors.tournamentStartDate = 'Tournament start date must be on or after registration closing date';
+      }
+      if (startDate && endDate && !validateDateStrings(startDate, endDate)) {
+        errors.tournamentDates = 'Tournament end date must be on or after tournament start date';
       }
 
       const teamsCount = parseInt(numberOfTeams, 10);
@@ -779,6 +830,7 @@ const tournamentController = {
       }
 
       const shareableIdentifier = generateShareableIdentifier();
+      const initialStatus = publishNow || status === 'published' ? 'published' : 'draft';
 
       const tournament = await prisma.tournament.create({
         data: {
@@ -789,15 +841,18 @@ const tournamentController = {
           sport: effectiveSport,
           venueName: turf.name,
           city: turf.city,
+          registrationStartDate: String(registrationStartDate).slice(0, 32),
+          registrationEndDate: String(registrationEndDate).slice(0, 32),
           startDate: String(startDate).slice(0, 32),
           endDate: String(endDate).slice(0, 32),
           numberOfTeams: teamsCount,
+          participantCapacity: teamsCount,
           playersPerTeam: playersCount,
           oversPerTeam: parsedOvers,
           description: description ? description.trim() : null,
           rules: rules ? rules.trim() : null,
           bannerUrl: bannerUrl ? bannerUrl.trim() : null,
-          status: 'draft',
+          status: initialStatus,
           shareableIdentifier,
         },
         include: {
@@ -821,7 +876,8 @@ const tournamentController = {
 
   /**
    * POST /api/v1/admin/tournaments
-   * Super Admin creates a tournament directly
+   * POST /api/v1/vendor/tournaments
+   * Create tournament endpoint supporting both Vendor and Admin callers
    */
   async createTournament(req, res) {
     try {
@@ -829,14 +885,18 @@ const tournamentController = {
         name,
         description,
         sport,
+        category,
         turfId,
         venueName,
         city,
         venueLocation,
-        startDate,
-        endDate,
         registrationStartDate,
         registrationEndDate,
+        startDate,
+        endDate,
+        numberOfTeams,
+        playersPerTeam,
+        oversPerTeam,
         entryFee,
         prizePool,
         prizeDetails,
@@ -849,41 +909,61 @@ const tournamentController = {
         contactEmail,
       } = req.body;
 
+      const effectiveSport = (sport || category || '').trim();
       const errors = {};
       if (!name || !name.trim()) errors.name = 'Tournament name is required';
-      if (!sport || !sport.trim()) errors.sport = 'Sport type is required';
-      if (!startDate) errors.startDate = 'Start date is required';
-      if (!endDate) errors.endDate = 'End date is required';
+      if (!effectiveSport) errors.sport = 'Sport type is required';
+      if (!registrationStartDate) errors.registrationStartDate = 'Registration opening date is required';
+      if (!registrationEndDate) errors.registrationEndDate = 'Registration closing date is required';
+      if (!startDate) errors.startDate = 'Tournament start date is required';
+      if (!endDate) errors.endDate = 'Tournament end date is required';
 
-      if (startDate && endDate && !validateDateStrings(startDate, endDate)) {
-        errors.dateRange = 'Tournament end date must be on or after start date';
-      }
+      // 4-Date validation sequence
       if (registrationStartDate && registrationEndDate && !validateDateStrings(registrationStartDate, registrationEndDate)) {
-        errors.regDateRange = 'Registration end date must be on or after registration start date';
+        errors.registrationDates = 'Registration closing date must be on or after registration opening date';
       }
-      if (registrationEndDate && startDate) {
-        const regEnd = new Date(registrationEndDate).getTime();
-        const tStart = new Date(startDate).getTime();
-        if (regEnd > tStart) {
-          errors.regDeadline = 'Registration deadline cannot be after tournament start date';
+      if (registrationEndDate && startDate && !validateDateStrings(registrationEndDate, startDate)) {
+        errors.tournamentStartDate = 'Tournament start date must be on or after registration closing date';
+      }
+      if (startDate && endDate && !validateDateStrings(startDate, endDate)) {
+        errors.tournamentDates = 'Tournament end date must be on or after tournament start date';
+      }
+
+      const teamsCount = numberOfTeams
+        ? parseInt(numberOfTeams, 10)
+        : (participantCapacity ? parseInt(participantCapacity, 10) : 8);
+      if (isNaN(teamsCount) || teamsCount < 2) {
+        errors.numberOfTeams = 'Number of teams must be at least 2';
+      }
+
+      const playersCount = playersPerTeam ? parseInt(playersPerTeam, 10) : 11;
+      if (isNaN(playersCount) || playersCount < 1) {
+        errors.playersPerTeam = 'Players per team must be at least 1';
+      }
+
+      const isCricket = effectiveSport.toLowerCase().includes('cricket');
+      let parsedOvers = null;
+      if (isCricket) {
+        if (oversPerTeam !== undefined && oversPerTeam !== null && oversPerTeam !== '') {
+          parsedOvers = parseInt(oversPerTeam, 10);
+          if (isNaN(parsedOvers) || parsedOvers < 1) {
+            errors.oversPerTeam = 'Overs per team must be greater than 0 for Cricket';
+          }
         }
       }
 
-      if (entryFee !== undefined && (isNaN(Number(entryFee)) || Number(entryFee) < 0)) {
+      if (entryFee !== undefined && entryFee !== '' && (isNaN(Number(entryFee)) || Number(entryFee) < 0)) {
         errors.entryFee = 'Entry fee must be a valid non-negative number';
       }
-      if (prizePool !== undefined && (isNaN(Number(prizePool)) || Number(prizePool) < 0)) {
+      if (prizePool !== undefined && prizePool !== '' && (isNaN(Number(prizePool)) || Number(prizePool) < 0)) {
         errors.prizePool = 'Prize pool must be a valid non-negative number';
-      }
-      if (participantCapacity !== undefined && (isNaN(parseInt(participantCapacity, 10)) || parseInt(participantCapacity, 10) < 2)) {
-        errors.participantCapacity = 'Participant capacity must be at least 2';
       }
 
       if (Object.keys(errors).length > 0) {
         return sendError(res, Object.values(errors)[0], 400, 'VALIDATION_ERROR', errors);
       }
 
-      let resolvedVendorId = null;
+      let resolvedVendorId = req.vendor?.id || req.user?.vendorId || null;
       let resolvedVenue = venueName ? venueName.trim() : null;
       let resolvedCity = city ? city.trim() : null;
 
@@ -893,7 +973,7 @@ const tournamentController = {
           select: { id: true, name: true, city: true, vendorId: true },
         });
         if (turf) {
-          resolvedVendorId = turf.vendorId;
+          if (!resolvedVendorId) resolvedVendorId = turf.vendorId;
           if (!resolvedVenue) resolvedVenue = turf.name;
           if (!resolvedCity) resolvedCity = turf.city;
         }
@@ -906,27 +986,30 @@ const tournamentController = {
           creatorType: 'VENDOR',
           name: name.trim(),
           description: description ? description.trim() : null,
-          sport: sport.trim(),
+          sport: effectiveSport,
           turfId: turfId || null,
           vendorId: resolvedVendorId,
           venueName: resolvedVenue || 'TBD',
           city: resolvedCity,
           venueLocation: venueLocation || null,
+          registrationStartDate: String(registrationStartDate).slice(0, 32),
+          registrationEndDate: String(registrationEndDate).slice(0, 32),
           startDate: String(startDate).slice(0, 32),
           endDate: String(endDate).slice(0, 32),
-          registrationStartDate: registrationStartDate ? String(registrationStartDate).slice(0, 32) : null,
-          registrationEndDate: registrationEndDate ? String(registrationEndDate).slice(0, 32) : null,
-          entryFee: entryFee !== undefined ? Number(entryFee) : 0,
-          prizePool: prizePool !== undefined ? Number(prizePool) : 0,
+          numberOfTeams: teamsCount,
+          participantCapacity: teamsCount,
+          playersPerTeam: playersCount,
+          oversPerTeam: parsedOvers,
+          entryFee: entryFee !== undefined && entryFee !== '' ? Number(entryFee) : 0,
+          prizePool: prizePool !== undefined && prizePool !== '' ? Number(prizePool) : 0,
           prizeDetails: prizeDetails || null,
-          participantCapacity: participantCapacity ? parseInt(participantCapacity, 10) : 16,
           format: format ? String(format).trim().toLowerCase() : 'knockout',
           rules: rules ? rules.trim() : null,
           bannerUrl: bannerUrl ? bannerUrl.trim() : null,
           status: status && VALID_STATUSES.includes(status.toLowerCase()) ? status.toLowerCase() : 'draft',
           contactPhone: contactPhone ? contactPhone.trim() : null,
           contactEmail: contactEmail ? contactEmail.trim().toLowerCase() : null,
-          createdBy: req.user?.id || req.user?.uid || 'superadmin',
+          createdBy: req.user?.id || req.user?.uid || req.vendor?.id || 'vendor',
           shareableIdentifier,
         },
         include: {
@@ -938,7 +1021,7 @@ const tournamentController = {
 
       return sendSuccess(res, { tournament: formatTournament(newTournament, req.user) }, 201);
     } catch (err) {
-      console.error('Error creating admin tournament:', err);
+      console.error('Error creating tournament:', err);
       return sendError(res, err.message || 'Failed to create tournament', 500, 'CREATE_TOURNAMENT_FAILED');
     }
   },
@@ -982,10 +1065,10 @@ const tournamentController = {
         venueName,
         city,
         venueLocation,
-        startDate,
-        endDate,
         registrationStartDate,
         registrationEndDate,
+        startDate,
+        endDate,
         entryFee,
         prizePool,
         prizeDetails,
@@ -1004,10 +1087,20 @@ const tournamentController = {
       const errors = {};
       if (name !== undefined && !name.trim()) errors.name = 'Tournament name cannot be empty';
 
-      const sDate = startDate !== undefined ? startDate : existing.startDate;
-      const eDate = endDate !== undefined ? endDate : existing.endDate;
-      if (sDate && eDate && eDate < sDate) {
-        errors.dateRange = 'End date cannot be earlier than start date';
+      const sDate = startDate !== undefined ? String(startDate).slice(0, 32) : existing.startDate;
+      const eDate = endDate !== undefined ? String(endDate).slice(0, 32) : existing.endDate;
+      const rSDate = registrationStartDate !== undefined ? String(registrationStartDate).slice(0, 32) : existing.registrationStartDate;
+      const rEDate = registrationEndDate !== undefined ? String(registrationEndDate).slice(0, 32) : existing.registrationEndDate;
+
+      // 4-Date validation sequence
+      if (rSDate && rEDate && !validateDateStrings(rSDate, rEDate)) {
+        errors.registrationDates = 'Registration closing date must be on or after registration opening date';
+      }
+      if (rEDate && sDate && !validateDateStrings(rEDate, sDate)) {
+        errors.tournamentStartDate = 'Tournament start date must be on or after registration closing date';
+      }
+      if (sDate && eDate && !validateDateStrings(sDate, eDate)) {
+        errors.tournamentDates = 'Tournament end date must be on or after tournament start date';
       }
 
       if (numberOfTeams !== undefined) {
@@ -1030,9 +1123,14 @@ const tournamentController = {
       if (description !== undefined) updateData.description = description ? description.trim() : null;
       if (rules !== undefined) updateData.rules = rules ? rules.trim() : null;
       if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl ? bannerUrl.trim() : null;
+      if (registrationStartDate !== undefined) updateData.registrationStartDate = String(registrationStartDate).slice(0, 32);
+      if (registrationEndDate !== undefined) updateData.registrationEndDate = String(registrationEndDate).slice(0, 32);
       if (startDate !== undefined) updateData.startDate = String(startDate).slice(0, 32);
       if (endDate !== undefined) updateData.endDate = String(endDate).slice(0, 32);
-      if (numberOfTeams !== undefined) updateData.numberOfTeams = parseInt(numberOfTeams, 10);
+      if (numberOfTeams !== undefined) {
+        updateData.numberOfTeams = parseInt(numberOfTeams, 10);
+        updateData.participantCapacity = parseInt(numberOfTeams, 10);
+      }
       if (playersPerTeam !== undefined) updateData.playersPerTeam = parseInt(playersPerTeam, 10);
       if (oversPerTeam !== undefined) updateData.oversPerTeam = oversPerTeam ? parseInt(oversPerTeam, 10) : null;
 
@@ -1059,12 +1157,12 @@ const tournamentController = {
       }
       if (city !== undefined) updateData.city = city ? city.trim() : null;
       if (venueLocation !== undefined) updateData.venueLocation = venueLocation || null;
-      if (registrationStartDate !== undefined) updateData.registrationStartDate = String(registrationStartDate).slice(0, 32);
-      if (registrationEndDate !== undefined) updateData.registrationEndDate = String(registrationEndDate).slice(0, 32);
       if (entryFee !== undefined) updateData.entryFee = Number(entryFee);
       if (prizePool !== undefined) updateData.prizePool = prizePool !== '' ? Number(prizePool) : 0;
       if (prizeDetails !== undefined) updateData.prizeDetails = prizeDetails || null;
-      if (participantCapacity !== undefined) updateData.participantCapacity = parseInt(participantCapacity, 10);
+      if (participantCapacity !== undefined && numberOfTeams === undefined) {
+        updateData.participantCapacity = parseInt(participantCapacity, 10);
+      }
       if (format !== undefined) updateData.format = String(format).trim().toLowerCase();
       if (contactPhone !== undefined) updateData.contactPhone = contactPhone ? contactPhone.trim() : null;
       if (contactEmail !== undefined) updateData.contactEmail = contactEmail ? contactEmail.trim().toLowerCase() : null;
@@ -1477,14 +1575,22 @@ const tournamentController = {
       }
 
       const todayStr = new Date().toISOString().slice(0, 10);
+      const startStr = String(tournament.startDate || '').slice(0, 10);
       const endStr = String(tournament.endDate || '').slice(0, 10);
-      const regDeadline = tournament.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : null;
+      const regStartStr = tournament.registrationStartDate ? String(tournament.registrationStartDate).slice(0, 10) : null;
+      const regEndStr = tournament.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : null;
 
       if (endStr && todayStr > endStr) {
-        return sendError(res, 'This tournament has already completed', 400, 'TOURNAMENT_COMPLETED');
+        return sendError(res, 'This tournament has already completed. Registrations are closed.', 400, 'TOURNAMENT_COMPLETED');
       }
-      if (regDeadline && todayStr > regDeadline) {
-        return sendError(res, `Registration deadline (${regDeadline}) has passed`, 400, 'DEADLINE_PASSED');
+      if (startStr && todayStr >= startStr) {
+        return sendError(res, 'Tournament has already started. New registrations are not permitted.', 400, 'TOURNAMENT_ONGOING');
+      }
+      if (regStartStr && todayStr < regStartStr) {
+        return sendError(res, `Registration for this tournament has not opened yet. Registration opens on ${regStartStr}.`, 400, 'REGISTRATION_NOT_OPEN');
+      }
+      if (regEndStr && todayStr > regEndStr) {
+        return sendError(res, `Registration deadline (${regEndStr}) has passed. Registration is closed.`, 400, 'DEADLINE_PASSED');
       }
 
       const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
@@ -1642,8 +1748,10 @@ const tournamentController = {
    */
   async getTournamentRegistrations(req, res) {
     try {
-      const tournamentId = req.params?.id;
-      const currentVendorId = req.vendor?.id || req.user?.id || req.user?.uid;
+      const tournamentId = (req.params?.id || req.params?.tournamentId || '').trim();
+      const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id || req.user?.uid;
+
+      console.log(`📡 [VendorAPI] getTournamentRegistrations requested for tournament: "${tournamentId}", vendor: "${currentVendorId}"`);
 
       if (!currentVendorId) {
         return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
@@ -1657,6 +1765,7 @@ const tournamentController = {
       });
 
       if (!tournament) {
+        console.warn(`⚠️ [VendorAPI] Tournament "${tournamentId}" not found in database`);
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
@@ -1668,6 +1777,7 @@ const tournamentController = {
       );
 
       if (!isOwner && !isAdmin) {
+        console.warn(`⛔ [VendorAPI] Vendor "${currentVendorId}" is not owner of tournament "${tournamentId}" (turf vendor: "${tournament.turf?.vendorId}", tourn vendor: "${tournament.vendorId}")`);
         return sendError(res, 'Access denied: You do not own this tournament or its turf', 403, 'FORBIDDEN');
       }
 
@@ -1676,11 +1786,15 @@ const tournamentController = {
         orderBy: { createdAt: 'desc' },
       });
 
+      console.log(`✅ [VendorAPI] Returning ${registrations.length} registrations for tournament "${tournament.name}" (${tournamentId})`);
+
       const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
         ? Number(tournament.numberOfTeams)
         : (tournament.participantCapacity || 16);
 
       const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+      const pendingCount = registrations.filter((r) => r.status === 'pending').length;
+      const rejectedCount = registrations.filter((r) => r.status === 'rejected').length;
       const remainingSlots = Math.max(0, totalTeams - acceptedCount);
 
       return sendSuccess(res, {
@@ -1688,6 +1802,8 @@ const tournamentController = {
         summary: {
           totalTeams,
           acceptedCount,
+          pendingCount,
+          rejectedCount,
           remainingSlots,
           isFull: acceptedCount >= totalTeams,
         },
@@ -1704,9 +1820,9 @@ const tournamentController = {
    */
   async acceptRegistration(req, res) {
     try {
-      const tournamentId = req.params?.id;
-      const regId = req.params?.regId || req.params?.registrationId;
-      const currentVendorId = req.vendor?.id || req.user?.id || req.user?.uid;
+      const tournamentId = (req.params?.id || req.params?.tournamentId || '').trim();
+      const regId = (req.params?.regId || req.params?.registrationId || '').trim();
+      const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id || req.user?.uid;
 
       if (!currentVendorId) {
         return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
@@ -1814,10 +1930,10 @@ const tournamentController = {
    */
   async rejectRegistration(req, res) {
     try {
-      const tournamentId = req.params?.id;
-      const regId = req.params?.regId || req.params?.registrationId;
+      const tournamentId = (req.params?.id || req.params?.tournamentId || '').trim();
+      const regId = (req.params?.regId || req.params?.registrationId || '').trim();
       const { reason, rejectionReason } = req.body;
-      const currentVendorId = req.vendor?.id || req.user?.id || req.user?.uid;
+      const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id || req.user?.uid;
 
       if (!currentVendorId) {
         return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');

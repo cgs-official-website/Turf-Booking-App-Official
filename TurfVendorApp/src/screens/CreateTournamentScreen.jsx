@@ -45,20 +45,31 @@ const CreateTournamentScreen = ({ navigation, route }) => {
   const [selectedSport, setSelectedSport] = useState('Cricket');
   const [customSport, setCustomSport] = useState('');
 
-  // Default start date = tomorrow, end date = tomorrow + 3 days
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const nextWeek = new Date();
-  nextWeek.setDate(tomorrow.getDate() + 4);
+  // Default date timeline:
+  // Registration Opens: Today
+  // Registration Closes: Today + 5 days
+  // Tournament Starts: Today + 7 days
+  // Tournament Ends: Today + 10 days
+  const today = new Date();
+  const dRegClose = new Date();
+  dRegClose.setDate(today.getDate() + 5);
+  const dTourStart = new Date();
+  dTourStart.setDate(today.getDate() + 7);
+  const dTourEnd = new Date();
+  dTourEnd.setDate(today.getDate() + 10);
 
-  const [startDate, setStartDate] = useState(toDateString(tomorrow));
-  const [endDate, setEndDate] = useState(toDateString(nextWeek));
+  const [registrationStartDate, setRegistrationStartDate] = useState(toDateString(today));
+  const [registrationEndDate, setRegistrationEndDate] = useState(toDateString(dRegClose));
+  const [startDate, setStartDate] = useState(toDateString(dTourStart));
+  const [endDate, setEndDate] = useState(toDateString(dTourEnd));
 
   const [numberOfTeams, setNumberOfTeams] = useState('8');
   const [playersPerTeam, setPlayersPerTeam] = useState('11');
   const [oversPerTeam, setOversPerTeam] = useState('10');
 
   // Date Pickers state
+  const [showRegStartDatePicker, setShowRegStartDatePicker] = useState(false);
+  const [showRegEndDatePicker, setShowRegEndDatePicker] = useState(false);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
@@ -102,17 +113,28 @@ const CreateTournamentScreen = ({ navigation, route }) => {
       errs.sport = 'Please select or enter a sport';
     }
 
+    if (!registrationStartDate) {
+      errs.registrationStartDate = 'Registration opening date is required';
+    }
+    if (!registrationEndDate) {
+      errs.registrationEndDate = 'Registration closing date is required';
+    }
     if (!startDate) {
-      errs.startDate = 'Start date is required';
+      errs.startDate = 'Tournament start date is required';
     }
     if (!endDate) {
-      errs.endDate = 'End date is required';
+      errs.endDate = 'Tournament end date is required';
     }
 
-    if (startDate && endDate) {
-      if (endDate < startDate) {
-        errs.endDate = 'End date cannot be earlier than start date';
-      }
+    // Strict chronological validation: regStart <= regEnd <= tourtStart <= tourtEnd
+    if (registrationStartDate && registrationEndDate && registrationEndDate < registrationStartDate) {
+      errs.registrationDates = 'Registration closes date cannot be earlier than registration opens date';
+    }
+    if (registrationEndDate && startDate && startDate < registrationEndDate) {
+      errs.tournamentStartDate = 'Tournament starts date cannot be earlier than registration closes date';
+    }
+    if (startDate && endDate && endDate < startDate) {
+      errs.tournamentDates = 'Tournament ends date cannot be earlier than tournament starts date';
     }
 
     const teamsNum = parseInt(numberOfTeams, 10);
@@ -152,6 +174,8 @@ const CreateTournamentScreen = ({ navigation, route }) => {
         turfId,
         name: name.trim(),
         sport: effectiveSport,
+        registrationStartDate,
+        registrationEndDate,
         startDate,
         endDate,
         numberOfTeams: parseInt(numberOfTeams, 10),
@@ -187,15 +211,39 @@ const CreateTournamentScreen = ({ navigation, route }) => {
     }
   };
 
+  const handleRegStartDateChange = (event, selected) => {
+    setShowRegStartDatePicker(Platform.OS === 'ios');
+    if (selected) {
+      const formatted = toDateString(selected);
+      setRegistrationStartDate(formatted);
+      if (registrationEndDate && registrationEndDate < formatted) {
+        setRegistrationEndDate(formatted);
+      }
+      setErrors((prev) => ({ ...prev, registrationStartDate: null, registrationDates: null }));
+    }
+  };
+
+  const handleRegEndDateChange = (event, selected) => {
+    setShowRegEndDatePicker(Platform.OS === 'ios');
+    if (selected) {
+      const formatted = toDateString(selected);
+      setRegistrationEndDate(formatted);
+      if (startDate && startDate < formatted) {
+        setStartDate(formatted);
+      }
+      setErrors((prev) => ({ ...prev, registrationEndDate: null, registrationDates: null, tournamentStartDate: null }));
+    }
+  };
+
   const handleStartDateChange = (event, selected) => {
     setShowStartDatePicker(Platform.OS === 'ios');
     if (selected) {
       const formatted = toDateString(selected);
       setStartDate(formatted);
-      if (endDate < formatted) {
+      if (endDate && endDate < formatted) {
         setEndDate(formatted);
       }
-      setErrors((prev) => ({ ...prev, startDate: null }));
+      setErrors((prev) => ({ ...prev, startDate: null, tournamentStartDate: null, tournamentDates: null }));
     }
   };
 
@@ -204,7 +252,7 @@ const CreateTournamentScreen = ({ navigation, route }) => {
     if (selected) {
       const formatted = toDateString(selected);
       setEndDate(formatted);
-      setErrors((prev) => ({ ...prev, endDate: null }));
+      setErrors((prev) => ({ ...prev, endDate: null, tournamentDates: null }));
     }
   };
 
@@ -338,64 +386,159 @@ const CreateTournamentScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* Section: Dates */}
+        {/* Section: Registration Period */}
         <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
-          <Text style={[styles.sectionHeading, { color: colors.text }]}>Schedule & Dates</Text>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>REGISTRATION PERIOD</Text>
+          <Text style={[styles.sectionSubHeading, { color: colors.textSecondary }]}>
+            When users are allowed to apply and register their teams
+          </Text>
 
           <View style={styles.datesRow}>
-            {/* Start Date */}
+            {/* Registration Opens */}
             <View style={{ flex: 1 }}>
-              <Text style={[styles.fieldLabel, { color: colors.text }]}>Start Date *</Text>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Registration Opens *</Text>
               <TouchableOpacity
                 style={[
                   styles.dateBtn,
                   {
                     backgroundColor: colors.inputBg,
-                    borderColor: errors.startDate ? colors.error : colors.border,
+                    borderColor: errors.registrationStartDate || errors.registrationDates ? colors.error : colors.border,
+                  },
+                ]}
+                onPress={() => setShowRegStartDatePicker(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="calendar" size={15} color={colors.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.dateBtnText, { color: colors.text }]}>
+                  {registrationStartDate || 'Select Date'}
+                </Text>
+              </TouchableOpacity>
+              {errors.registrationStartDate ? (
+                <Text style={[styles.errorText, { color: colors.error }]}>{errors.registrationStartDate}</Text>
+              ) : null}
+            </View>
+
+            {/* Registration Closes */}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Registration Closes *</Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateBtn,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: errors.registrationEndDate || errors.registrationDates ? colors.error : colors.border,
+                  },
+                ]}
+                onPress={() => setShowRegEndDatePicker(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="calendar" size={15} color={colors.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.dateBtnText, { color: colors.text }]}>
+                  {registrationEndDate || 'Select Date'}
+                </Text>
+              </TouchableOpacity>
+              {errors.registrationEndDate ? (
+                <Text style={[styles.errorText, { color: colors.error }]}>{errors.registrationEndDate}</Text>
+              ) : null}
+            </View>
+          </View>
+          {errors.registrationDates ? (
+            <Text style={[styles.errorText, { color: colors.error, marginTop: 6 }]}>{errors.registrationDates}</Text>
+          ) : null}
+
+          {/* Registration Date Pickers */}
+          {showRegStartDatePicker && (
+            <DateTimePicker
+              value={new Date(registrationStartDate || Date.now())}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleRegStartDateChange}
+              minimumDate={new Date()}
+            />
+          )}
+
+          {showRegEndDatePicker && (
+            <DateTimePicker
+              value={new Date(registrationEndDate || registrationStartDate || Date.now())}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleRegEndDateChange}
+              minimumDate={new Date(registrationStartDate || Date.now())}
+            />
+          )}
+        </View>
+
+        {/* Section: Tournament Schedule */}
+        <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>TOURNAMENT SCHEDULE</Text>
+          <Text style={[styles.sectionSubHeading, { color: colors.textSecondary }]}>
+            When the tournament games and matches take place
+          </Text>
+
+          <View style={styles.datesRow}>
+            {/* Tournament Starts */}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Tournament Starts *</Text>
+              <TouchableOpacity
+                style={[
+                  styles.dateBtn,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: errors.startDate || errors.tournamentStartDate ? colors.error : colors.border,
                   },
                 ]}
                 onPress={() => setShowStartDatePicker(true)}
                 activeOpacity={0.8}
               >
-                <Feather name="calendar" size={15} color={colors.primary} style={{ marginRight: 8 }} />
+                <Feather name="play-circle" size={15} color={colors.primary} style={{ marginRight: 8 }} />
                 <Text style={[styles.dateBtnText, { color: colors.text }]}>
                   {startDate || 'Select Date'}
                 </Text>
               </TouchableOpacity>
-              {errors.startDate ? <Text style={[styles.errorText, { color: colors.error }]}>{errors.startDate}</Text> : null}
+              {errors.startDate ? (
+                <Text style={[styles.errorText, { color: colors.error }]}>{errors.startDate}</Text>
+              ) : null}
             </View>
 
-            {/* End Date */}
+            {/* Tournament Ends */}
             <View style={{ flex: 1 }}>
-              <Text style={[styles.fieldLabel, { color: colors.text }]}>End Date *</Text>
+              <Text style={[styles.fieldLabel, { color: colors.text }]}>Tournament Ends *</Text>
               <TouchableOpacity
                 style={[
                   styles.dateBtn,
                   {
                     backgroundColor: colors.inputBg,
-                    borderColor: errors.endDate ? colors.error : colors.border,
+                    borderColor: errors.endDate || errors.tournamentDates ? colors.error : colors.border,
                   },
                 ]}
                 onPress={() => setShowEndDatePicker(true)}
                 activeOpacity={0.8}
               >
-                <Feather name="calendar" size={15} color={colors.primary} style={{ marginRight: 8 }} />
+                <Feather name="flag" size={15} color={colors.primary} style={{ marginRight: 8 }} />
                 <Text style={[styles.dateBtnText, { color: colors.text }]}>
                   {endDate || 'Select Date'}
                 </Text>
               </TouchableOpacity>
-              {errors.endDate ? <Text style={[styles.errorText, { color: colors.error }]}>{errors.endDate}</Text> : null}
+              {errors.endDate ? (
+                <Text style={[styles.errorText, { color: colors.error }]}>{errors.endDate}</Text>
+              ) : null}
             </View>
           </View>
+          {errors.tournamentStartDate ? (
+            <Text style={[styles.errorText, { color: colors.error, marginTop: 6 }]}>{errors.tournamentStartDate}</Text>
+          ) : null}
+          {errors.tournamentDates ? (
+            <Text style={[styles.errorText, { color: colors.error, marginTop: 6 }]}>{errors.tournamentDates}</Text>
+          ) : null}
 
-          {/* DateTimePicker Modals */}
+          {/* Tournament Date Pickers */}
           {showStartDatePicker && (
             <DateTimePicker
-              value={new Date(startDate || Date.now())}
+              value={new Date(startDate || registrationEndDate || Date.now())}
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleStartDateChange}
-              minimumDate={new Date()}
+              minimumDate={new Date(registrationEndDate || Date.now())}
             />
           )}
 
@@ -619,6 +762,12 @@ const styles = StyleSheet.create({
   sectionHeading: {
     fontSize: SIZES.base,
     fontWeight: '800',
+    marginBottom: 10,
+  },
+  sectionSubHeading: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: -6,
     marginBottom: 14,
   },
   fieldLabel: {

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
-export const LAN_URL_CURRENT = 'http://192.168.0.213:5000/api/v1';
+export const LAN_URL_CURRENT = 'http://10.37.161.39:5000/api/v1';
 export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -90,8 +90,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
-    // Local hosts fail fast; Railway gets more time (cold start / mobile data / bcrypt)
-    const timeoutMs = isFormData ? 45000 : isLocalHost(host) ? 3500 : 20000;
+    // Local hosts allow 15s for remote DB network latency; remote servers get 30s
+    const timeoutMs = isFormData ? 45000 : isLocalHost(host) ? 15000 : 30000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(`${host}${endpoint}`, {

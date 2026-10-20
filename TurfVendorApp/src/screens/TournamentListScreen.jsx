@@ -183,42 +183,80 @@ const TournamentListScreen = ({ navigation }) => {
               </Text>
             </View>
 
-            <View
-              style={[
-                styles.statusBadge,
-                {
-                  backgroundColor: isPublished
-                    ? isDark
-                      ? 'rgba(16, 185, 129, 0.15)'
-                      : '#DCFCE7'
-                    : isDark
-                    ? 'rgba(245, 158, 11, 0.15)'
-                    : '#FEF3C7',
-                  borderColor: isPublished
-                    ? isDark
-                      ? 'rgba(16, 185, 129, 0.4)'
-                      : '#86EFAC'
-                    : isDark
-                    ? 'rgba(245, 158, 11, 0.4)'
-                    : '#FDE68A',
-                },
-              ]}
-            >
+            {/* Dynamic Lifecycle Badge */}
+            {(() => {
+              const lifecycleStatus = item.lifecycleStatus || (isPublished ? 'published' : 'draft');
+              const lifecycleLabel = item.lifecycleLabel || (isPublished ? 'PUBLISHED' : 'DRAFT');
+
+              let badgeBg = isDark ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7';
+              let badgeBorder = isDark ? 'rgba(16, 185, 129, 0.4)' : '#86EFAC';
+              let badgeColor = '#10B981';
+
+              if (lifecycleStatus === 'cancelled') {
+                badgeBg = isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2';
+                badgeBorder = isDark ? 'rgba(239, 68, 68, 0.4)' : '#FCA5A5';
+                badgeColor = '#EF4444';
+              } else if (lifecycleStatus === 'completed') {
+                badgeBg = isDark ? 'rgba(100, 116, 139, 0.15)' : '#F1F5F9';
+                badgeBorder = isDark ? 'rgba(100, 116, 139, 0.4)' : '#CBD5E1';
+                badgeColor = '#64748B';
+              } else if (lifecycleStatus === 'ongoing') {
+                badgeBg = isDark ? 'rgba(2, 132, 199, 0.15)' : '#E0F2FE';
+                badgeBorder = isDark ? 'rgba(2, 132, 199, 0.4)' : '#7DD3FC';
+                badgeColor = '#0284C7';
+              } else if (lifecycleStatus === 'registration_closed') {
+                badgeBg = isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7';
+                badgeBorder = isDark ? 'rgba(245, 158, 11, 0.4)' : '#FDE68A';
+                badgeColor = '#D97706';
+              } else if (lifecycleStatus === 'registration_open') {
+                badgeBg = isDark ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7';
+                badgeBorder = isDark ? 'rgba(16, 185, 129, 0.4)' : '#86EFAC';
+                badgeColor = '#10B981';
+              } else if (lifecycleStatus === 'published') {
+                badgeBg = isDark ? 'rgba(14, 165, 233, 0.15)' : '#E0F2FE';
+                badgeBorder = isDark ? 'rgba(14, 165, 233, 0.4)' : '#BAE6FD';
+                badgeColor = '#0284C7';
+              } else {
+                badgeBg = isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7';
+                badgeBorder = isDark ? 'rgba(245, 158, 11, 0.4)' : '#FDE68A';
+                badgeColor = '#D97706';
+              }
+
+              return (
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: badgeBg,
+                      borderColor: badgeBorder,
+                    },
+                  ]}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: badgeColor }]} />
+                  <Text style={[styles.statusText, { color: badgeColor }]}>
+                    {lifecycleLabel}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {Array.isArray(item.registrations) && item.registrations.length > 0 ? (
               <View
                 style={[
-                  styles.statusDot,
-                  { backgroundColor: isPublished ? '#10B981' : '#F59E0B' },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusText,
-                  { color: isPublished ? '#10B981' : '#D97706' },
+                  styles.statusBadge,
+                  {
+                    backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF',
+                    borderColor: isDark ? 'rgba(59, 130, 246, 0.4)' : '#BFDBFE',
+                    marginLeft: 6,
+                  },
                 ]}
               >
-                {isPublished ? 'Published' : 'Draft'}
-              </Text>
-            </View>
+                <Feather name="users" size={11} color="#3B82F6" style={{ marginRight: 4 }} />
+                <Text style={[styles.statusText, { color: '#2563EB', fontWeight: '700' }]}>
+                  {item.registrations.length} {item.registrations.length === 1 ? 'Application' : 'Applications'}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <Feather name="chevron-right" size={18} color={colors.textLight} />
@@ -259,7 +297,7 @@ const TournamentListScreen = ({ navigation }) => {
           <View style={[styles.metricTag, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6' }]}>
             <Feather name="users" size={12} color={colors.primary} />
             <Text style={[styles.metricTagText, { color: colors.text }]}>
-              {item.numberOfTeams} Teams
+              {item.acceptedTeamsCount !== undefined ? `${item.acceptedTeamsCount} / ${item.numberOfTeams} Accepted` : `${item.numberOfTeams} Teams`}
             </Text>
           </View>
 

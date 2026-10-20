@@ -27,11 +27,8 @@ import {
   getTournamentByIdApi,
   publishTournamentApi,
   cancelTournamentApi,
-<<<<<<< HEAD
   getMyTournamentRegistrationApi,
-=======
   updateTournamentTeamsApi,
->>>>>>> 4d1ada6 (Describe your changes)
 } from '../api/tournaments';
 
 const DEFAULT_SPORT_IMAGES = {
@@ -435,14 +432,18 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 styles.statusBadge,
                 {
                   backgroundColor:
-                    lifecycleStatus === 'published'
+                    lifecycleStatus === 'registration_open'
                       ? '#10B981'
+                      : lifecycleStatus === 'registration_closed'
+                      ? '#F59E0B'
                       : lifecycleStatus === 'full'
                       ? '#F59E0B'
                       : lifecycleStatus === 'ongoing'
                       ? '#0284C7'
                       : lifecycleStatus === 'completed'
                       ? '#64748B'
+                      : lifecycleStatus === 'published'
+                      ? '#0EA5E9'
                       : lifecycleStatus === 'draft'
                       ? '#F59E0B'
                       : '#EF4444',
@@ -450,14 +451,18 @@ export default function TournamentDetailScreen({ route, navigation }) {
               ]}
             >
               <Text style={styles.statusBadgeText}>
-                {lifecycleStatus === 'published'
+                {lifecycleStatus === 'registration_open'
                   ? `REGISTRATION OPEN • ${remainingSlots} SLOTS LEFT`
+                  : lifecycleStatus === 'registration_closed'
+                  ? 'REGISTRATION CLOSED'
                   : lifecycleStatus === 'full'
-                  ? `FULL • ${acceptedTeamsCount}/${totalTeams} TEAMS`
+                  ? `TEAMS FULL • ${acceptedTeamsCount}/${totalTeams}`
                   : lifecycleStatus === 'ongoing'
                   ? 'ONGOING'
                   : lifecycleStatus === 'completed'
                   ? 'COMPLETED'
+                  : lifecycleStatus === 'published'
+                  ? (tournament.registrationStartDate ? `REGISTRATION OPENS ${formatDate(tournament.registrationStartDate)}` : 'UPCOMING')
                   : lifecycleStatus === 'draft'
                   ? 'DRAFT'
                   : 'CANCELLED'}
@@ -535,29 +540,67 @@ export default function TournamentDetailScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* ── Format & Key Metrics ── */}
+        {/* ── Registration Period Card ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
-          <Text style={[styles.sectionHeading, { color: C.text }]}>Tournament Format</Text>
+          <Text style={[styles.sectionHeading, { color: C.text }]}>REGISTRATION PERIOD</Text>
+          <Text style={[styles.sectionSubHeading, { color: C.subtext }]}>
+            When users are allowed to apply and register their teams
+          </Text>
 
           <View style={styles.metricGrid}>
-            {/* Start Date */}
+            {/* Registration Opens */}
             <View style={[styles.metricBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
               <Feather name="calendar" size={16} color={C.primary} />
-              <Text style={[styles.metricLabel, { color: C.subtext }]}>Starts</Text>
+              <Text style={[styles.metricLabel, { color: C.subtext }]}>Registration Opens</Text>
+              <Text style={[styles.metricVal, { color: C.text }]}>
+                {formatDate(tournament.registrationStartDate || tournament.startDate)}
+              </Text>
+            </View>
+
+            {/* Registration Closes */}
+            <View style={[styles.metricBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+              <Feather name="clock" size={16} color="#F59E0B" />
+              <Text style={[styles.metricLabel, { color: C.subtext }]}>Registration Closes</Text>
+              <Text style={[styles.metricVal, { color: C.text }]}>
+                {formatDate(tournament.registrationEndDate || tournament.startDate)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Tournament Schedule Card ── */}
+        <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <Text style={[styles.sectionHeading, { color: C.text }]}>TOURNAMENT SCHEDULE</Text>
+          <Text style={[styles.sectionSubHeading, { color: C.subtext }]}>
+            When actual match play and games take place
+          </Text>
+
+          <View style={styles.metricGrid}>
+            {/* Tournament Starts */}
+            <View style={[styles.metricBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+              <Feather name="play-circle" size={16} color={C.primary} />
+              <Text style={[styles.metricLabel, { color: C.subtext }]}>Tournament Starts</Text>
               <Text style={[styles.metricVal, { color: C.text }]}>{formatDate(tournament.startDate)}</Text>
             </View>
 
-            {/* End Date */}
+            {/* Tournament Ends */}
             <View style={[styles.metricBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
               <Feather name="flag" size={16} color="#0284C7" />
-              <Text style={[styles.metricLabel, { color: C.subtext }]}>Ends</Text>
+              <Text style={[styles.metricLabel, { color: C.subtext }]}>Tournament Ends</Text>
               <Text style={[styles.metricVal, { color: C.text }]}>{formatDate(tournament.endDate)}</Text>
             </View>
+          </View>
+        </View>
 
+        {/* ── Structure & Squad Format Card ── */}
+        <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <Text style={[styles.sectionHeading, { color: C.text }]}>Tournament Structure</Text>
+
+          <View style={styles.metricGrid}>
             {/* Teams */}
             <View style={[styles.metricBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-              <Ionicons name="people-outline" size={18} color="#0F766E" />
-              <Text style={[styles.metricLabel, { color: C.subtext }]}>Teams</Text>
+              <Ionicons name="people-outline" size={18} color="#7C3AED" />
+              <Text style={[styles.metricLabel, { color: C.subtext }]}>Total Capacity</Text>
               <Text style={[styles.metricVal, { color: C.text }]}>{tournament.numberOfTeams} Teams</Text>
             </View>
 
@@ -571,7 +614,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
           {/* Cricket Overs Indicator */}
           {isCricket && Boolean(tournament.oversPerTeam) && (
-            <View style={[styles.cricketOversRow, { backgroundColor: dark ? '#1E293B' : '#FEF3C7' }]}>
+            <View style={[styles.cricketOversRow, { backgroundColor: dark ? '#1E293B' : '#FEF3C7', marginTop: 12 }]}>
               <Feather name="disc" size={16} color="#D97706" style={{ marginRight: 8 }} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cricketOversTitle, { color: '#B45309' }]}>Cricket Match Overs Rule</Text>
@@ -583,7 +626,6 @@ export default function TournamentDetailScreen({ route, navigation }) {
           )}
         </View>
 
-<<<<<<< HEAD
         {/* ── Capacity & Slots Overview (Part 1 & 5) ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <View style={styles.capacityHeaderRow}>
@@ -764,44 +806,102 @@ export default function TournamentDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* ── Register CTA (Part 1) ── */}
+        {/* ── Register CTA (Part 1 & 3) ── */}
         {!isOwner && !myRegistration && (
           <View style={styles.registerCtaWrap}>
-            {lifecycleStatus === 'published' && remainingSlots > 0 ? (
-              <TouchableOpacity
-                style={[styles.registerBigBtn, { backgroundColor: C.primary }, SHADOW.floating]}
-                onPress={() => navigation.navigate('RegisterTeam', { tournament })}
-                activeOpacity={0.88}
-              >
-                <Ionicons name="trophy-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.registerBigBtnText}>Register Your Team</Text>
-              </TouchableOpacity>
-            ) : isFull ? (
-              <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-                <Feather name="lock" size={16} color="#EF4444" style={{ marginRight: 8 }} />
-                <Text style={[styles.blockedCtaText, { color: C.text }]}>
-                  Tournament Full ({totalTeams}/{totalTeams} Teams Registered)
-                </Text>
-              </View>
-            ) : lifecycleStatus === 'ongoing' ? (
-              <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-                <Feather name="activity" size={16} color="#0284C7" style={{ marginRight: 8 }} />
-                <Text style={[styles.blockedCtaText, { color: '#0284C7' }]}>
-                  Tournament is currently ongoing
-                </Text>
-              </View>
-            ) : lifecycleStatus === 'completed' ? (
-              <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-                <Feather name="flag" size={16} color={C.subtext} style={{ marginRight: 8 }} />
-                <Text style={[styles.blockedCtaText, { color: C.subtext }]}>
-                  Tournament completed
-                </Text>
-              </View>
-            ) : null}
+            {(() => {
+              const todayStr = new Date().toISOString().slice(0, 10);
+              const startStr = String(tournament.startDate || '').slice(0, 10);
+              const endStr = String(tournament.endDate || '').slice(0, 10);
+              const regStartStr = tournament.registrationStartDate ? String(tournament.registrationStartDate).slice(0, 10) : null;
+              const regEndStr = tournament.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : null;
+
+              const isCompleted = (endStr && todayStr > endStr) || lifecycleStatus === 'completed';
+              const isOngoing = (startStr && todayStr >= startStr && (!endStr || todayStr <= endStr)) || lifecycleStatus === 'ongoing';
+              const isTeamsFull = isFull || remainingSlots <= 0 || lifecycleStatus === 'full';
+              const isRegEnded = (regEndStr && todayStr > regEndStr) || lifecycleStatus === 'registration_closed';
+              const isRegNotOpen = Boolean(regStartStr && todayStr < regStartStr);
+
+              if (tournament.status === 'draft') {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="file-text" size={16} color={C.subtext} style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: C.subtext }]}>Draft Tournament (Not Published)</Text>
+                  </View>
+                );
+              }
+
+              if (tournament.status === 'cancelled') {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="slash" size={16} color={C.error} style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: C.error }]}>Tournament Cancelled</Text>
+                  </View>
+                );
+              }
+
+              if (isCompleted) {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="flag" size={16} color={C.subtext} style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: C.subtext }]}>Tournament Completed</Text>
+                  </View>
+                );
+              }
+
+              if (isOngoing) {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="activity" size={16} color="#0284C7" style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: '#0284C7' }]}>Tournament Ongoing (Registration Closed)</Text>
+                  </View>
+                );
+              }
+
+              if (isTeamsFull) {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="lock" size={16} color="#EF4444" style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: '#EF4444' }]}>Teams Full</Text>
+                  </View>
+                );
+              }
+
+              if (isRegEnded) {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="clock" size={16} color="#F59E0B" style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: '#D97706' }]}>Registration Closed</Text>
+                  </View>
+                );
+              }
+
+              if (isRegNotOpen) {
+                return (
+                  <View style={[styles.blockedCtaCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                    <Feather name="calendar" size={16} color="#0284C7" style={{ marginRight: 8 }} />
+                    <Text style={[styles.blockedCtaText, { color: '#0284C7' }]}>
+                      Registration Opens on {formatDate(tournament.registrationStartDate)}
+                    </Text>
+                  </View>
+                );
+              }
+
+              // Registration is Open!
+              return (
+                <TouchableOpacity
+                  style={[styles.registerBigBtn, { backgroundColor: C.primary }, SHADOW.floating]}
+                  onPress={() => navigation.navigate('RegisterTeam', { tournament })}
+                  activeOpacity={0.88}
+                >
+                  <Ionicons name="trophy-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.registerBigBtnText}>Register Your Team</Text>
+                </TouchableOpacity>
+              );
+            })()}
           </View>
         )}
 
-=======
         {/* ── Teams & Player Rosters Section ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <View style={styles.sectionHeaderRow}>
@@ -935,7 +1035,6 @@ export default function TournamentDetailScreen({ route, navigation }) {
           })}
         </View>
 
->>>>>>> 4d1ada6 (Describe your changes)
         {/* ── Description ── */}
         {Boolean(tournament.description) && (
           <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
@@ -1499,7 +1598,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-<<<<<<< HEAD
 
   // ── Capacity Section ──
   capacityHeaderRow: {
@@ -1644,7 +1742,6 @@ const styles = StyleSheet.create({
   blockedCtaText: {
     fontSize: 13,
     fontFamily: FONT.bold,
-=======
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1704,6 +1801,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
->>>>>>> 4d1ada6 (Describe your changes)
   },
 });
