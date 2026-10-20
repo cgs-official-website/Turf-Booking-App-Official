@@ -245,12 +245,12 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
         {/* Action Row */}
         <View style={styles.footerRow}>
           <TouchableOpacity
-            style={[styles.viewDetailsBtn, { backgroundColor: '#0F766E' }]}
+            style={[styles.viewTournamentBtn, { backgroundColor: '#0F766E' }]}
             onPress={onPress}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
           >
-            <Text style={styles.viewDetailsText}>View Details</Text>
-            <Feather name="chevron-right" size={14} color="#FFFFFF" style={{ marginLeft: 3 }} />
+            <Text style={styles.viewTournamentText} numberOfLines={1}>View Tournament</Text>
+            <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 5 }} />
           </TouchableOpacity>
 
           {isPublished && (
@@ -393,24 +393,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 4,
   },
-  viewDetailsBtn: {
+  viewTournamentBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: RADIUS.md,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.full || 999,
     marginRight: 10,
+    minHeight: 36,
   },
-  viewDetailsText: {
+  viewTournamentText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   shareIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: RADIUS.md,
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.full || 999,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

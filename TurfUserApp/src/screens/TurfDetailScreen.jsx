@@ -389,7 +389,7 @@ export default function TurfDetailScreen({ route, navigation }) {
             >
               <View style={styles.turfTournamentHeader}>
                 <View style={[styles.turfTournamentBadge, { backgroundColor: '#0F766E' }]}>
-                  <Text style={{ fontSize: 11, marginRight: 4 }}>🏆</Text>
+                  <Feather name="award" size={12} color="#FFFFFF" style={{ marginRight: 5 }} />
                   <Text style={styles.turfTournamentBadgeText}>Tournament Available</Text>
                 </View>
                 <View style={[styles.turfTournamentSportTag, { backgroundColor: 'rgba(15, 118, 110, 0.15)' }]}>
@@ -403,14 +403,26 @@ export default function TurfDetailScreen({ route, navigation }) {
                 {turf.activeTournament.name}
               </Text>
 
-              <Text style={[styles.turfTournamentMeta, { color: C.subtext }]}>
-                📅 {turf.activeTournament.startDate} to {turf.activeTournament.endDate} • 👥 {turf.activeTournament.numberOfTeams} Teams ({turf.activeTournament.playersPerTeam} / team)
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather name="calendar" size={11} color={C.primary} style={{ marginRight: 4 }} />
+                  <Text style={[styles.turfTournamentMetaClean, { color: C.subtext }]}>
+                    {turf.activeTournament.startDate} to {turf.activeTournament.endDate}
+                  </Text>
+                </View>
+                <Text style={{ color: C.subtext, fontSize: 11 }}>•</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather name="users" size={11} color="#3B82F6" style={{ marginRight: 4 }} />
+                  <Text style={[styles.turfTournamentMetaClean, { color: C.subtext }]}>
+                    {turf.activeTournament.numberOfTeams} Teams ({turf.activeTournament.playersPerTeam} / team)
+                  </Text>
+                </View>
+              </View>
 
-              <View style={[styles.turfTournamentFooter, { marginTop: 6 }]}>
+              <View style={[styles.turfTournamentFooter, { marginTop: 4 }]}>
                 <View style={{ flex: 1 }} />
-                <View style={[styles.viewTurfBtn, { backgroundColor: '#0F766E', borderColor: '#0F766E' }]}>
-                  <Text style={[styles.viewTurfText, { color: '#FFFFFF' }]}>View Tournament</Text>
+                <View style={[styles.viewTournamentPillBtn, { backgroundColor: '#0F766E' }]}>
+                  <Text style={[styles.viewTournamentPillText, { color: '#FFFFFF' }]}>View Tournament</Text>
                   <Feather name="arrow-right" size={13} color="#FFFFFF" style={{ marginLeft: 5 }} />
                 </View>
               </View>
@@ -1523,5 +1535,22 @@ const styles = StyleSheet.create({
   turfTournamentCtaText: {
     fontSize: 13,
     fontWeight: '800',
+  },
+  turfTournamentMetaClean: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  viewTournamentPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+  },
+  viewTournamentPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

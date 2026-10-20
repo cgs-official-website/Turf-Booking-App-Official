@@ -39,7 +39,7 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 function getDisplayDistance(turf, userCoords) {
-  if (!turf) return 'Location unavailable';
+  if (!turf) return null;
 
   if (typeof turf.distance === 'number' && !isNaN(turf.distance)) {
     return `${turf.distance} km`;
@@ -47,21 +47,17 @@ function getDisplayDistance(turf, userCoords) {
 
   const uLat = userCoords?.lat ?? userCoords?.latitude;
   const uLng = userCoords?.lng ?? userCoords?.longitude;
-  if (!isValidCoordinate(uLat, uLng)) {
-    return 'Location unavailable';
-  }
-
   const turfLat = turf.latitude ?? turf.lat ?? turf.location?.latitude ?? turf.location?.lat ?? turf.location?.geo?.lat;
   const turfLng = turf.longitude ?? turf.lng ?? turf.location?.longitude ?? turf.location?.lng ?? turf.location?.geo?.lng;
-  if (!isValidCoordinate(turfLat, turfLng)) {
-    return 'Location unavailable';
+
+  if (isValidCoordinate(uLat, uLng) && isValidCoordinate(turfLat, turfLng)) {
+    const dist = calculateDistanceKm(uLat, uLng, turfLat, turfLng);
+    if (dist !== null && !isNaN(dist)) {
+      return `${dist} km`;
+    }
   }
 
-  const dist = calculateDistanceKm(uLat, uLng, turfLat, turfLng);
-  if (dist !== null && !isNaN(dist)) {
-    return `${dist} km`;
-  }
-  return 'Location unavailable';
+  return turf.city || turf.location?.city || null;
 }
 
 function isOfferCurrentlyLive(turf) {
@@ -228,10 +224,12 @@ export default function TurfCard({
           {/* Bottom image stats */}
           <View style={styles.bottomFloatingRow}>
             <RatingBadge rating={rating} count={count} />
-            <View style={styles.distancePill}>
-              <Feather name="navigation" size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
-              <Text style={styles.distanceText}>{distance}</Text>
-            </View>
+            {distance ? (
+              <View style={styles.distancePill}>
+                <Feather name={distance.includes('km') ? 'navigation' : 'map-pin'} size={11} color="#FFFFFF" style={{ marginRight: 3 }} />
+                <Text style={styles.distanceText}>{distance}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -333,7 +331,7 @@ export default function TurfCard({
         <View style={styles.locationRow}>
           <Feather name="map-pin" size={12} color={C.subtext} style={{ marginRight: 4 }} />
           <Text style={[styles.locationText, { color: C.subtext }]} numberOfLines={1}>
-            {locationText} • {distance}
+            {distance && distance.includes('km') ? `${locationText} • ${distance}` : locationText}
           </Text>
         </View>
 

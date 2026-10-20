@@ -13,7 +13,7 @@ try {
   Geolocation.setRNConfiguration({
     skipPermissionRequests: false,
     authorizationLevel: 'auto',
-    locationProvider: 'playServices',
+    locationProvider: 'auto',
   });
 } catch (_) { }
 import Feather from 'react-native-vector-icons/Feather';
@@ -22,7 +22,7 @@ import { turfsApi } from '../api/turfs';
 import { nearbyTurfsApi } from '../api/nearbyTurfsApi';
 import { notificationsApi } from '../api/notifications';
 import { fetchWishlist, toggleWishlist } from '../redux/wishlistSlice';
-import { setLocationPermission } from '../redux/authSlice';
+import { setLocationPermission, setUserCoords as setReduxUserCoords, setLocation } from '../redux/authSlice';
 import useTheme from '../hooks/useTheme';
 import SearchBar from '../components/SearchBar';
 import SportChip from '../components/SportChip';
@@ -47,20 +47,20 @@ const { width } = Dimensions.get('window');
 const fetchReverseGeocode = async (lat, lng) => {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2000);
+    const timer = setTimeout(() => controller.abort(), 4500);
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { 'User-Agent': 'NammaOoruTurfApp/1.0' }, signal: controller.signal }
+      { headers: { 'User-Agent': 'TurfBookingApp/1.0' }, signal: controller.signal }
     );
     clearTimeout(timer);
     const data = await res.json();
     const addr = data.address || {};
-    const road = addr.road || addr.suburb || addr.neighbourhood;
-    const city = addr.city || addr.town || addr.village || addr.county || addr.state;
-    if (road && city && road !== city) {
-      return `${road}, ${city}`;
+    const suburb = addr.suburb || addr.neighbourhood || addr.subdistrict || addr.road;
+    const city = addr.city || addr.town || addr.village || addr.county || addr.state_district;
+    if (suburb && city && suburb !== city) {
+      return `${suburb}, ${city}`;
     }
-    return city || road || 'Current Location';
+    return city || suburb || 'Current Location';
   } catch (_) {
     return 'Current Location';
   }
@@ -193,7 +193,9 @@ export default function HomeScreen({ navigation }) {
   const onLocationSuccess = useCallback(async (position) => {
     try {
       const { latitude, longitude } = position.coords;
-      setUserCoords({ lat: latitude, lng: longitude });
+      const coords = { lat: latitude, lng: longitude };
+      setUserCoords(coords);
+      dispatch(setReduxUserCoords(coords));
       setLocationOff(false);
       setIsLocating(false);
 
@@ -209,8 +211,10 @@ export default function HomeScreen({ navigation }) {
       // Asynchronously reverse geocode without delaying UI
       fetchReverseGeocode(latitude, longitude)
         .then((placeName) => {
-          setCustomLocationName(placeName);
-          dispatch(setLocationPermission(placeName));
+          if (placeName && placeName !== 'Current Location') {
+            setCustomLocationName(placeName);
+            dispatch(setLocation(placeName));
+          }
         })
         .catch(() => { });
     } catch (err) {
@@ -231,7 +235,7 @@ export default function HomeScreen({ navigation }) {
         setIsLocating(false);
         setNearbyLoading(false);
       },
-      { enableHighAccuracy: false, timeout: 3500, maximumAge: 600000 }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 }
     );
   }, [onLocationSuccess]);
 
@@ -275,17 +279,25 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    const onLocationFailure = () => {
+    const onLocationFailure = (err) => {
       setIsLocating(false);
       setNearbyLoading(false);
-      setLocationOff(true);
+      if (err?.code === 1) {
+        setLocationOff(true);
+      }
     };
 
-    // Fast resolution location provider call
+    // Fast resolution location provider call, with high accuracy retry
     Geolocation.getCurrentPosition(
       onLocationSuccess,
-      onLocationFailure,
-      { enableHighAccuracy: false, timeout: 3500, maximumAge: 300000 }
+      () => {
+        Geolocation.getCurrentPosition(
+          onLocationSuccess,
+          onLocationFailure,
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+        );
+      },
+      { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
     );
   }, [onLocationSuccess]);
 
@@ -424,13 +436,11 @@ export default function HomeScreen({ navigation }) {
   const displayName = user?.name?.split(' ')[0] || 'Player';
   const displayLocation = isLocating
     ? 'Locating...'
-    : locationOff
-      ? 'Select Location'
-      : (customLocationName || (location && location !== 'Current Location'
-        ? location
-        : (typeof user?.location === 'string' && user.location.trim()
-          ? user.location.trim()
-          : (user?.location?.address || user?.location?.city || 'Chennai, Tamil Nadu'))));
+    : (customLocationName || (location && location !== 'Current Location'
+      ? location
+      : (typeof user?.location === 'string' && user.location.trim()
+        ? user.location.trim()
+        : (user?.location?.address || user?.location?.city || 'Erode, Tamil Nadu'))));
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
@@ -462,16 +472,10 @@ export default function HomeScreen({ navigation }) {
                   <Feather name="map-pin" size={14} color={C.primary} style={{ marginRight: 4 }} />
                 </TouchableOpacity>
 
-                {/* Location Text & Chevron: Keep existing behavior to open Location Screen */}
+                {/* Location Text & Chevron: Open Location Screen */}
                 <TouchableOpacity
                   style={styles.locationRow}
-                  onPress={() => {
-                    if (locationOff) {
-                      requestLocationAndFetchNearby();
-                    } else {
-                      navigation.navigate('Location');
-                    }
-                  }}
+                  onPress={() => navigation.navigate('Location')}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.locationText, { color: C.text }]} numberOfLines={1}>
@@ -668,6 +672,7 @@ export default function HomeScreen({ navigation }) {
                   <TurfCard
                     turf={item}
                     variant="featured"
+                    userCoords={userCoords}
                     isFavorite={isWishlisted(item._id || item.id)}
                     onToggleFavorite={() => dispatch(toggleWishlist(item))}
                     onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id })}
@@ -747,6 +752,7 @@ export default function HomeScreen({ navigation }) {
                     key={item._id || item.id}
                     turf={item}
                     variant="vertical"
+                    userCoords={userCoords}
                     isFavorite={isWishlisted(item._id || item.id)}
                     onToggleFavorite={() => dispatch(toggleWishlist(item))}
                     onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id, turf: item })}
@@ -758,6 +764,7 @@ export default function HomeScreen({ navigation }) {
                     key={item._id || item.id}
                     turf={item}
                     variant="vertical"
+                    userCoords={userCoords}
                     isFavorite={isWishlisted(item._id || item.id)}
                     onToggleFavorite={() => dispatch(toggleWishlist(item))}
                     onPress={() => navigation.navigate('TurfDetail', { id: item._id || item.id })}

@@ -315,7 +315,7 @@ function formatTournament(t, reqUser = null) {
         players: Array.isArray(r.players) ? r.players : [],
         seed: idx + 1,
       })),
-    registrations: (isOwner || isAdmin) ? registrationsList : undefined,
+    registrations: registrationsList,
     canEdit,
     canDelete: canEdit,
     createdAt: t.createdAt,
@@ -601,8 +601,13 @@ const tournamentController = {
         return sendError(res, 'Tournament ID is required', 400, 'MISSING_ID');
       }
 
-      const tournament = await prisma.tournament.findUnique({
-        where: { id },
+      const tournament = await prisma.tournament.findFirst({
+        where: {
+          OR: [
+            { id },
+            { shareableIdentifier: id },
+          ],
+        },
         include: {
           turf: {
             select: {
@@ -1491,9 +1496,13 @@ const tournamentController = {
       }
 
       const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+      const isTurfOwner = existing.turfId
+        ? await prisma.turf.findFirst({ where: { id: existing.turfId, vendorId: currentUserId } })
+        : null;
       const isOwner = Boolean(
         (existing.userId && existing.userId === currentUserId) ||
-        (existing.vendorId && existing.vendorId === currentUserId)
+        (existing.vendorId && existing.vendorId === currentUserId) ||
+        isTurfOwner
       );
 
       if (!isOwner && !isAdmin) {

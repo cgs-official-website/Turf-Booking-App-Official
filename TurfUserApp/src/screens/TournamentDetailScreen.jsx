@@ -25,6 +25,7 @@ import useTheme from '../hooks/useTheme';
 import { SPACING, RADIUS, SHADOW, FONT } from '../utils/theme';
 import {
   getTournamentByIdApi,
+  getPublicTournamentByShareIdApi,
   publishTournamentApi,
   cancelTournamentApi,
   getMyTournamentRegistrationApi,
@@ -62,7 +63,12 @@ const formatDate = (dateStr) => {
 };
 
 export default function TournamentDetailScreen({ route, navigation }) {
-  const { tournamentId, tournament: initialTournament } = route.params || {};
+  const targetId =
+    route.params?.tournamentId ||
+    route.params?.id ||
+    route.params?.shareId ||
+    route.params?.shareableIdentifier;
+  const initialTournament = route.params?.tournament;
   const { C, dark } = useTheme();
   const { user } = useSelector((s) => s.auth);
 
@@ -70,6 +76,18 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [loading, setLoading] = useState(!initialTournament);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Squad Rosters Expanded State
+  const [expandedTeams, setExpandedTeams] = useState(new Set());
+
+  const toggleTeamExpand = (teamId) => {
+    setExpandedTeams((prev) => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
+  };
 
   // Team & Player Management Modal State
   const [playerModalVisible, setPlayerModalVisible] = useState(false);
@@ -101,20 +119,40 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [winnerTeamId, setWinnerTeamId] = useState('');
 
   const loadDetails = useCallback(async () => {
-    if (!tournamentId) return;
+    if (!targetId) {
+      setTournament(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await getTournamentByIdApi(tournamentId);
-      const data = res?.tournament || res?.data?.tournament;
-      if (data) {
-        setTournament(data);
+      let data = null;
+      try {
+        const res = await getTournamentByIdApi(targetId);
+        data = res?.tournament || res?.data?.tournament;
+      } catch (err) {
+        // Fallback to share identifier resolution
+        try {
+          const shareRes = await getPublicTournamentByShareIdApi(targetId);
+          data = shareRes?.tournament || shareRes?.data?.tournament;
+        } catch (shareErr) {
+          console.warn('Failed to resolve tournament:', shareErr.message);
+        }
       }
+      setTournament(data || null);
     } catch (err) {
       console.warn('Failed to load tournament detail:', err.message);
+      setTournament(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tournamentId]);
+  }, [targetId]);
+
+  useEffect(() => {
+    setTournament(initialTournament || null);
+    loadDetails();
+  }, [targetId, loadDetails]);
 
   useFocusEffect(
     useCallback(() => {
@@ -150,7 +188,11 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const isApproved = tournament?.status === 'published' && (tournament?.approvalStatus === 'approved' || !tournament?.approvalStatus);
 
   const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
-  const acceptedTeamsCount = tournament?.acceptedTeamsCount !== undefined ? Number(tournament.acceptedTeamsCount) : 0;
+  const initialRegs = Array.isArray(tournament?.registrations) ? tournament.registrations : [];
+  const initialAcceptedCount = initialRegs.filter((r) => r.status === 'accepted').length;
+  const acceptedTeamsCount = tournament?.acceptedTeamsCount !== undefined
+    ? Number(tournament.acceptedTeamsCount)
+    : initialAcceptedCount;
   const remainingSlots = tournament?.remainingSlots !== undefined
     ? Number(tournament.remainingSlots)
     : Math.max(0, totalTeams - acceptedTeamsCount);
@@ -646,22 +688,53 @@ export default function TournamentDetailScreen({ route, navigation }) {
       <View style={[styles.centerBox, { backgroundColor: C.bg }]}>
         <Feather name="alert-circle" size={42} color={C.error} />
         <Text style={[styles.errorTitle, { color: C.text }]}>Tournament Not Found</Text>
+        <Text style={{ fontSize: 13, color: C.subtext, textAlign: 'center', marginTop: 6, marginBottom: 16, paddingHorizontal: 24 }}>
+          This tournament link is invalid, unapproved, private, or has ended.
+        </Text>
         <TouchableOpacity
           style={[styles.backBtnPill, { backgroundColor: C.primary }]}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Main');
+            }
+          }}
         >
-          <Text style={styles.backBtnText}>Go Back</Text>
+          <Text style={styles.backBtnText}>Explore Tournaments</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const teamsList = Array.isArray(tournament.teams) && tournament.teams.length > 0
-    ? tournament.teams
-    : Array.from({ length: tournament.numberOfTeams || 2 }, (_, idx) => ({
-        id: `team_${idx + 1}`,
-        name: `Team ${idx + 1}`,
-        players: [],
+  const registrations = Array.isArray(tournament.registrations) ? tournament.registrations : [];
+  const acceptedSquads = registrations.filter((r) => r.status === 'accepted');
+  const pendingSquads = registrations.filter((r) => r.status === 'pending');
+  const rejectedSquads = registrations.filter((r) => r.status === 'rejected');
+
+  const manualTeamsWithPlayers = Array.isArray(tournament.teams)
+    ? tournament.teams.filter((t) => Array.isArray(t.players) && t.players.length > 0)
+    : [];
+
+  const displayTeams = registrations.length > 0
+    ? [...acceptedSquads, ...pendingSquads, ...rejectedSquads].map((r, idx) => ({
+        id: r.id || `reg_${idx}`,
+        name: r.teamName || `Team ${idx + 1}`,
+        captainName: r.captainName,
+        captainPhone: r.captainPhone,
+        captainEmail: r.captainEmail,
+        status: r.status || 'pending',
+        rejectionReason: r.rejectionReason,
+        players: Array.isArray(r.players) ? r.players : [],
+        isRegistration: true,
+      }))
+    : manualTeamsWithPlayers.map((t, idx) => ({
+        id: t.id || `manual_${idx}`,
+        name: t.name || `Team ${idx + 1}`,
+        captainName: t.captainName || null,
+        status: 'accepted',
+        players: Array.isArray(t.players) ? t.players : [],
+        isRegistration: false,
       }));
 
   const maxPlayersPerTeam = tournament.playersPerTeam || 11;
@@ -1267,7 +1340,13 @@ export default function TournamentDetailScreen({ route, navigation }) {
               return (
                 <TouchableOpacity
                   style={[styles.registerBigBtn, { backgroundColor: '#0F766E' }, SHADOW.floating]}
-                  onPress={() => navigation.navigate('RegisterTeam', { tournament })}
+                  onPress={() => {
+                    if (!user) {
+                      navigation.navigate('Login');
+                      return;
+                    }
+                    navigation.navigate('RegisterTeam', { tournament });
+                  }}
                   activeOpacity={0.88}
                 >
                   <Ionicons name="trophy-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
@@ -1277,7 +1356,6 @@ export default function TournamentDetailScreen({ route, navigation }) {
             })()}
           </View>
         )}
-
         {/* ── Tournament Bracket & Matches Section ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <View style={styles.sectionHeaderRow}>
@@ -1734,138 +1812,167 @@ export default function TournamentDetailScreen({ route, navigation }) {
             </>
           )}
         </View>
-
-        {/* ── Teams & Player Rosters Section ── */}
+        {/* ── Teams & Squad Rosters Section ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <View style={styles.sectionHeaderRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.sectionHeading, { color: C.text, marginBottom: 2 }]}>Teams & Squads</Text>
               <Text style={[styles.sectionSubtitle, { color: C.subtext }]}>
-                {tournament.numberOfTeams} Teams • Capacity: {maxPlayersPerTeam} players per team
+                {acceptedSquads.length} / {totalTeams} Teams Confirmed • {remainingSlots} Slots Left • Max {maxPlayersPerTeam} players/team
               </Text>
             </View>
           </View>
 
-          {teamsList.map((team, idx) => {
-            const players = Array.isArray(team.players) ? team.players : [];
-            const isFull = players.length >= maxPlayersPerTeam;
-            const fillRatio = Math.min(players.length / maxPlayersPerTeam, 1);
+          {displayTeams.length === 0 ? (
+            <View style={[styles.emptyTeamsCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+              <Feather name="shield" size={32} color={C.subtext} style={{ opacity: 0.5, marginBottom: 8 }} />
+              <Text style={[styles.emptyTeamsTitle, { color: C.text }]}>No Teams Registered Yet</Text>
+              <Text style={[styles.emptyTeamsSub, { color: C.subtext }]}>
+                Teams that register will appear here with their confirmed squad rosters.
+              </Text>
+            </View>
+          ) : (
+            displayTeams.map((team, idx) => {
+              const players = Array.isArray(team.players) ? team.players : [];
+              const isFull = players.length >= maxPlayersPerTeam;
+              const isExpanded = expandedTeams.has(team.id);
 
-            return (
-              <View
-                key={team.id || idx}
-                style={[
-                  styles.teamCard,
-                  { backgroundColor: C.bgSoft, borderColor: C.border },
-                ]}
-              >
-                {/* Team Card Header */}
-                <View style={styles.teamCardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.teamNameText, { color: C.text }]}>{team.name}</Text>
-                  </View>
+              let statusBg = 'rgba(16, 185, 129, 0.15)';
+              let statusBorder = '#10B981';
+              let statusText = '#10B981';
+              let statusLabel = 'Accepted';
 
-                  {/* Capacity Pill */}
-                  <View
-                    style={[
-                      styles.capacityPill,
-                      {
-                        backgroundColor: isFull
-                          ? 'rgba(16, 185, 129, 0.15)'
-                          : 'rgba(59, 130, 246, 0.12)',
-                        borderColor: isFull ? '#10B981' : '#3B82F6',
-                      },
-                    ]}
+              if (team.status === 'pending') {
+                statusBg = 'rgba(245, 158, 11, 0.15)';
+                statusBorder = '#F59E0B';
+                statusText = '#D97706';
+                statusLabel = 'Pending';
+              } else if (team.status === 'rejected') {
+                statusBg = 'rgba(239, 68, 68, 0.15)';
+                statusBorder = '#EF4444';
+                statusText = '#EF4444';
+                statusLabel = 'Rejected';
+              }
+
+              return (
+                <View
+                  key={team.id || idx}
+                  style={[
+                    styles.teamCard,
+                    { backgroundColor: C.bgSoft, borderColor: C.border },
+                  ]}
+                >
+                  {/* Team Card Header */}
+                  <TouchableOpacity
+                    style={styles.teamCardHeader}
+                    onPress={() => toggleTeamExpand(team.id)}
+                    activeOpacity={0.7}
                   >
-                    <Text
-                      style={[
-                        styles.capacityPillText,
-                        { color: isFull ? '#10B981' : '#2563EB' },
-                      ]}
-                    >
-                      {players.length} / {maxPlayersPerTeam} Players
-                    </Text>
-                  </View>
-                </View>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={[styles.teamNameText, { color: C.text }]} numberOfLines={1}>
+                        {team.name}
+                      </Text>
+                      {Boolean(team.captainName) && (
+                        <Text style={[styles.teamCaptainText, { color: C.subtext }]}>
+                          Captain: <Text style={{ color: C.text, fontWeight: '700' }}>{team.captainName}</Text>
+                        </Text>
+                      )}
+                    </View>
 
-                {/* Progress bar */}
-                <View style={[styles.capacityTrack, { backgroundColor: C.border }]}>
-                  <View
-                    style={[
-                      styles.capacityBar,
-                      {
-                        width: `${fillRatio * 100}%`,
-                        backgroundColor: isFull ? '#10B981' : '#3B82F6',
-                      },
-                    ]}
-                  />
-                </View>
-
-                {/* Player List */}
-                {players.length > 0 ? (
-                  <View style={styles.playersListWrap}>
-                    {players.map((player, pIdx) => (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {/* Status Badge */}
                       <View
-                        key={player.id || pIdx}
                         style={[
-                          styles.playerItemRow,
+                          styles.teamStatusBadge,
+                          { backgroundColor: statusBg, borderColor: statusBorder },
+                        ]}
+                      >
+                        <Text style={[styles.teamStatusText, { color: statusText }]}>
+                          {statusLabel}
+                        </Text>
+                      </View>
+
+                      {/* Capacity Pill */}
+                      <View
+                        style={[
+                          styles.capacityPill,
                           {
-                            backgroundColor: C.card,
-                            borderColor: C.border,
+                            backgroundColor: isFull ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.12)',
+                            borderColor: isFull ? '#10B981' : '#3B82F6',
                           },
                         ]}
                       >
-                        <View style={[styles.playerAvatar, { backgroundColor: C.primaryLight }]}>
-                          <Text style={[styles.playerAvatarText, { color: C.primary }]}>
-                            {String(player.name || 'P').charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-                        <View style={{ flex: 1, marginLeft: 8 }}>
-                          <Text style={[styles.playerNameText, { color: C.text }]} numberOfLines={1}>
-                            {player.name}
-                          </Text>
-                          {player.phone ? (
-                            <Text style={[styles.playerPhoneText, { color: C.subtext }]}>
-                              📞 {player.phone}
-                            </Text>
-                          ) : null}
-                        </View>
-
-                        {/* Remove button if owner */}
-                        {isOwner && (
-                          <TouchableOpacity
-                            style={styles.playerRemoveBtn}
-                            onPress={() => handleRemovePlayer(team.id, player.id, player.name)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Feather name="x" size={14} color={C.error} />
-                          </TouchableOpacity>
-                        )}
+                        <Text
+                          style={[
+                            styles.capacityPillText,
+                            { color: isFull ? '#10B981' : '#2563EB' },
+                          ]}
+                        >
+                          {players.length} / {maxPlayersPerTeam} Players
+                        </Text>
                       </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={[styles.noPlayersText, { color: C.subtext }]}>
-                    No players registered in this squad yet.
-                  </Text>
-                )}
 
-                {/* Add Player CTA if owner & not full */}
-                {isOwner && !isFull && (
-                  <TouchableOpacity
-                    style={[styles.addPlayerBtn, { borderColor: '#0F766E' }]}
-                    onPress={() => handleOpenAddPlayer(team.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Feather name="user-plus" size={13} color="#0F766E" style={{ marginRight: 6 }} />
-                    <Text style={[styles.addPlayerBtnText, { color: '#0F766E' }]}>
-                      Add / Invite Player ({players.length}/{maxPlayersPerTeam})
-                    </Text>
+                      {players.length > 0 && (
+                        <Feather
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color={C.primary}
+                        />
+                      )}
+                    </View>
                   </TouchableOpacity>
-                )}
-              </View>
-            );
-          })}
+
+                  {/* Toggle View Squad Button */}
+                  {players.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.toggleSquadBtn}
+                      onPress={() => toggleTeamExpand(team.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.toggleSquadText, { color: C.primary }]}>
+                        {isExpanded ? 'Hide Squad' : `View Squad (${players.length || maxPlayersPerTeam})`}
+                      </Text>
+                      <Feather
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={C.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Expanded Players List */}
+                  {isExpanded && players.length > 0 && (
+                    <View style={[styles.rosterListWrap, { borderColor: C.border }]}>
+                      {players.map((p, pIdx) => (
+                        <View
+                          key={p.id || p.index || pIdx}
+                          style={[styles.rosterPlayerRow, { borderBottomColor: C.border }]}
+                        >
+                          <View style={[styles.rosterNumberBadge, { backgroundColor: C.primaryLight }]}>
+                            <Text style={[styles.rosterNumberText, { color: C.primary }]}>
+                              #{p.index || pIdx + 1}
+                            </Text>
+                          </View>
+                          <Text style={[styles.rosterPlayerName, { color: C.text }]}>{p.name}</Text>
+                          {Boolean(p.phone) && (
+                            <Text style={[styles.rosterPlayerPhone, { color: C.subtext }]}>{p.phone}</Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Rejection Reason Notice if Rejected */}
+                  {team.status === 'rejected' && Boolean(team.rejectionReason) && (
+                    <View style={styles.rejectedReasonBox}>
+                      <Text style={styles.rejectedReasonLabel}>Rejection Reason: </Text>
+                      <Text style={styles.rejectedReasonValue}>{team.rejectionReason}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
         </View>
 
         {/* ── Description ── */}
@@ -2714,6 +2821,106 @@ const styles = StyleSheet.create({
   capacityPillText: {
     fontSize: 10,
     fontWeight: '800',
+  },
+  teamCaptainText: {
+    fontSize: 12,
+    marginTop: 2,
+    fontFamily: FONT.regular,
+  },
+  teamStatusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  teamStatusText: {
+    fontSize: 10,
+    fontFamily: FONT.bold,
+  },
+  toggleSquadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    marginTop: 6,
+    borderRadius: 6,
+    gap: 4,
+  },
+  toggleSquadText: {
+    fontSize: 12,
+    fontFamily: FONT.bold,
+  },
+  rosterListWrap: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  rosterPlayerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  rosterNumberBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  rosterNumberText: {
+    fontSize: 10,
+    fontFamily: FONT.bold,
+  },
+  rosterPlayerName: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: FONT.medium,
+  },
+  rosterPlayerPhone: {
+    fontSize: 11,
+    fontFamily: FONT.regular,
+  },
+  rejectedReasonBox: {
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  rejectedReasonLabel: {
+    fontSize: 11,
+    fontFamily: FONT.bold,
+    color: '#EF4444',
+  },
+  rejectedReasonValue: {
+    fontSize: 11,
+    fontFamily: FONT.regular,
+    color: '#B91C1C',
+  },
+  emptyTeamsCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginVertical: 4,
+  },
+  emptyTeamsTitle: {
+    fontSize: 14,
+    fontFamily: FONT.bold,
+    marginBottom: 4,
+  },
+  emptyTeamsSub: {
+    fontSize: 12,
+    fontFamily: FONT.regular,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   capacityTrack: {
     height: 4,

@@ -62,7 +62,7 @@ function page({ title, description, body, status = 200 }) {
     };
 }
 
-router.get('/tournament/:shareId', async (req, res) => {
+router.get(['/tournament/:shareId', '/tournaments/:shareId', '/t/:shareId'], async (req, res) => {
     const shareId = String(req.params.shareId || '').trim();
     let t = null;
     try {
@@ -81,19 +81,27 @@ router.get('/tournament/:shareId', async (req, res) => {
         return res.status(out.status).type('html').send(out.html);
     }
 
-    if (!t || t.status === 'draft' || t.status === 'cancelled') {
+    if (!t || t.status !== 'published') {
         const out = page({
             title: 'Tournament not available',
-            description: 'This tournament link is no longer active.',
+            description: 'This tournament link is no longer active or is unapproved.',
             status: 404,
-            body: '<div class="card"><h1>Tournament not available</h1><p class="empty">This link is no longer active. Please ask the organiser for a fresh link, or open the Turf Booking app to browse live tournaments.</p></div>',
+            body: '<div class="card"><h1>Tournament not available</h1><p class="empty">This link is no longer active, unapproved, or has ended. Please ask the organiser for a fresh link, or open the Turf Booking app to browse live tournaments.</p></div>',
         });
         return res.status(out.status).type('html').send(out.html);
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    const regStart = t.registrationStartDate ? String(t.registrationStartDate).slice(0, 10) : (t.startDate ? String(t.startDate).slice(0, 10) : '');
+    const regEnd = t.registrationEndDate ? String(t.registrationEndDate).slice(0, 10) : (t.endDate ? String(t.endDate).slice(0, 10) : '');
+    const isRegNotOpen = Boolean(regStart && today < regStart);
+    const isRegClosed = Boolean(regEnd && today > regEnd);
+    const regStatusText = isRegClosed ? 'Registration Closed' : isRegNotOpen ? `Opens ${fmtDate(regStart)}` : 'Registration Open';
+
     const venue = t.venueName || t.turf?.name || '';
     const city = t.city || t.turf?.city || '';
     const rows = [
+        ['Status', regStatusText],
         ['Dates', `${fmtDate(t.startDate)} – ${fmtDate(t.endDate)}`],
         t.registrationEndDate ? ['Register by', fmtDate(t.registrationEndDate)] : null,
         ['Teams', t.numberOfTeams],
@@ -110,8 +118,9 @@ router.get('/tournament/:shareId', async (req, res) => {
   <p class="venue">${esc([venue, city].filter(Boolean).join(' · '))}</p>
   <dl>${rows.map(([k, v]) => `<div class="row"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
   ${t.description ? `<p class="empty">${esc(t.description)}</p>` : ''}
-  <div class="note">To register your team, open the <strong>Turf Booking</strong> app, go to <strong>Tournaments</strong> and select <strong>${esc(t.name)}</strong>.</div>
-  ${appUrl ? `<a class="btn" href="${esc(appUrl)}">Get the Turf Booking app</a>` : ''}
+  <div class="note">To view live squads and register your team, open this tournament in the <strong>Turf Booking</strong> app.</div>
+  <a class="btn" href="turfuserapp://tournament/${esc(shareId)}" style="margin-top:16px;">Open in Turf Booking App</a>
+  ${appUrl ? `<a class="btn" href="${esc(appUrl)}" style="margin-top:8px;background:transparent;border:1px solid var(--brand);color:var(--brand);">Get the Turf Booking app</a>` : ''}
 </div>`;
 
     const out = page({

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useSelector } from 'react-redux';
-import { Platform } from 'react-native';
+import { Platform, Linking } from 'react-native';
 import { fcmHelper } from '../utils/fcmHelper';
 import MainTabs              from './MainTabs';
 import SplashScreen          from '../screens/SplashScreen';
@@ -44,8 +44,31 @@ import { createNavigationContainerRef } from '@react-navigation/native';
 const Stack = createStackNavigator();
 export const navigationRef = createNavigationContainerRef();
 
+const extractTournamentIdFromUrl = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/(?:tournament|tournaments|t)\/([^/?#]+)/i);
+  return match && match[1] ? decodeURIComponent(match[1]) : null;
+};
+
+const linking = {
+  prefixes: [
+    'https://turf-booking-app-official-production.up.railway.app',
+    'https://turfbookingapp.com',
+    'turfuserapp://',
+    'turfbooking://',
+  ],
+  config: {
+    screens: {
+      TournamentDetail: {
+        path: 'tournament/:tournamentId',
+      },
+    },
+  },
+};
+
 export default function RootNavigator() {
   const { token, user, bootstrapped, splashDone, locationSet } = useSelector((s) => s.auth);
+  const pendingTournamentIdRef = React.useRef(null);
 
   useEffect(() => {
     if (token) {
@@ -65,8 +88,55 @@ export default function RootNavigator() {
   // Wait for BOTH bootstrapAuth (data ready) AND splash animation (visual ready)
   const showSplash = !bootstrapped || !splashDone;
 
+  // Deep linking handler for cold start and runtime events
+  useEffect(() => {
+    const handleUrl = (url) => {
+      const tournId = extractTournamentIdFromUrl(url);
+      if (!tournId) return;
+
+      if (!showSplash && navigationRef.isReady()) {
+        navigationRef.navigate('TournamentDetail', {
+          tournamentId: tournId,
+          shareId: tournId,
+          tournament: null,
+        });
+      } else {
+        pendingTournamentIdRef.current = tournId;
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+
+    const subscription = Linking.addEventListener('url', (event) => {
+      if (event?.url) handleUrl(event.url);
+    });
+
+    return () => {
+      subscription?.remove?.();
+    };
+  }, [showSplash]);
+
+  // Flush pending deep link once splash is dismissed and navigation is ready
+  useEffect(() => {
+    if (!showSplash && pendingTournamentIdRef.current) {
+      const tournId = pendingTournamentIdRef.current;
+      pendingTournamentIdRef.current = null;
+      setTimeout(() => {
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('TournamentDetail', {
+            tournamentId: tournId,
+            shareId: tournId,
+            tournament: null,
+          });
+        }
+      }, 150);
+    }
+  }, [showSplash]);
+
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <Stack.Navigator
         screenOptions={{ headerShown: false, cardStyle: { backgroundColor: '#0B132B' } }}
       >
@@ -83,6 +153,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Login2"     component={Login2Screen} />
             <Stack.Screen name="OTP"        component={OTPScreen} />
             <Stack.Screen name="Register"   component={RegisterScreen} />
+            <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ presentation: 'card' }} />
           </>
 
         ) : (

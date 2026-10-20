@@ -21,7 +21,7 @@ try {
   Geolocation.setRNConfiguration({
     skipPermissionRequests: false,
     authorizationLevel: 'auto',
-    locationProvider: 'playServices',
+    locationProvider: 'auto',
   });
 } catch (_) { }
 import useTheme from '../hooks/useTheme';

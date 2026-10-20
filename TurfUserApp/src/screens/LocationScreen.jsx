@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useDispatch } from 'react-redux';
 import Feather from 'react-native-vector-icons/Feather';
-import { setLocation } from '../redux/authSlice';
+import Geolocation from '@react-native-community/geolocation';
+import { setLocation, setUserCoords } from '../redux/authSlice';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 import useTheme from '../hooks/useTheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,7 +22,56 @@ export default function LocationScreen({ navigation }) {
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [predictions, setPredictions] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [locatingGps, setLocatingGps] = useState(false);
   const debounceRef = useRef(null);
+
+  const handleUseCurrentLocation = async () => {
+    if (locatingGps) return;
+    setLocatingGps(true);
+    try {
+      Geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            dispatch(setUserCoords({ lat: latitude, lng: longitude }));
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 4000);
+              const res = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+                { headers: { 'User-Agent': 'TurfBookingApp/1.0' }, signal: controller.signal }
+              );
+              clearTimeout(timer);
+              const data = await res.json();
+              const addr = data.address || {};
+              const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || 'Current Location';
+              dispatch(setLocation(city));
+            } catch {
+              dispatch(setLocation('Current Location'));
+            }
+          } catch {
+            dispatch(setLocation('Current Location'));
+          } finally {
+            setLocatingGps(false);
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.replace('Main');
+          }
+        },
+        () => {
+          setLocatingGps(false);
+          dispatch(setLocation('Current Location'));
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.replace('Main');
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+      );
+    } catch {
+      setLocatingGps(false);
+      dispatch(setLocation('Current Location'));
+      if (navigation.canGoBack()) navigation.goBack();
+      else navigation.replace('Main');
+    }
+  };
 
   // Load live dynamic active turf locations from actual registered turfs
   const loadActiveLocations = useCallback(async () => {
@@ -168,21 +218,30 @@ export default function LocationScreen({ navigation }) {
         {!hasSearch && (
           <TouchableOpacity
             style={[styles.gpsBtn, { backgroundColor: C.primaryLight, borderColor: C.primary }]}
-            onPress={() => handleSelect('Current Location')}
+            onPress={handleUseCurrentLocation}
             activeOpacity={0.8}
+            disabled={locatingGps}
           >
             <View style={[styles.gpsIconCircle, { backgroundColor: C.primary }]}>
-              <Feather name="navigation" size={14} color="#FFFFFF" />
+              {locatingGps ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Feather name="navigation" size={14} color="#FFFFFF" />
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.gpsTitle, { color: C.primaryDark || C.primary }]}>
-                Use Current Location
+                {locatingGps ? 'Detecting Location...' : 'Use Current Location'}
               </Text>
               <Text style={[styles.gpsSub, { color: C.subtext }]}>
                 Auto-detect via GPS & show all nearby stadiums
               </Text>
             </View>
-            <Feather name="chevron-right" size={18} color={C.primary} />
+            {locatingGps ? (
+              <ActivityIndicator size="small" color={C.primary} />
+            ) : (
+              <Feather name="chevron-right" size={18} color={C.primary} />
+            )}
           </TouchableOpacity>
         )}
 

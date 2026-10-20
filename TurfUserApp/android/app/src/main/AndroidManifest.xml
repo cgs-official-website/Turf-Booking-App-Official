@@ -38,6 +38,28 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+
+        <!-- Deep linking for HTTPS tournament share links (Android App Links) -->
+        <intent-filter android:autoVerify="true">
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="turf-booking-app-official-production.up.railway.app" android:pathPrefix="/tournament" />
+            <data android:scheme="https" android:host="turf-booking-app-official-production.up.railway.app" android:pathPrefix="/tournaments" />
+            <data android:scheme="https" android:host="turf-booking-app-official-production.up.railway.app" android:pathPrefix="/t" />
+            <data android:scheme="https" android:host="turfbookingapp.com" android:pathPrefix="/tournament" />
+            <data android:scheme="https" android:host="turfbookingapp.com" android:pathPrefix="/tournaments" />
+            <data android:scheme="https" android:host="turfbookingapp.com" android:pathPrefix="/t" />
+        </intent-filter>
+
+        <!-- Custom scheme deep linking: turfuserapp:// and turfbooking:// -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="turfuserapp" />
+            <data android:scheme="turfbooking" />
+        </intent-filter>
       </activity>
     </application>
 </manifest>

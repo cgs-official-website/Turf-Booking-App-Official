@@ -266,10 +266,10 @@ const TournamentListScreen = ({ navigation }) => {
               <View
                 style={[
                   styles.statusBadge,
+                  styles.applicationsBadge,
                   {
                     backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF',
                     borderColor: isDark ? 'rgba(59, 130, 246, 0.4)' : '#BFDBFE',
-                    marginLeft: 6,
                   },
                 ]}
               >
@@ -281,7 +281,7 @@ const TournamentListScreen = ({ navigation }) => {
             ) : null}
           </View>
 
-          <Feather name="chevron-right" size={18} color={colors.textLight} />
+          <Feather name="chevron-right" size={18} color={colors.textLight} style={{ marginTop: 2 }} />
         </View>
 
         <Text style={[styles.tournamentName, { color: colors.text }]} numberOfLines={2}>
@@ -617,13 +617,20 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 10,
   },
   cardHeaderLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginRight: 8,
+  },
+  applicationsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   sourceTag: {
     paddingHorizontal: 7,

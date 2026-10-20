@@ -59,6 +59,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const [tournamentRejectionReason, setTournamentRejectionReason] = useState('');
   const [processingRegId, setProcessingRegId] = useState(null);
   const [expandedRegs, setExpandedRegs] = useState(new Set());
+  const [expandedSquads, setExpandedSquads] = useState(new Set());
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [selectedRegForReject, setSelectedRegForReject] = useState(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
@@ -151,6 +152,15 @@ const TournamentDetailScreen = ({ route, navigation }) => {
       const next = new Set(prev);
       if (next.has(regId)) next.delete(regId);
       else next.add(regId);
+      return next;
+    });
+  };
+
+  const toggleSquadExpand = (squadId) => {
+    setExpandedSquads((prev) => {
+      const next = new Set(prev);
+      if (next.has(squadId)) next.delete(squadId);
+      else next.add(squadId);
       return next;
     });
   };
@@ -387,13 +397,18 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const turfName = tournament.turfName || tournament.turf?.name || 'Partner Facility';
   const turfCity = tournament.turf?.city || tournament.turf?.address || 'Tamil Nadu';
   const maxPlayers = tournament.playersPerTeam || 11;
-  const teamsList = Array.isArray(tournament.teams) && tournament.teams.length > 0
-    ? tournament.teams
-    : Array.from({ length: tournament.numberOfTeams || 2 }, (_, idx) => ({
-        id: `team_${idx + 1}`,
-        name: `Team ${idx + 1}`,
-        players: [],
-      }));
+  const acceptedSquads = Array.isArray(registrations)
+    ? registrations
+        .filter((r) => r.status === 'accepted')
+        .map((r, idx) => ({
+          id: r.id || `accepted_${idx}`,
+          name: r.teamName || `Accepted Team ${idx + 1}`,
+          captainName: r.captainName,
+          captainPhone: r.captainPhone,
+          captainEmail: r.captainEmail,
+          players: Array.isArray(r.players) ? r.players : [],
+        }))
+    : [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1182,80 +1197,135 @@ const TournamentDetailScreen = ({ route, navigation }) => {
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Teams & Squad Rosters</Text>
           <Text style={[styles.shareSub, { color: colors.textSecondary }]}>
-            Configured squads ({tournament.numberOfTeams} teams • max {maxPlayers} players/team):
+            Confirmed squad rosters ({acceptedSquads.length} / {tournament.numberOfTeams || 2} teams accepted • max {maxPlayers} players/team):
           </Text>
 
-          {teamsList.map((team, idx) => {
-            const players = Array.isArray(team.players) ? team.players : [];
-            const isFull = players.length >= maxPlayers;
-            return (
-              <View
-                key={team.id || idx}
-                style={[
-                  styles.teamCard,
-                  {
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.teamHeader}>
-                  <Text style={[styles.teamNameText, { color: colors.text }]}>{team.name}</Text>
-                  <View
-                    style={[
-                      styles.capacityPill,
-                      {
-                        backgroundColor: isFull
-                          ? 'rgba(16, 185, 129, 0.15)'
-                          : isDark
-                          ? 'rgba(255,255,255,0.06)'
-                          : '#F1F5F9',
-                        borderColor: isFull ? '#10B981' : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.capacityPillText,
-                        { color: isFull ? '#10B981' : colors.textSecondary },
-                      ]}
-                    >
-                      {players.length} / {maxPlayers} Players
-                    </Text>
-                  </View>
-                </View>
+          {acceptedSquads.length === 0 ? (
+            <View style={styles.emptyRegsBox}>
+              <Feather name="shield" size={26} color={colors.textSecondary} style={{ opacity: 0.5, marginBottom: 6 }} />
+              <Text style={[styles.emptyRegsTitle, { color: colors.text }]}>No Accepted Squads Yet</Text>
+              <Text style={[styles.emptyRegsSub, { color: colors.textSecondary }]}>
+                Teams accepted from the Team Registrations section above will appear here with their confirmed squad rosters.
+              </Text>
+            </View>
+          ) : (
+            acceptedSquads.map((team, idx) => {
+              const players = Array.isArray(team.players) ? team.players : [];
+              const isFull = players.length >= maxPlayers;
+              const isExpanded = expandedSquads.has(team.id);
 
-                {players.length > 0 ? (
-                  <View style={{ marginTop: 6, gap: 5 }}>
-                    {players.map((p, pIdx) => (
+              return (
+                <View
+                  key={team.id || idx}
+                  style={[
+                    styles.teamCard,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8FAFC',
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={styles.teamHeader}
+                    onPress={() => toggleSquadExpand(team.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={[styles.teamNameText, { color: colors.text }]} numberOfLines={1}>
+                        {team.name}
+                      </Text>
+                      {team.captainName ? (
+                        <Text style={[styles.regCaptainLine, { color: colors.textSecondary }]}>
+                          Captain: <Text style={{ color: colors.text, fontWeight: '700' }}>{team.captainName}</Text>
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <View
-                        key={p.id || pIdx}
                         style={[
-                          styles.playerItemRow,
+                          styles.capacityPill,
                           {
-                            backgroundColor: colors.card,
-                            borderColor: colors.border,
+                            backgroundColor: isFull
+                              ? 'rgba(16, 185, 129, 0.15)'
+                              : isDark
+                              ? 'rgba(255,255,255,0.06)'
+                              : '#F1F5F9',
+                            borderColor: isFull ? '#10B981' : colors.border,
                           },
                         ]}
                       >
-                        <Feather name="user" size={12} color={colors.primary} style={{ marginRight: 6 }} />
-                        <Text style={[styles.playerNameText, { color: colors.text }]}>{p.name}</Text>
-                        {p.phone ? (
-                          <Text style={{ fontSize: 10, color: colors.textSecondary, marginLeft: 'auto' }}>
-                            {p.phone}
-                          </Text>
-                        ) : null}
+                        <Text
+                          style={[
+                            styles.capacityPillText,
+                            { color: isFull ? '#10B981' : colors.textSecondary },
+                          ]}
+                        >
+                          {players.length} / {maxPlayers} Players
+                        </Text>
                       </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.textSecondary, marginTop: 4 }}>
-                    No players registered in this squad yet.
-                  </Text>
-                )}
-              </View>
-            );
-          })}
+
+                      {players.length > 0 && (
+                        <Feather
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color={colors.primary}
+                        />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Toggle View Squad Button */}
+                  {players.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.toggleRosterBtn}
+                      onPress={() => toggleSquadExpand(team.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.toggleRosterText, { color: colors.primary }]}>
+                        {isExpanded ? 'Hide Squad' : `View Squad (${players.length || maxPlayers})`}
+                      </Text>
+                      <Feather
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Expanded Players List */}
+                  {isExpanded && players.length > 0 && (
+                    <View style={[styles.rosterList, { borderColor: colors.border }]}>
+                      {players.map((p, pIdx) => (
+                        <View
+                          key={p.id || p.index || pIdx}
+                          style={[styles.rosterRow, { borderBottomColor: colors.border }]}
+                        >
+                          <View style={[styles.rosterNum, { backgroundColor: colors.primaryLight }]}>
+                            <Text style={[styles.rosterNumText, { color: colors.primary }]}>
+                              #{p.index || pIdx + 1}
+                            </Text>
+                          </View>
+                          <Text style={[styles.rosterName, { color: colors.text }]}>{p.name}</Text>
+                          {p.phone ? (
+                            <Text style={[styles.rosterPhone, { color: colors.textSecondary }]}>
+                              {p.phone}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {players.length === 0 && (
+                    <Text style={{ fontSize: 11, fontStyle: 'italic', color: colors.textSecondary, marginTop: 4 }}>
+                      No players registered in this squad yet.
+                    </Text>
+                  )}
+                </View>
+              );
+            })
+          )}
         </View>
 
         {/* Bottom Actions */}
