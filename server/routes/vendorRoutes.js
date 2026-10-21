@@ -87,6 +87,14 @@ router.patch('/tournaments/:id/approve', tournamentController.approveTournament)
 router.post('/tournaments/:id/reject', tournamentController.rejectTournament);
 router.patch('/tournaments/:id/reject', tournamentController.rejectTournament);
 
+// Vendor Tournament Bracket, Toss & Live Scoring
+// Only the vendor who CREATED the tournament (or an admin) may generate the
+// bracket and enter scores - enforced inside the controller (isCreator check).
+router.post('/tournaments/:id/bracket/generate', tournamentController.generateBracket);
+router.post('/tournaments/:id/matches/:matchId/toss', tournamentController.conductMatchToss);
+router.post('/tournaments/:id/matches/:matchId/score', tournamentController.updateMatchScore);
+router.post('/tournaments/:id/matches/:matchId/winner', tournamentController.confirmMatchWinner);
+
 // Vendor Tournament Registrations (Phase 2)
 router.get('/tournaments/:id/registrations', tournamentController.getTournamentRegistrations);
 router.post('/tournaments/:id/registrations/:regId/accept', tournamentController.acceptRegistration);

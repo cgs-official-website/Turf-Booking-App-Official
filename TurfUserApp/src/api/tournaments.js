@@ -4,8 +4,14 @@ import { client } from './client';
  * Fetch all published & active tournaments hosted by turfs
  * (Available Tab)
  */
-export const getAvailableTournamentsApi = () => {
-  return client.get('/tournaments/available');
+// In-memory stale-while-revalidate cache: the Tournaments tab paints instantly
+// from the last response while a fresh one loads in the background.
+let availableCache = null;
+export const getCachedAvailableTournaments = () => availableCache;
+export const getAvailableTournamentsApi = async () => {
+  const data = await client.get('/tournaments/available');
+  availableCache = data;
+  return data;
 };
 
 /**

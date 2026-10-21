@@ -7,15 +7,14 @@ export const EMULATOR_URL = 'http://10.0.2.2:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-export const CANDIDATE_URLS = [
-  LOCAL_URL,
-  LAN_URL_CURRENT,
-  'http://localhost:5000/api/v1',
-  EMULATOR_URL,
-  RAILWAY_PROD_URL,
-];
+// RELEASE (APK): Railway ONLY. The old code tried 127.0.0.1 -> LAN IP (hangs
+// ~15s on a real phone) -> localhost -> ... -> Railway for EVERY request, which
+// made login and every other screen extremely slow.
+export const CANDIDATE_URLS = IS_DEV
+  ? [LOCAL_URL, LAN_URL_CURRENT, 'http://localhost:5000/api/v1', EMULATOR_URL, RAILWAY_PROD_URL]
+  : [RAILWAY_PROD_URL];
 
-export const BASE_URL = LOCAL_URL;
+export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
 export const FALLBACK_URL = CANDIDATE_URLS[0];
 
 let activeBaseUrl = BASE_URL;
@@ -79,19 +78,16 @@ export const apiRequest = async (endpoint, options = {}) => {
   let lastResponse = null;
   let lastError = null;
 
-  const hostsToTry = [
-    LOCAL_URL,
-    LAN_URL_CURRENT,
-    'http://localhost:5000/api/v1',
-    activeBaseUrl,
-    RAILWAY_PROD_URL,
-    EMULATOR_URL,
-  ].filter((v, i, a) => v && a.indexOf(v) === i);
+  // Release: Railway only. Dev: last working host first, then the rest.
+  const hostsToTry = (IS_DEV
+    ? [activeBaseUrl, ...CANDIDATE_URLS]
+    : [RAILWAY_PROD_URL]
+  ).filter((v, i, a) => v && a.indexOf(v) === i);
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
-    // Local hosts allow 15s for remote DB network latency; remote servers get 30s
-    const timeoutMs = isFormData ? 45000 : isLocalHost(host) ? 15000 : 30000;
+    // Local hosts fail fast (3s) so a dead LAN IP never blocks; Railway gets 30s
+    const timeoutMs = isFormData ? 45000 : isLocalHost(host) ? 3000 : 30000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(`${host}${endpoint}`, {
@@ -101,7 +97,7 @@ export const apiRequest = async (endpoint, options = {}) => {
       clearTimeout(timeoutId);
       lastResponse = res;
       // If 404 on this host, another candidate server might have the route (e.g. local vs un-deployed remote)
-      if (res && res.status === 404 && hostsToTry.indexOf(host) < hostsToTry.length - 1) {
+      if (IS_DEV && res && res.status === 404 && hostsToTry.indexOf(host) < hostsToTry.length - 1) {
         continue;
       }
       if (res && (res.ok || res.status < 500)) {

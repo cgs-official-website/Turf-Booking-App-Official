@@ -14,16 +14,18 @@ export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
-// Prioritize local / LAN development endpoints during testing, fallback to Railway
-export const BASE_URL = LOCAL_URL;
+// RELEASE (APK): talk to Railway ONLY. Previously every request first tried
+// 127.0.0.1 -> 10.37.161.39 (LAN, hangs ~15s on a real phone) -> localhost ->
+// 10.0.2.2 (hangs ~15s) and only then reached Railway. That was the main cause
+// of the very slow login / tournament loading.
+// DEV: try local endpoints first, but with a short timeout so a dead LAN IP
+// can never block the app for 15s.
+export const BASE_URL = IS_DEV ? LOCAL_URL : RAILWAY_PROD_URL;
 
-const CANDIDATE_URLS = [
-  LOCAL_URL,
-  LAN_URL_CURRENT,
-  LOCAL_HOST_URL,
-  EMULATOR_URL,
-  RAILWAY_PROD_URL,
-].filter(Boolean);
+const CANDIDATE_URLS = (IS_DEV
+  ? [LOCAL_URL, LAN_URL_CURRENT, LOCAL_HOST_URL, EMULATOR_URL, RAILWAY_PROD_URL]
+  : [RAILWAY_PROD_URL]
+).filter(Boolean);
 
 export const getOrigin = () => {
   if (client && client.activeBaseUrl) {
@@ -47,6 +49,12 @@ class ApiClient {
 
   async initSavedBaseUrl() {
     try {
+      if (!IS_DEV) {
+        // Release: always Railway. Drop any local URL saved by old test builds.
+        this.activeBaseUrl = RAILWAY_PROD_URL;
+        AsyncStorage.removeItem('activeBaseUrl').catch(() => { });
+        return;
+      }
       const saved = await AsyncStorage.getItem('activeBaseUrl');
       if (saved && CANDIDATE_URLS.includes(saved)) {
         this.activeBaseUrl = saved;
@@ -79,8 +87,8 @@ class ApiClient {
       const baseUrl = urlsToTry[i];
       const controller = new AbortController();
       const isLocal = /^https?:\/\/(127\.|localhost|10\.|192\.168\.|172\.)/.test(baseUrl);
-      // Give local enough time for remote cloud database queries (15s), Railway 30s
-      const timeoutMs = isLocal ? 15000 : 30000;
+      // Local/LAN hosts must fail fast (3s) in dev; Railway gets 30s (cold start safe)
+      const timeoutMs = isLocal ? 3000 : 30000;
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
@@ -92,7 +100,7 @@ class ApiClient {
         lastResponse = res;
 
         // If 404 on this host, another candidate server might have the route (e.g. local vs un-deployed remote)
-        if (res && res.status === 404 && i < urlsToTry.length - 1) {
+        if (IS_DEV && res && res.status === 404 && i < urlsToTry.length - 1) {
           lastError = new Error(`Route not found on ${baseUrl}`);
           continue;
         }

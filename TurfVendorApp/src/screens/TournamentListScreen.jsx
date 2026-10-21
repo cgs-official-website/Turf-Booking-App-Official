@@ -115,7 +115,7 @@ const TournamentListScreen = ({ navigation }) => {
   const filteredTournaments = tournaments.filter((t) => {
     if (selectedTurfFilter !== 'all') {
       const matchTurf = (t.turfId && t.turfId === selectedTurfFilter) ||
-                        (t.turf && (t.turf.id === selectedTurfFilter || t.turf._id === selectedTurfFilter));
+        (t.turf && (t.turf.id === selectedTurfFilter || t.turf._id === selectedTurfFilter));
       if (!matchTurf) return false;
     }
     const isUser = t.creatorType === 'USER' || t.source === 'USER CREATED';
@@ -262,7 +262,7 @@ const TournamentListScreen = ({ navigation }) => {
               );
             })()}
 
-            {Array.isArray(item.registrations) && item.registrations.length > 0 ? (
+            {(item.registrationsCount ?? (Array.isArray(item.registrations) ? item.registrations.length : 0)) > 0 ? (
               <View
                 style={[
                   styles.statusBadge,
@@ -275,7 +275,7 @@ const TournamentListScreen = ({ navigation }) => {
               >
                 <Feather name="users" size={11} color="#3B82F6" style={{ marginRight: 4 }} />
                 <Text style={[styles.statusText, { color: '#2563EB', fontWeight: '700' }]}>
-                  {item.registrations.length} {item.registrations.length === 1 ? 'Application' : 'Applications'}
+                  {item.registrationsCount ?? item.registrations?.length ?? 0} {(item.registrationsCount ?? item.registrations?.length ?? 0) === 1 ? 'Application' : 'Applications'}
                 </Text>
               </View>
             ) : null}

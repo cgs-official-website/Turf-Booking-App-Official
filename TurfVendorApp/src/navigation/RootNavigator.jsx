@@ -33,6 +33,7 @@ import TournamentListScreen from '../screens/TournamentListScreen';
 import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import EditTournamentScreen from '../screens/EditTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
+import TournamentMatchesScreen from '../screens/TournamentMatchesScreen';
 
 // Vendor onboarding flow (Turf+Vendor setup -> Vendor KYC -> Turf KYC) — shown
 // once, right after login, before the vendor reaches Home/MainTabs.
@@ -211,6 +212,7 @@ const RootNavigator = () => {
             <Stack.Screen name="CreateTournament" component={CreateTournamentScreen} options={{ title: 'Create Tournament' }} />
             <Stack.Screen name="EditTournament" component={EditTournamentScreen} options={{ title: 'Edit Tournament' }} />
             <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ title: 'Tournament Details' }} />
+            <Stack.Screen name="TournamentMatches" component={TournamentMatchesScreen} options={{ title: 'Matches & Scoring' }} />
           </>
         )}
       </Stack.Navigator>

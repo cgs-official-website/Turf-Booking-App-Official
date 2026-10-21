@@ -23,6 +23,15 @@ const app = express();
 // ── Middleware ─────────────────────────────────────────────────────────────
 app.use(cors());
 
+// gzip responses (tournament lists / brackets are large JSON). Optional dep:
+// run `npm i compression` in /server. If it is missing the server still works.
+try {
+  // eslint-disable-next-line global-require
+  app.use(require('compression')({ threshold: 1024 }));
+} catch (_) {
+  console.warn('ℹ️ "compression" not installed - responses are not gzipped. Run: npm i compression');
+}
+
 // Preserve raw body for Razorpay webhook HMAC signature verification
 app.use(
   express.json({
@@ -34,9 +43,17 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Lightweight request log. NEVER log request bodies: they contain passwords,
+// OTPs and base64 images, and JSON.stringify on a big body blocks the event
+// loop (this was slowing down every request, including login).
 app.use((req, res, next) => {
-  const bodyPreview = req.body && Object.keys(req.body).length > 0 ? JSON.stringify(req.body) : '';
-  console.log(`📡 [${req.method}] ${req.url} ${bodyPreview}`);
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    if (process.env.LOG_REQUESTS === 'true' || ms > 1000) {
+      console.log(`📡 [${req.method}] ${req.originalUrl.split('?')[0]} ${res.statusCode} ${ms}ms`);
+    }
+  });
   next();
 });
 

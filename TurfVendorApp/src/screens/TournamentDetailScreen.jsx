@@ -95,35 +95,39 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const loadDetails = useCallback(async () => {
     if (!tournamentId) return;
     try {
-      console.log(`📡 [TournamentDetail] Loading details for tournamentId: "${tournamentId}"`);
+      // Fetch tournament + registrations IN PARALLEL (was sequential = 2x slower)
+      const [tournResult, regsResult] = await Promise.allSettled([
+        getTournamentByIdApi(tournamentId),
+        getTournamentRegistrationsApi(tournamentId),
+      ]);
+
       let tournData = null;
-      try {
-        const tournRes = await getTournamentByIdApi(tournamentId);
+      if (tournResult.status === 'fulfilled') {
+        const tournRes = tournResult.value;
         tournData = tournRes?.data?.tournament || tournRes?.tournament || tournRes;
         if (tournData && tournData.id) {
           setTournament(tournData);
         }
-      } catch (tErr) {
-        console.warn('⚠️ [TournamentDetail] getTournamentByIdApi failed:', tErr);
+      } else {
+        console.warn('⚠️ [TournamentDetail] getTournamentByIdApi failed:', tournResult.reason?.message);
       }
 
-      try {
-        const regsRes = await getTournamentRegistrationsApi(tournamentId);
-        console.log('📡 [TournamentDetail] getTournamentRegistrationsApi result:', regsRes);
+      if (regsResult.status === 'fulfilled') {
+        const regsRes = regsResult.value;
         const regs = Array.isArray(regsRes)
           ? regsRes
           : Array.isArray(regsRes?.registrations)
-          ? regsRes.registrations
-          : Array.isArray(regsRes?.data?.registrations)
-          ? regsRes.data.registrations
-          : Array.isArray(regsRes?.data)
-          ? regsRes.data
-          : Array.isArray(tournData?.registrations)
-          ? tournData.registrations
-          : [];
+            ? regsRes.registrations
+            : Array.isArray(regsRes?.data?.registrations)
+              ? regsRes.data.registrations
+              : Array.isArray(regsRes?.data)
+                ? regsRes.data
+                : Array.isArray(tournData?.registrations)
+                  ? tournData.registrations
+                  : [];
         setRegistrations(regs);
-      } catch (rErr) {
-        console.warn('⚠️ [TournamentDetail] getTournamentRegistrationsApi failed, falling back to tournament registrations:', rErr);
+      } else {
+        console.warn('⚠️ [TournamentDetail] registrations failed, using tournament registrations:', regsResult.reason?.message);
         if (Array.isArray(tournData?.registrations)) {
           setRegistrations(tournData.registrations);
         }
@@ -399,15 +403,15 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   const maxPlayers = tournament.playersPerTeam || 11;
   const acceptedSquads = Array.isArray(registrations)
     ? registrations
-        .filter((r) => r.status === 'accepted')
-        .map((r, idx) => ({
-          id: r.id || `accepted_${idx}`,
-          name: r.teamName || `Accepted Team ${idx + 1}`,
-          captainName: r.captainName,
-          captainPhone: r.captainPhone,
-          captainEmail: r.captainEmail,
-          players: Array.isArray(r.players) ? r.players : [],
-        }))
+      .filter((r) => r.status === 'accepted')
+      .map((r, idx) => ({
+        id: r.id || `accepted_${idx}`,
+        name: r.teamName || `Accepted Team ${idx + 1}`,
+        captainName: r.captainName,
+        captainPhone: r.captainPhone,
+        captainEmail: r.captainEmail,
+        players: Array.isArray(r.players) ? r.players : [],
+      }))
     : [];
 
   return (
@@ -890,6 +894,28 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+        {/* ── Matches & Scoring (vendor-created tournaments: vendor enters scores) ── */}
+        {tournament.status === 'published' && (
+          <TouchableOpacity
+            style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.primary, flexDirection: 'row', alignItems: 'center' }, SHADOWS.sm]}
+            onPress={() => navigation.navigate('TournamentMatches', { tournamentId: tournament.id })}
+            activeOpacity={0.85}
+          >
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Feather name="activity" size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardSectionTitle, { color: colors.text, marginBottom: 2 }]}>Matches & Scoring</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: SIZES.sm }}>
+                {tournament.creatorType === 'USER'
+                  ? 'View fixtures and live scores'
+                  : 'Generate fixtures, toss, enter live scores & declare winners'}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+
         {/* ── Team Registrations Section (Part 3) ── */}
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <View style={styles.regSectionHeaderRow}>
@@ -916,8 +942,8 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                             ? 'rgba(239, 68, 68, 0.15)'
                             : '#FEE2E2'
                           : isDark
-                          ? 'rgba(16, 185, 129, 0.15)'
-                          : '#DCFCE7',
+                            ? 'rgba(16, 185, 129, 0.15)'
+                            : '#DCFCE7',
                       borderColor: slotsLeft === 0 ? '#EF4444' : '#10B981',
                     },
                   ]}
@@ -1050,17 +1076,17 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                                   ? 'rgba(16, 185, 129, 0.15)'
                                   : '#DCFCE7'
                                 : isRejected
-                                ? isDark
-                                  ? 'rgba(239, 68, 68, 0.15)'
-                                  : '#FEE2E2'
-                                : isDark
-                                ? 'rgba(245, 158, 11, 0.15)'
-                                : '#FEF3C7',
+                                  ? isDark
+                                    ? 'rgba(239, 68, 68, 0.15)'
+                                    : '#FEE2E2'
+                                  : isDark
+                                    ? 'rgba(245, 158, 11, 0.15)'
+                                    : '#FEF3C7',
                               borderColor: isAccepted
                                 ? '#10B981'
                                 : isRejected
-                                ? '#EF4444'
-                                : '#F59E0B',
+                                  ? '#EF4444'
+                                  : '#F59E0B',
                             },
                           ]}
                         >
@@ -1071,8 +1097,8 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                                 color: isAccepted
                                   ? '#10B981'
                                   : isRejected
-                                  ? '#DC2626'
-                                  : '#D97706',
+                                    ? '#DC2626'
+                                    : '#D97706',
                               },
                             ]}
                           >
@@ -1249,8 +1275,8 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                             backgroundColor: isFull
                               ? 'rgba(16, 185, 129, 0.15)'
                               : isDark
-                              ? 'rgba(255,255,255,0.06)'
-                              : '#F1F5F9',
+                                ? 'rgba(255,255,255,0.06)'
+                                : '#F1F5F9',
                             borderColor: isFull ? '#10B981' : colors.border,
                           },
                         ]}

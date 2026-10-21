@@ -323,8 +323,104 @@ function formatTournament(t, reqUser = null) {
   };
 }
 
+/**
+ * Registration columns needed for list screens. `players` (JSON roster) is
+ * intentionally excluded: it is the heaviest column and list cards never show it.
+ */
+const REGISTRATION_LIST_SELECT = {
+  id: true,
+  userId: true,
+  status: true,
+  teamName: true,
+  captainName: true,
+  captainPhone: true,
+  captainEmail: true,
+  rejectionReason: true,
+  createdAt: true,
+};
+
+/**
+ * Heavy JSON / text columns never needed by list cards.
+ * (bracket can be hundreds of KB once matches have scores & rosters.)
+ */
+const TOURNAMENT_LIST_OMIT = { bracket: true, teams: true, rules: true };
+
+/**
+ * Slim payload for list endpoints (Available / My / Vendor list).
+ * Full data (bracket, rosters, registrations, rules) is only returned by
+ * GET /tournaments/:id.
+ */
+function formatTournamentSummary(t, reqUser = null) {
+  const full = formatTournament(t, reqUser);
+  if (!full) return null;
+  const {
+    registrations,
+    acceptedTeams,
+    bracket,
+    teams,
+    rules,
+    description,
+    prizeDetails,
+    venueLocation,
+    ...rest
+  } = full;
+  return {
+    ...rest,
+    registrationsCount: Array.isArray(registrations) ? registrations.length : 0,
+    hasBracket: Boolean(t.bracket && typeof t.bracket === 'object' && Object.keys(t.bracket).length > 0),
+    isSummary: true,
+  };
+}
+
+/**
+ * Cryptographically-secure Fisher-Yates shuffle. Used for the tournament draw so
+ * that NOBODY (host, vendor, admin or players) can choose who plays whom.
+ */
+function secureShuffle(list) {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/** Bit-reversal order of match indexes -> spreads BYEs evenly across the bracket. */
+function byeSpreadOrder(matchCount) {
+  const bits = Math.max(0, Math.log2(matchCount));
+  return Array.from({ length: matchCount }, (_, i) => {
+    let rev = 0;
+    for (let b = 0; b < bits; b++) if (i & (1 << b)) rev |= 1 << (bits - 1 - b);
+    return rev;
+  });
+}
+
+/** Leading number of a score string: "142/6 (10.0 ov)" -> 142, "3" -> 3 */
+function parseScoreValue(v) {
+  const m = String(v ?? '').match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+function roundNameFor(roundIdx, totalRounds) {
+  const fromFinal = totalRounds - roundIdx;
+  if (fromFinal === 0) return 'Final';
+  if (fromFinal === 1) return 'Semi-Finals';
+  if (fromFinal === 2) return 'Quarter-Finals';
+  return `Round of ${Math.pow(2, fromFinal + 1)}`;
+}
+
+/**
+ * Fire-and-forget: never make the API response wait for push notifications.
+ */
+function notifyInBackground(params) {
+  Promise.resolve()
+    .then(() => notificationService.sendNotification(params))
+    .catch((e) => console.warn('⚠️ Background notification failed:', e.message));
+}
+
 const tournamentController = {
   formatTournament,
+  formatTournamentSummary,
 
   /**
    * GET /api/v1/admin/tournaments
@@ -392,18 +488,16 @@ const tournamentController = {
         });
       }
 
-      // Aggregate status counts for quick KPI cards
-      const allTournaments = await prisma.tournament.findMany({
-        select: { status: true },
-      });
-
+      // Aggregate status counts for quick KPI cards (single GROUP BY, no full table load)
+      const grouped = await prisma.tournament.groupBy({ by: ['status'], _count: { _all: true } });
+      const countOf = (st) => grouped.find((g) => g.status === st)?._count?._all || 0;
       const stats = {
-        total: allTournaments.length,
-        draft: allTournaments.filter((t) => t.status === 'draft').length,
-        published: allTournaments.filter((t) => t.status === 'published').length,
-        ongoing: allTournaments.filter((t) => t.status === 'ongoing').length,
-        completed: allTournaments.filter((t) => t.status === 'completed').length,
-        cancelled: allTournaments.filter((t) => t.status === 'cancelled').length,
+        total: grouped.reduce((sum, g) => sum + g._count._all, 0),
+        draft: countOf('draft'),
+        published: countOf('published'),
+        ongoing: countOf('ongoing'),
+        completed: countOf('completed'),
+        cancelled: countOf('cancelled'),
       };
 
       return sendSuccess(res, {
@@ -437,6 +531,7 @@ const tournamentController = {
             gte: todayStr,
           },
         },
+        omit: TOURNAMENT_LIST_OMIT,
         include: {
           turf: {
             select: {
@@ -450,15 +545,16 @@ const tournamentController = {
               pricePerHour: true,
             },
           },
-          registrations: true,
+          registrations: { select: REGISTRATION_LIST_SELECT },
           user: {
             select: { id: true, name: true, avatar: true },
           },
         },
         orderBy: [{ startDate: 'asc' }, { createdAt: 'desc' }],
+        take: 100,
       });
 
-      const formatted = tournaments.map((t) => formatTournament(t, req.user));
+      const formatted = tournaments.map((t) => formatTournamentSummary(t, req.user));
 
       return sendSuccess(res, {
         tournaments: formatted,
@@ -486,7 +582,9 @@ const tournamentController = {
           creatorType: 'USER',
           userId,
         },
+        omit: TOURNAMENT_LIST_OMIT,
         include: {
+          registrations: { select: REGISTRATION_LIST_SELECT },
           turf: {
             select: {
               id: true,
@@ -504,7 +602,7 @@ const tournamentController = {
         orderBy: { createdAt: 'desc' },
       });
 
-      const formatted = tournaments.map((t) => formatTournament(t, req.user));
+      const formatted = tournaments.map((t) => formatTournamentSummary(t, req.user));
 
       return sendSuccess(res, {
         tournaments: formatted,
@@ -530,7 +628,7 @@ const tournamentController = {
         return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
       }
 
-      let where = {};
+      let where;
       if (turfId) {
         // Verify turf belongs to this vendor
         const turf = await prisma.turf.findUnique({
@@ -540,44 +638,29 @@ const tournamentController = {
         if (!turf || turf.vendorId !== vendorId) {
           return sendError(res, 'Turf not found or does not belong to vendor', 403, 'FORBIDDEN');
         }
-        where = {
-          turfId,
-          OR: [
-            { vendorId },
-            { turf: { vendorId } },
-          ],
-        };
+        where = { turfId };
       } else {
-        // Query all turfs belonging to vendor
-        const vendorTurfs = await prisma.turf.findMany({
-          where: { vendorId },
-          select: { id: true },
-        });
-        const turfIds = vendorTurfs.map((t) => t.id);
-        where = {
-          OR: [
-            { turfId: { in: turfIds } },
-            { vendorId: vendorId },
-            { turf: { vendorId } },
-          ],
-        };
+        // One query: tournaments created by vendor OR hosted at any of vendor's turfs
+        where = { OR: [{ vendorId }, { turf: { vendorId } }] };
       }
 
       const tournaments = await prisma.tournament.findMany({
         where,
+        omit: TOURNAMENT_LIST_OMIT,
         include: {
           turf: {
             select: { id: true, name: true, city: true, images: true, logo: true, location: true, vendorId: true },
           },
-          registrations: true,
+          registrations: { select: REGISTRATION_LIST_SELECT },
           user: {
             select: { id: true, name: true, avatar: true, phone: true },
           },
         },
         orderBy: { createdAt: 'desc' },
+        take: 200,
       });
 
-      const formatted = tournaments.map((t) => formatTournament(t, req.user || req.vendor));
+      const formatted = tournaments.map((t) => formatTournamentSummary(t, req.user || req.vendor));
 
       return sendSuccess(res, {
         tournaments: formatted,
@@ -846,7 +929,7 @@ const tournamentController = {
         const notifBody = `${creatorName} requested to conduct "${name.trim()}" at ${turf.name}. Tap to review and approve.`;
         try {
           console.log(`[Tournament Request Trace] User ID: ${userId} → Turf ID: ${turf.id} → Vendor ID: ${turf.vendorId} → Tournament ID: ${tournament.id} → Notification Recipient ID: ${turf.vendorId}`);
-          await notificationService.sendNotification({
+          notifyInBackground({
             recipientId: turf.vendorId,
             recipientRole: 'vendor',
             title: notifTitle,
@@ -1535,7 +1618,7 @@ const tournamentController = {
         const creatorName = published.user?.name || existing.user?.name || req.user?.name || 'A user';
         const turfName = published.turf?.name || 'your turf';
         console.log(`[Tournament Request Trace] User ID: ${published.userId} → Turf ID: ${published.turfId} → Vendor ID: ${published.turf.vendorId} → Tournament ID: ${published.id} → Notification Recipient ID: ${published.turf.vendorId}`);
-        await notificationService.sendNotification({
+        notifyInBackground({
           recipientId: published.turf.vendorId,
           recipientRole: 'vendor',
           title: '🏆 Tournament Request Received',
@@ -1549,7 +1632,7 @@ const tournamentController = {
             action: 'tournament_request',
             turfId: published.turfId,
           },
-        }).catch((e) => console.warn('⚠️ FCM notify vendor error:', e.message));
+        });
       }
 
       const formatted = formatTournament(published, req.user);
@@ -2303,7 +2386,7 @@ const tournamentController = {
         const notifTitle = '🎉 Tournament Approved!';
         const notifBody = `${turfName} approved your tournament "${tournament.name}". It is now live and public!`;
         try {
-          await notificationService.sendNotification({
+          notifyInBackground({
             recipientId: tournament.userId,
             recipientRole: 'user',
             title: notifTitle,
@@ -2404,7 +2487,7 @@ const tournamentController = {
         const notifTitle = 'Tournament Request Declined';
         const notifBody = `${turfName} declined your tournament request "${tournament.name}". Reason: ${rejectionReasonText}`;
         try {
-          await notificationService.sendNotification({
+          notifyInBackground({
             recipientId: tournament.userId,
             recipientRole: 'user',
             title: notifTitle,
@@ -2451,19 +2534,21 @@ const tournamentController = {
 
     const totalRounds = Math.log2(P);
     const rounds = [];
+    const getRoundName = roundNameFor;
 
-    function getRoundName(roundIdx, totalRoundsCount) {
-      const roundsFromFinal = totalRoundsCount - roundIdx;
-      if (roundsFromFinal === 0) return 'Final';
-      if (roundsFromFinal === 1) return 'Semi-Finals';
-      if (roundsFromFinal === 2) return 'Quarter-Finals';
-      if (roundsFromFinal === 3) return 'Round of 16';
-      return `Round ${roundIdx}`;
-    }
-
-    const paddedTeams = [...teams];
-    while (paddedTeams.length < P) {
-      paddedTeams.push(null); // BYE
+    // ── RANDOM DRAW ── teams are shuffled with a secure RNG; pairs are formed from
+    // the shuffled order. Byes (when team count is not 2/4/8/16...) are spread
+    // evenly and also go to randomly drawn teams. No manual pairing is possible.
+    const shuffled = secureShuffle(teams);
+    const firstRoundMatches = P / 2;
+    const byeCount = P - N;
+    const byeMatchIdx = new Set(byeSpreadOrder(firstRoundMatches).slice(0, byeCount));
+    const r1Pairs = [];
+    let ti = 0;
+    for (let m = 0; m < firstRoundMatches; m++) {
+      const a1 = shuffled[ti++] || null;
+      const b1 = byeMatchIdx.has(m) ? null : (shuffled[ti++] || null);
+      r1Pairs.push([a1, b1]);
     }
 
     let globalMatchCounter = 1;
@@ -2484,8 +2569,8 @@ const tournamentController = {
         let teamB = null;
 
         if (r === 1) {
-          teamA = paddedTeams[m * 2] || null;
-          teamB = paddedTeams[m * 2 + 1] || null;
+          teamA = r1Pairs[m][0];
+          teamB = r1Pairs[m][1];
         }
 
         const isBye = Boolean(r === 1 && teamA && !teamB);
@@ -2537,10 +2622,14 @@ const tournamentController = {
     return {
       status: 'in_progress',
       generatedAt: new Date().toISOString(),
+      drawType: 'random',
+      locked: true,
       teamsCount: N,
+      byes: byeCount,
       totalRounds,
       rounds,
       winner: null,
+      runnerUp: null,
     };
   },
 
@@ -2582,6 +2671,17 @@ const tournamentController = {
 
       if (!isCreator) {
         return sendError(res, 'Access denied: Only the tournament manager (creator) can generate match brackets.', 403, 'FORBIDDEN');
+      }
+
+      // The draw is FINAL: once generated nobody (host/vendor) can re-draw or edit pairings.
+      const isAdminUser = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+      if (tournament.bracket && Array.isArray(tournament.bracket.rounds) && !isAdminUser) {
+        return sendError(
+          res,
+          'The random draw has already been conducted and is locked. Pairings cannot be changed.',
+          409,
+          'BRACKET_LOCKED'
+        );
       }
 
       // Accepted team registrations ONLY
@@ -2640,7 +2740,7 @@ const tournamentController = {
       for (const uId of acceptedUserIds) {
         if (uId !== currentUserId) {
           try {
-            await notificationService.sendNotification({
+            notifyInBackground({
               recipientId: uId,
               recipientRole: 'user',
               title: '⚡ Tournament Matches Announced!',
@@ -2653,7 +2753,7 @@ const tournamentController = {
                 action: 'bracket_generated',
               },
             });
-          } catch (_) {}
+          } catch (_) { }
         }
       }
 
@@ -2822,8 +2922,21 @@ const tournamentController = {
         return sendError(res, 'Match not found in tournament bracket', 404, 'MATCH_NOT_FOUND');
       }
 
+      if (!targetMatch.teamA || !targetMatch.teamB) {
+        return sendError(res, 'Both teams must be decided before entering a score.', 400, 'MATCH_NOT_READY');
+      }
+      if (targetMatch.status === 'completed' && !(req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+        return sendError(res, 'This match is completed and its result is locked.', 409, 'MATCH_LOCKED');
+      }
+
       if (score) {
-        targetMatch.score = score;
+        // Keep only the fields the apps use; stops arbitrary/huge JSON being stored in the bracket
+        targetMatch.score = {
+          teamA: String(score.teamA ?? '').slice(0, 40),
+          teamB: String(score.teamB ?? '').slice(0, 40),
+          summary: String(score.summary ?? '').slice(0, 300),
+          updatedAt: new Date().toISOString(),
+        };
       }
       if (status) {
         targetMatch.status = status;
@@ -2861,10 +2974,10 @@ const tournamentController = {
     try {
       const id = (req.params?.id || req.params?.tournamentId || '').trim();
       const matchId = (req.params?.matchId || req.body?.matchId || '').trim();
-      const { winnerTeamId } = req.body;
+      const { winnerTeamId: requestedWinnerId, tiebreakNote } = req.body;
 
-      if (!id || !matchId || !winnerTeamId) {
-        return sendError(res, 'Tournament ID, Match ID, and Winner Team ID are required', 400, 'MISSING_PARAMS');
+      if (!id || !matchId) {
+        return sendError(res, 'Tournament ID and Match ID are required', 400, 'MISSING_PARAMS');
       }
 
       const tournament = await prisma.tournament.findUnique({
@@ -2909,6 +3022,36 @@ const tournamentController = {
         return sendError(res, 'Match not found in tournament bracket', 404, 'MATCH_NOT_FOUND');
       }
 
+      if (!targetMatch.teamA || !targetMatch.teamB) {
+        return sendError(res, 'Both teams must be decided before finishing a match.', 400, 'MATCH_NOT_READY');
+      }
+      if (targetMatch.status === 'completed') {
+        return sendError(res, 'This match is already completed and locked.', 409, 'MATCH_LOCKED');
+      }
+
+      // ── SCORE-BASED RESULT ── the winner is decided by the entered score.
+      const scoreA = parseScoreValue(targetMatch.score?.teamA);
+      const scoreB = parseScoreValue(targetMatch.score?.teamB);
+      if (scoreA === null || scoreB === null) {
+        return sendError(res, 'Enter the score of both teams before finishing the match.', 400, 'SCORE_REQUIRED');
+      }
+
+      let winnerTeamId;
+      let decidedBy = 'score';
+      if (scoreA !== scoreB) {
+        winnerTeamId = scoreA > scoreB ? targetMatch.teamA.id : targetMatch.teamB.id;
+        if (requestedWinnerId && requestedWinnerId !== winnerTeamId) {
+          return sendError(res, 'Winner does not match the entered score. Correct the score first.', 400, 'WINNER_SCORE_MISMATCH');
+        }
+      } else {
+        // Scores level: a tie-breaker (penalties / super over / golden goal) result is required
+        if (!requestedWinnerId) {
+          return sendError(res, 'Scores are tied. Select the tie-breaker winner (penalties / super over).', 400, 'TIE_NEEDS_TIEBREAK');
+        }
+        winnerTeamId = requestedWinnerId;
+        decidedBy = 'tiebreak';
+      }
+
       const winningTeamObj = targetMatch.teamA?.id === winnerTeamId
         ? targetMatch.teamA
         : (targetMatch.teamB?.id === winnerTeamId ? targetMatch.teamB : null);
@@ -2916,8 +3059,15 @@ const tournamentController = {
       if (!winningTeamObj) {
         return sendError(res, 'Invalid winner team: specified team is not in this match.', 400, 'INVALID_WINNER');
       }
+      const losingTeamObj = winningTeamObj.id === targetMatch.teamA.id ? targetMatch.teamB : targetMatch.teamA;
 
       targetMatch.winner = winningTeamObj;
+      targetMatch.loser = losingTeamObj;
+      targetMatch.decidedBy = decidedBy;
+      if (decidedBy === 'tiebreak' && tiebreakNote) {
+        targetMatch.score = { ...(targetMatch.score || {}), tiebreak: String(tiebreakNote).slice(0, 120) };
+      }
+      targetMatch.completedAt = new Date().toISOString();
       targetMatch.status = 'completed';
 
       let isTournamentFinal = false;
@@ -2938,6 +3088,7 @@ const tournamentController = {
         // This is the FINAL match!
         isTournamentFinal = true;
         bracket.winner = winningTeamObj;
+        bracket.runnerUp = losingTeamObj;
         bracket.status = 'completed';
       }
 
@@ -2965,7 +3116,7 @@ const tournamentController = {
 
       for (const uId of acceptedUserIds) {
         try {
-          await notificationService.sendNotification({
+          notifyInBackground({
             recipientId: uId,
             recipientRole: 'user',
             title: notifTitle,
@@ -2978,7 +3129,7 @@ const tournamentController = {
               action: isTournamentFinal ? 'champion_declared' : 'match_won',
             },
           });
-        } catch (_) {}
+        } catch (_) { }
       }
 
       const formatted = formatTournament(updated, req.user || req.vendor);

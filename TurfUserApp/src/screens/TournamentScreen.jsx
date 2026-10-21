@@ -16,7 +16,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import TournamentCard from '../components/TournamentCard';
-import { getAvailableTournamentsApi, getMyTournamentsApi } from '../api/tournaments';
+import { getAvailableTournamentsApi, getMyTournamentsApi, getCachedAvailableTournaments } from '../api/tournaments';
 import { SPACING, RADIUS, SHADOW } from '../utils/theme';
 
 export default function TournamentScreen({ navigation }) {
@@ -24,15 +24,15 @@ export default function TournamentScreen({ navigation }) {
   const { token, user } = useSelector((s) => s.auth);
 
   const [activeTab, setActiveTab] = useState('available'); // 'available' | 'my'
-  const [availableTournaments, setAvailableTournaments] = useState([]);
+  const cachedAvailable = getCachedAvailableTournaments();
+  const [availableTournaments, setAvailableTournaments] = useState(cachedAvailable?.tournaments || []);
   const [myTournaments, setMyTournaments] = useState([]);
-  const [loadingAvailable, setLoadingAvailable] = useState(true);
+  const [loadingAvailable, setLoadingAvailable] = useState(!cachedAvailable);
   const [loadingMy, setLoadingMy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadAvailable = useCallback(async () => {
     try {
-      setLoadingAvailable(true);
       const res = await getAvailableTournamentsApi();
       setAvailableTournaments(res?.tournaments || []);
     } catch (err) {

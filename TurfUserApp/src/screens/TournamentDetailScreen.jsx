@@ -124,7 +124,9 @@ export default function TournamentDetailScreen({ route, navigation }) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Only show the full-screen spinner when we have nothing to show yet.
+    // Re-fetches (focus / pull-to-refresh / live polling) update silently.
+    setLoading((prev) => (tournamentRef.current ? false : true));
     try {
       let data = null;
       try {
@@ -149,14 +151,21 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
   }, [targetId]);
 
+  // Keep a ref of the latest tournament so loadDetails can stay stable
+  const tournamentRef = React.useRef(initialTournament || null);
   useEffect(() => {
-    setTournament(initialTournament || null);
-    loadDetails();
-  }, [targetId, loadDetails]);
+    tournamentRef.current = tournament;
+  }, [tournament]);
 
+  // Single fetch on mount/focus (previously mount fired TWO identical requests),
+  // plus a light 20s poll while a bracket exists so live scores appear for users.
   useFocusEffect(
     useCallback(() => {
       loadDetails();
+      const timer = setInterval(() => {
+        if (tournamentRef.current?.bracket) loadDetails();
+      }, 20000);
+      return () => clearInterval(timer);
     }, [loadDetails])
   );
 
@@ -289,8 +298,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
         isPendingApproval
           ? 'Your tournament request is awaiting turf owner approval. The invite link will become active once approved.'
           : isRejected
-          ? 'This tournament request was declined by the turf venue.'
-          : 'Please publish this tournament first to generate a shareable link.'
+            ? 'This tournament request was declined by the turf venue.'
+            : 'Please publish this tournament first to generate a shareable link.'
       );
       return;
     }
@@ -718,24 +727,24 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
   const displayTeams = registrations.length > 0
     ? [...acceptedSquads, ...pendingSquads, ...rejectedSquads].map((r, idx) => ({
-        id: r.id || `reg_${idx}`,
-        name: r.teamName || `Team ${idx + 1}`,
-        captainName: r.captainName,
-        captainPhone: r.captainPhone,
-        captainEmail: r.captainEmail,
-        status: r.status || 'pending',
-        rejectionReason: r.rejectionReason,
-        players: Array.isArray(r.players) ? r.players : [],
-        isRegistration: true,
-      }))
+      id: r.id || `reg_${idx}`,
+      name: r.teamName || `Team ${idx + 1}`,
+      captainName: r.captainName,
+      captainPhone: r.captainPhone,
+      captainEmail: r.captainEmail,
+      status: r.status || 'pending',
+      rejectionReason: r.rejectionReason,
+      players: Array.isArray(r.players) ? r.players : [],
+      isRegistration: true,
+    }))
     : manualTeamsWithPlayers.map((t, idx) => ({
-        id: t.id || `manual_${idx}`,
-        name: t.name || `Team ${idx + 1}`,
-        captainName: t.captainName || null,
-        status: 'accepted',
-        players: Array.isArray(t.players) ? t.players : [],
-        isRegistration: false,
-      }));
+      id: t.id || `manual_${idx}`,
+      name: t.name || `Team ${idx + 1}`,
+      captainName: t.captainName || null,
+      status: 'accepted',
+      players: Array.isArray(t.players) ? t.players : [],
+      isRegistration: false,
+    }));
 
   const maxPlayersPerTeam = tournament.playersPerTeam || 11;
 
@@ -1072,8 +1081,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
                     lifecycleStatus === 'published'
                       ? 'rgba(16, 185, 129, 0.12)'
                       : lifecycleStatus === 'full'
-                      ? 'rgba(245, 158, 11, 0.12)'
-                      : 'rgba(100, 116, 139, 0.12)',
+                        ? 'rgba(245, 158, 11, 0.12)'
+                        : 'rgba(100, 116, 139, 0.12)',
                 },
               ]}
             >
@@ -1085,16 +1094,16 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       lifecycleStatus === 'published'
                         ? '#10B981'
                         : lifecycleStatus === 'full'
-                        ? '#D97706'
-                        : '#64748B',
+                          ? '#D97706'
+                          : '#64748B',
                   },
                 ]}
               >
                 {lifecycleStatus === 'published'
                   ? `${remainingSlots} SLOTS REMAINING`
                   : lifecycleStatus === 'full'
-                  ? 'FULL'
-                  : lifecycleStatus.toUpperCase()}
+                    ? 'FULL'
+                    : lifecycleStatus.toUpperCase()}
               </Text>
             </View>
           </View>
@@ -1156,14 +1165,14 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       myRegistration.status === 'accepted'
                         ? 'rgba(16, 185, 129, 0.15)'
                         : myRegistration.status === 'rejected'
-                        ? 'rgba(239, 68, 68, 0.15)'
-                        : 'rgba(245, 158, 11, 0.15)',
+                          ? 'rgba(239, 68, 68, 0.15)'
+                          : 'rgba(245, 158, 11, 0.15)',
                     borderColor:
                       myRegistration.status === 'accepted'
                         ? '#10B981'
                         : myRegistration.status === 'rejected'
-                        ? '#EF4444'
-                        : '#F59E0B',
+                          ? '#EF4444'
+                          : '#F59E0B',
                   },
                 ]}
               >
@@ -1175,16 +1184,16 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         myRegistration.status === 'accepted'
                           ? '#10B981'
                           : myRegistration.status === 'rejected'
-                          ? '#EF4444'
-                          : '#D97706',
+                            ? '#EF4444'
+                            : '#D97706',
                     },
                   ]}
                 >
                   {myRegistration.status === 'accepted'
                     ? 'Accepted'
                     : myRegistration.status === 'rejected'
-                    ? 'Rejected'
-                    : 'Pending Approval'}
+                      ? 'Rejected'
+                      : 'Pending Approval'}
                 </Text>
               </View>
             </View>
@@ -2027,8 +2036,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 {isPendingApproval
                   ? 'The shareable link will be unlocked as soon as the turf owner approves your tournament request.'
                   : isRejected
-                  ? 'This tournament request was declined by the turf venue.'
-                  : 'Publish your tournament to activate the shareable link.'}
+                    ? 'This tournament request was declined by the turf venue.'
+                    : 'Publish your tournament to activate the shareable link.'}
               </Text>
             </View>
           )}

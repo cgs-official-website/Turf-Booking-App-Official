@@ -90,3 +90,42 @@ export const rejectTournamentApi = (tournamentId, reason) => {
 };
 
 
+/**
+ * Generate knockout bracket from ACCEPTED teams (vendor who created the tournament only)
+ */
+export const generateBracketApi = (tournamentId, data = {}) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/bracket/generate`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Record coin toss for a match
+ */
+export const conductMatchTossApi = (tournamentId, matchId, data) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/matches/${matchId}/toss`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Enter / update live score of a match: { score: { teamA, teamB, summary }, status }
+ */
+export const updateMatchScoreApi = (tournamentId, matchId, data) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/matches/${matchId}/score`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Confirm match winner, advance to next round (or crown champion on the final)
+ */
+export const confirmMatchWinnerApi = (tournamentId, matchId, data) => {
+  return apiRequest(`/vendor/tournaments/${tournamentId}/matches/${matchId}/winner`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
