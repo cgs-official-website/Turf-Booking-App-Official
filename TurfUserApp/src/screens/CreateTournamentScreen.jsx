@@ -18,7 +18,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import { SPACING, RADIUS, SHADOW, FONT } from '../utils/theme';
-import { createUserTournamentApi } from '../api/tournaments';
+import { createUserTournamentApi, updateTournamentApi } from '../api/tournaments';
 import { turfsApi } from '../api/turfs';
 
 const SPORTS = [
@@ -80,7 +80,11 @@ export default function CreateTournamentScreen({ route, navigation }) {
   // 2: 'tournament_form'
   // 3: 'manage_teams'
   // 4: 'summary_confirm'
-  const initialTurfParam = route.params?.turf || null;
+  // Edit mode: opened from the tournament detail screen by the creator.
+  // The host turf is locked (changing it would need a fresh turf-owner approval).
+  const editTournament = route.params?.editTournament || null;
+  const isEdit = Boolean(editTournament?.id);
+  const initialTurfParam = route.params?.turf || (isEdit ? (editTournament.turf || { id: editTournament.turfId, name: editTournament.venueName }) : null);
   const [currentStep, setCurrentStep] = useState(initialTurfParam ? 2 : 1);
 
   // ── Step 1: Turf Selection State ──
@@ -135,6 +139,40 @@ export default function CreateTournamentScreen({ route, navigation }) {
 
   const effectiveSport = selectedSport === 'Other' ? customSport.trim() : selectedSport;
   const isCricket = effectiveSport.toLowerCase().includes('cricket');
+
+  // Prefill the form with the existing tournament when editing
+  useEffect(() => {
+    if (!isEdit) return;
+    const t = editTournament;
+    setName(t.name || '');
+    const sportName = t.sport || 'Cricket';
+    if (SPORTS.some((sp) => sp.id === sportName && sp.id !== 'Other')) {
+      setSelectedSport(sportName);
+    } else {
+      setSelectedSport('Other');
+      setCustomSport(sportName);
+    }
+    const d10 = (v) => (v ? String(v).slice(0, 10) : '');
+    if (t.registrationStartDate) setRegistrationStartDate(d10(t.registrationStartDate));
+    if (t.registrationEndDate) setRegistrationEndDate(d10(t.registrationEndDate));
+    if (t.startDate) setStartDate(d10(t.startDate));
+    if (t.endDate) setEndDate(d10(t.endDate));
+    if (t.numberOfTeams) setNumberOfTeams(String(t.numberOfTeams));
+    if (t.playersPerTeam) setPlayersPerTeam(String(t.playersPerTeam));
+    if (t.oversPerTeam) setOversPerTeam(String(t.oversPerTeam));
+    setDescription(t.description || '');
+    setRules(t.rules || '');
+    setBannerUrl(t.bannerUrl || '');
+    if (Array.isArray(t.teams) && t.teams.length > 0) {
+      setTeams(
+        t.teams.map((tm, i) => ({
+          id: tm.id || `team_${i + 1}`,
+          name: tm.name || `Team ${i + 1}`,
+          players: Array.isArray(tm.players) ? tm.players : [],
+        }))
+      );
+    }
+  }, []);
 
   // Load available turfs for Step 1
   useEffect(() => {
@@ -225,7 +263,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
     // 1. Registration Period Validation
     if (!registrationStartDate) {
       errs.registrationStartDate = 'Registration open date is required';
-    } else if (registrationStartDate < todayStr) {
+    } else if (registrationStartDate < todayStr && !(isEdit && registrationStartDate === String(editTournament.registrationStartDate || '').slice(0, 10))) {
       errs.registrationStartDate = 'Registration open date cannot be in the past';
     }
 
@@ -238,7 +276,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
     // 2. Tournament Schedule Validation
     if (!startDate) {
       errs.startDate = 'Tournament start date is required';
-    } else if (startDate < todayStr) {
+    } else if (startDate < todayStr && !(isEdit && startDate === String(editTournament.startDate || '').slice(0, 10))) {
       errs.startDate = 'Tournament start date cannot be in the past';
     } else if (registrationEndDate && startDate < registrationEndDate) {
       errs.startDate = 'Tournament start date cannot be earlier than registration close date';
@@ -253,6 +291,16 @@ export default function CreateTournamentScreen({ route, navigation }) {
     const teamsNum = parseInt(numberOfTeams, 10);
     if (!numberOfTeams || isNaN(teamsNum) || teamsNum < 2) {
       errs.numberOfTeams = 'Minimum 2 teams required';
+    } else if (isEdit) {
+      const confirmed = Number(editTournament.acceptedTeamsCount || 0);
+      if (teamsNum < confirmed) {
+        errs.numberOfTeams = `Cannot be less than the ${confirmed} team(s) already confirmed`;
+      }
+      if (editTournament.hasBracket || editTournament.bracket) {
+        if (teamsNum !== Number(editTournament.numberOfTeams)) {
+          errs.numberOfTeams = 'Cannot change the number of teams after the bracket is generated';
+        }
+      }
     }
 
     const playersNum = parseInt(playersPerTeam, 10);
@@ -519,6 +567,12 @@ export default function CreateTournamentScreen({ route, navigation }) {
       return;
     }
 
+    const cleanedPhone = newPlayerPhone.replace(/\D/g, '').slice(0, 10);
+    if (newPlayerPhone.trim() && cleanedPhone.length !== 10) {
+      Alert.alert('Invalid Phone Number', 'Phone number must be exactly 10 numeric digits.');
+      return;
+    }
+
     const maxCapacity = parseInt(playersPerTeam, 10) || 11;
     const currentTeam = teams[activeTeamIndex];
     if (!currentTeam) return;
@@ -532,8 +586,8 @@ export default function CreateTournamentScreen({ route, navigation }) {
     const playerRecord = {
       id: editingPlayerIndex !== null ? currentTeam.players[editingPlayerIndex].id : `p_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       name: newPlayerName.trim(),
-      phone: newPlayerPhone.trim(),
-      isInvited: Boolean(newPlayerPhone.trim()),
+      phone: cleanedPhone || '',
+      isInvited: Boolean(cleanedPhone),
     };
 
     if (editingPlayerIndex !== null) {
@@ -589,6 +643,16 @@ export default function CreateTournamentScreen({ route, navigation }) {
         teams,
         publishNow,
       };
+
+      if (isEdit) {
+        // Edits never touch the host turf or the approval status.
+        const { turfId: _turfId, publishNow: _publishNow, ...editPayload } = payload;
+        await updateTournamentApi(editTournament.id, editPayload);
+        Alert.alert('Tournament Updated', 'Your changes have been saved.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
 
       const res = await createUserTournamentApi(payload);
       const created = res?.tournament || res?.data?.tournament;
@@ -1432,40 +1496,60 @@ export default function CreateTournamentScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Actions: Save Draft or Publish */}
-        <View style={styles.summaryActionButtons}>
-          <TouchableOpacity
-            style={[styles.saveDraftBtn, { backgroundColor: C.card, borderColor: C.border }]}
-            disabled={submitting}
-            onPress={() => handleSubmit(false)}
-            activeOpacity={0.8}
-          >
-            {submitting ? (
-              <ActivityIndicator color={C.text} size="small" />
-            ) : (
-              <>
-                <Feather name="save" size={16} color={C.text} style={{ marginRight: 6 }} />
-                <Text style={[styles.saveDraftBtnText, { color: C.text }]}>Save as Draft</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        {/* Actions: Save Draft or Publish (or Save Changes when editing) */}
+        {isEdit ? (
+          <View style={styles.summaryActionButtons}>
+            <TouchableOpacity
+              style={[styles.publishTournamentBtn, { backgroundColor: '#0F766E' }, SHADOW.card]}
+              disabled={submitting}
+              onPress={() => handleSubmit(false)}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Feather name="check" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.publishTournamentBtnText}>Save Changes</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.summaryActionButtons}>
+            <TouchableOpacity
+              style={[styles.saveDraftBtn, { backgroundColor: C.card, borderColor: C.border }]}
+              disabled={submitting}
+              onPress={() => handleSubmit(false)}
+              activeOpacity={0.8}
+            >
+              {submitting ? (
+                <ActivityIndicator color={C.text} size="small" />
+              ) : (
+                <>
+                  <Feather name="save" size={16} color={C.text} style={{ marginRight: 6 }} />
+                  <Text style={[styles.saveDraftBtnText, { color: C.text }]}>Save as Draft</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.publishTournamentBtn, { backgroundColor: '#0F766E' }, SHADOW.card]}
-            disabled={submitting}
-            onPress={() => handleSubmit(true)}
-            activeOpacity={0.85}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="rocket-outline" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.publishTournamentBtnText}>Publish Tournament</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.publishTournamentBtn, { backgroundColor: '#0F766E' }, SHADOW.card]}
+              disabled={submitting}
+              onPress={() => handleSubmit(true)}
+              activeOpacity={0.85}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="rocket-outline" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.publishTournamentBtnText}>Publish Tournament</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
@@ -1478,7 +1562,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
           style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.border }]}
           hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
           onPress={() => {
-            if (currentStep > 1) {
+            if (currentStep > (isEdit ? 2 : 1)) {
               setCurrentStep(currentStep - 1);
             } else {
               navigation.goBack();
@@ -1490,15 +1574,17 @@ export default function CreateTournamentScreen({ route, navigation }) {
         </TouchableOpacity>
 
         <View style={styles.headerTitleWrap}>
-          <Text style={[styles.headerTitle, { color: C.text }]}>Create Tournament</Text>
+          <Text style={[styles.headerTitle, { color: C.text }]}>{isEdit ? 'Edit Tournament' : 'Create Tournament'}</Text>
           <Text style={[styles.headerSubtitle, { color: C.subtext }]}>
             {currentStep === 1
               ? 'Select Venue'
               : currentStep === 2
-              ? 'Basic Details'
-              : currentStep === 3
-              ? 'Teams & Players'
-              : 'Review & Publish'}
+                ? 'Basic Details'
+                : currentStep === 3
+                  ? 'Teams & Players'
+                  : isEdit
+                    ? 'Review & Save'
+                    : 'Review & Publish'}
           </Text>
         </View>
 
@@ -1543,19 +1629,19 @@ export default function CreateTournamentScreen({ route, navigation }) {
                   {datePickerTarget === 'regStart'
                     ? 'Registration Opens'
                     : datePickerTarget === 'regEnd'
-                    ? 'Registration Closes'
-                    : datePickerTarget === 'tournStart'
-                    ? 'Tournament Starts'
-                    : 'Tournament Ends'}
+                      ? 'Registration Closes'
+                      : datePickerTarget === 'tournStart'
+                        ? 'Tournament Starts'
+                        : 'Tournament Ends'}
                 </Text>
                 <Text style={[styles.modalSubtitleText, { color: C.subtext }]}>
                   {datePickerTarget === 'regStart'
                     ? 'When users are allowed to apply and register their teams'
                     : datePickerTarget === 'regEnd'
-                    ? `Must be on or after ${registrationStartDate || 'Registration Opens'}`
-                    : datePickerTarget === 'tournStart'
-                    ? `Must be on or after ${registrationEndDate || 'Registration Closes'}`
-                    : `Must be on or after ${startDate || 'Tournament Starts'}`}
+                      ? `Must be on or after ${registrationStartDate || 'Registration Opens'}`
+                      : datePickerTarget === 'tournStart'
+                        ? `Must be on or after ${registrationEndDate || 'Registration Closes'}`
+                        : `Must be on or after ${startDate || 'Tournament Starts'}`}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1695,9 +1781,10 @@ export default function CreateTournamentScreen({ route, navigation }) {
                 style={[styles.textInput, { backgroundColor: C.bgSoft, borderColor: C.border, color: C.text }]}
                 placeholder="e.g. 9876543210"
                 placeholderTextColor={C.subtext}
-                keyboardType="phone-pad"
+                keyboardType="numeric"
+                maxLength={10}
                 value={newPlayerPhone}
-                onChangeText={setNewPlayerPhone}
+                onChangeText={(text) => setNewPlayerPhone(text.replace(/\D/g, '').slice(0, 10))}
               />
 
               <TouchableOpacity
@@ -1759,8 +1846,8 @@ export default function CreateTournamentScreen({ route, navigation }) {
                     createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
                       ? '#FEF3C7'
                       : createdTournamentResult?.status === 'published'
-                      ? '#DCFCE7'
-                      : '#F1F5F9',
+                        ? '#DCFCE7'
+                        : '#F1F5F9',
                 },
               ]}
             >
@@ -1769,16 +1856,16 @@ export default function CreateTournamentScreen({ route, navigation }) {
                   createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
                     ? 'hourglass'
                     : createdTournamentResult?.status === 'published'
-                    ? 'checkmark-circle'
-                    : 'document-text'
+                      ? 'checkmark-circle'
+                      : 'document-text'
                 }
                 size={44}
                 color={
                   createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
                     ? '#D97706'
                     : createdTournamentResult?.status === 'published'
-                    ? '#10B981'
-                    : '#64748B'
+                      ? '#10B981'
+                      : '#64748B'
                 }
               />
             </View>
@@ -1787,8 +1874,8 @@ export default function CreateTournamentScreen({ route, navigation }) {
               {createdTournamentResult?.status === 'pending_approval' || createdTournamentResult?.approvalStatus === 'pending'
                 ? 'Submitted for Turf Approval! 🎉'
                 : createdTournamentResult?.status === 'published'
-                ? 'Tournament Published!'
-                : 'Tournament Saved as Draft!'}
+                  ? 'Tournament Published!'
+                  : 'Tournament Saved as Draft!'}
             </Text>
 
             <Text style={[styles.successModalSubtitle, { color: C.subtext }]}>

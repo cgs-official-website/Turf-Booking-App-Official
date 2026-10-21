@@ -1102,7 +1102,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                               },
                             ]}
                           >
-                            {isAccepted ? 'Accepted' : isRejected ? 'Rejected' : 'Pending'}
+                            {isAccepted ? 'Confirmed' : isRejected ? 'Rejected' : 'Pending'}
                           </Text>
                         </View>
                       </View>

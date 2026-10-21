@@ -73,10 +73,10 @@ class ApiClient {
   }
 
   async fetchWithFallback(path, options = {}) {
-    const urlsToTry = [
-      this.activeBaseUrl,
-      ...CANDIDATE_URLS.filter((u) => u !== this.activeBaseUrl),
-    ];
+    const urlsToTry = (IS_DEV
+      ? [LOCAL_URL, this.activeBaseUrl, ...CANDIDATE_URLS]
+      : [this.activeBaseUrl, ...CANDIDATE_URLS]
+    ).filter((v, i, a) => v && a.indexOf(v) === i);
 
     const { signal: _inheritedSignal, ...cleanOptions } = options;
 

@@ -72,6 +72,20 @@ async function withCreateLock(key, fn) {
 }
 
 /**
+ * Teams the creator filled in directly (stored in tournament.teams JSON, NOT in the
+ * registrations table). Any team with at least one player occupies a slot and counts
+ * as an accepted/confirmed team.
+ */
+function getCreatorTeams(t) {
+  let list = t && t.teams;
+  if (typeof list === 'string') {
+    try { list = JSON.parse(list); } catch (_) { list = []; }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.filter((tm) => tm && Array.isArray(tm.players) && tm.players.length > 0);
+}
+
+/**
  * Format tournament data for client responses
  */
 function formatTournament(t, reqUser = null) {
@@ -96,7 +110,9 @@ function formatTournament(t, reqUser = null) {
     : (t.participantCapacity || 16);
 
   const registrationsList = Array.isArray(t.registrations) ? t.registrations : [];
-  const acceptedTeamsCount = registrationsList.filter((r) => r.status === 'accepted').length;
+  const creatorTeams = getCreatorTeams(t);
+  const acceptedTeamsCount =
+    creatorTeams.length + registrationsList.filter((r) => r.status === 'accepted').length;
   const pendingApplicationsCount = registrationsList.filter((r) => r.status === 'pending').length;
   const rejectedApplicationsCount = registrationsList.filter((r) => r.status === 'rejected').length;
   const remainingSlots = Math.max(0, totalTeams - acceptedTeamsCount);
@@ -303,18 +319,29 @@ function formatTournament(t, reqUser = null) {
     isOwner,
     isManager: isOwner,
     bracket: t.bracket && typeof t.bracket === 'object' && Object.keys(t.bracket).length > 0 ? t.bracket : null,
-    acceptedTeams: registrationsList
-      .filter((r) => r.status === 'accepted')
-      .map((r, idx) => ({
-        id: r.id,
-        teamId: r.id,
-        name: r.teamName,
-        teamName: r.teamName,
-        captainName: r.captainName,
-        captainPhone: r.captainPhone,
-        players: Array.isArray(r.players) ? r.players : [],
-        seed: idx + 1,
+    acceptedTeams: [
+      ...creatorTeams.map((tm) => ({
+        id: tm.id,
+        teamId: tm.id,
+        name: tm.name,
+        teamName: tm.name,
+        captainName: tm.captainName || null,
+        captainPhone: null,
+        players: tm.players,
+        isCreatorTeam: true,
       })),
+      ...registrationsList
+        .filter((r) => r.status === 'accepted')
+        .map((r) => ({
+          id: r.id,
+          teamId: r.id,
+          name: r.teamName,
+          teamName: r.teamName,
+          captainName: r.captainName,
+          captainPhone: r.captainPhone,
+          players: Array.isArray(r.players) ? r.players : [],
+        })),
+    ].map((tm, idx) => ({ ...tm, seed: idx + 1 })),
     registrations: registrationsList,
     canEdit,
     canDelete: canEdit,
@@ -729,6 +756,40 @@ const tournamentController = {
 
       if (!tournament) {
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
+      }
+
+      // Auto-heal legacy pending registrations for published tournaments
+      if (tournament.status === 'published' && Array.isArray(tournament.registrations)) {
+        const pendingRegs = tournament.registrations.filter((r) => r.status === 'pending');
+        if (pendingRegs.length > 0) {
+          const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
+            ? Number(tournament.numberOfTeams)
+            : (tournament.participantCapacity || 16);
+          const creatorCount = getCreatorTeams(tournament).length;
+          let currentAccepted =
+            creatorCount + tournament.registrations.filter((r) => r.status === 'accepted').length;
+
+          const toPromoteIds = [];
+          for (const reg of pendingRegs) {
+            if (currentAccepted < totalTeams) {
+              toPromoteIds.push(reg.id);
+              reg.status = 'accepted';
+              currentAccepted++;
+            }
+          }
+
+          if (toPromoteIds.length > 0) {
+            await prisma.tournamentRegistration.updateMany({
+              where: { id: { in: toPromoteIds } },
+              data: { status: 'accepted' },
+            });
+            await prisma.tournament.update({
+              where: { id: tournament.id },
+              data: { currentParticipantsCount: currentAccepted },
+            });
+            tournament.currentParticipantsCount = currentAccepted;
+          }
+        }
       }
 
       // Gated access: If tournament is not published, only owner, turf vendor, or admin can access
@@ -1315,6 +1376,7 @@ const tournamentController = {
 
       const existing = await prisma.tournament.findUnique({
         where: { id },
+        include: { registrations: true },
       });
 
       if (!existing) {
@@ -1331,6 +1393,22 @@ const tournamentController = {
       if (!isOwner && !isAdmin) {
         return sendError(res, 'Access denied: You cannot modify this tournament', 403, 'FORBIDDEN');
       }
+
+      // Creators may keep editing after the turf owner approves, but not once the
+      // tournament is cancelled or finished.
+      if (!isAdmin) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const endStr = String(existing.endDate || '').slice(0, 10);
+        if (existing.status === 'cancelled') {
+          return sendError(res, 'A cancelled tournament cannot be edited', 400, 'TOURNAMENT_CANCELLED');
+        }
+        if (endStr && todayStr > endStr) {
+          return sendError(res, 'A completed tournament cannot be edited', 400, 'TOURNAMENT_COMPLETED');
+        }
+      }
+      const hasBracket = Boolean(
+        existing.bracket && typeof existing.bracket === 'object' && Object.keys(existing.bracket).length > 0
+      );
 
       const {
         name,
@@ -1381,7 +1459,18 @@ const tournamentController = {
 
       if (numberOfTeams !== undefined) {
         const tCount = parseInt(numberOfTeams, 10);
-        if (isNaN(tCount) || tCount < 2) errors.numberOfTeams = 'Number of teams must be at least 2';
+        if (isNaN(tCount) || tCount < 2) {
+          errors.numberOfTeams = 'Number of teams must be at least 2';
+        } else if (tCount !== Number(existing.numberOfTeams)) {
+          const takenSlots =
+            getCreatorTeams(existing).length +
+            (existing.registrations || []).filter((r) => r.status === 'accepted').length;
+          if (hasBracket) {
+            errors.numberOfTeams = 'Number of teams cannot be changed after the bracket has been generated';
+          } else if (tCount < takenSlots) {
+            errors.numberOfTeams = `Number of teams cannot be less than the ${takenSlots} team(s) already confirmed`;
+          }
+        }
       }
 
       if (playersPerTeam !== undefined) {
@@ -1412,6 +1501,14 @@ const tournamentController = {
 
       // Admin or facility fields
       if (turfId !== undefined && turfId !== existing.turfId) {
+        if (!isAdmin && existing.creatorType === 'USER') {
+          return sendError(
+            res,
+            'The host turf cannot be changed after submission. Create a new tournament for a different venue.',
+            400,
+            'TURF_LOCKED'
+          );
+        }
         if (turfId) {
           const turf = await prisma.turf.findUnique({
             where: { id: turfId },
@@ -1460,8 +1557,10 @@ const tournamentController = {
         }));
       }
 
-      if (status !== undefined && (isAdmin || VALID_STATUSES.includes(status.toLowerCase()))) {
-        updateData.status = status.toLowerCase();
+      // For user-created tournaments, status changes (publish / approve) go through their
+      // own endpoints. Letting the creator set it here would bypass the turf owner's approval.
+      if (status !== undefined && (isAdmin || existing.creatorType !== 'USER') && VALID_STATUSES.includes(String(status).toLowerCase())) {
+        updateData.status = String(status).toLowerCase();
       }
 
       const updated = await prisma.tournament.update({
@@ -1474,6 +1573,7 @@ const tournamentController = {
           user: {
             select: { id: true, name: true, avatar: true },
           },
+          registrations: true,
         },
       });
 
@@ -1874,12 +1974,18 @@ const tournamentController = {
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
-      // Check status
-      if (tournament.status === 'draft') {
-        return sendError(res, 'This tournament is not yet published for registration', 400, 'NOT_PUBLISHED');
+      // Check status: only approved & published tournaments accept public registrations
+      if (tournament.status === 'draft' || tournament.status === 'pending_approval' || tournament.approvalStatus === 'pending') {
+        return sendError(res, 'This tournament is awaiting turf owner approval and is not yet open for registration', 400, 'NOT_APPROVED');
+      }
+      if (tournament.status === 'rejected' || tournament.approvalStatus === 'rejected') {
+        return sendError(res, 'This tournament was rejected and is not open for registration', 400, 'TOURNAMENT_REJECTED');
       }
       if (tournament.status === 'cancelled') {
         return sendError(res, 'This tournament has been cancelled', 400, 'TOURNAMENT_CANCELLED');
+      }
+      if (tournament.status !== 'published') {
+        return sendError(res, 'This tournament is not open for registration', 400, 'NOT_OPEN');
       }
 
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -1905,7 +2011,9 @@ const tournamentController = {
         ? Number(tournament.numberOfTeams)
         : (tournament.participantCapacity || 16);
 
-      const acceptedCount = (tournament.registrations || []).filter((r) => r.status === 'accepted').length;
+      const acceptedCount =
+        getCreatorTeams(tournament).length +
+        (tournament.registrations || []).filter((r) => r.status === 'accepted').length;
 
       if (acceptedCount >= totalTeams) {
         return sendError(res, 'This tournament is full. All team slots have been filled.', 400, 'TOURNAMENT_FULL');
@@ -1991,33 +2099,111 @@ const tournamentController = {
         phone: String(p.phone).trim(),
       }));
 
-      const registration = await prisma.tournamentRegistration.create({
-        data: {
-          tournamentId,
-          userId,
-          teamName: teamName.trim(),
-          captainName: captainName.trim(),
-          captainPhone: captainPhone.trim(),
-          captainEmail: captainEmail ? captainEmail.trim().toLowerCase() : null,
-          players: cleanedPlayers,
-          status: 'pending',
-        },
+      // Concurrently safe atomic transaction
+      const outcome = await prisma.$transaction(async (tx) => {
+        // Re-check capacity atomically within transaction
+        const currentAccepted =
+          getCreatorTeams(tournament).length +
+          (await tx.tournamentRegistration.count({
+            where: { tournamentId, status: 'accepted' },
+          }));
+
+        if (currentAccepted >= totalTeams) {
+          const err = new Error('This tournament is full. All team slots have been filled.');
+          err.code = 'TOURNAMENT_FULL';
+          throw err;
+        }
+
+        // Create the registration with 'accepted' (confirmed) status directly
+        const registration = await tx.tournamentRegistration.create({
+          data: {
+            tournamentId,
+            userId,
+            teamName: teamName.trim(),
+            captainName: captainName.trim(),
+            captainPhone: captainPhone.trim(),
+            captainEmail: captainEmail ? captainEmail.trim().toLowerCase() : null,
+            players: cleanedPlayers,
+            status: 'accepted',
+          },
+        });
+
+        const newAcceptedCount = currentAccepted + 1;
+        const remainingSlots = Math.max(0, totalTeams - newAcceptedCount);
+
+        // Keep currentParticipantsCount on tournament updated
+        await tx.tournament.update({
+          where: { id: tournamentId },
+          data: { currentParticipantsCount: newAcceptedCount },
+        });
+
+        return {
+          registration,
+          acceptedCount: newAcceptedCount,
+          totalTeams,
+          remainingSlots,
+        };
       });
+
+      // Dispatch notifications in background
+      try {
+        const creatorId = tournament.userId || tournament.vendorId;
+        const creatorRole = tournament.userId ? 'user' : 'vendor';
+        if (creatorId && creatorId !== userId) {
+          notifyInBackground({
+            recipientId: creatorId,
+            recipientRole: creatorRole,
+            title: '👥 New Team Registered!',
+            body: `Team "${teamName.trim()}" registered for your tournament "${tournament.name}". (${outcome.acceptedCount}/${totalTeams} teams confirmed)`,
+            type: 'tournament',
+            data: {
+              tournamentId,
+              id: tournamentId,
+              screen: 'TournamentDetail',
+              action: 'team_registered',
+            },
+          });
+        }
+
+        notifyInBackground({
+          recipientId: userId,
+          recipientRole: 'user',
+          title: '🎉 Registration Confirmed!',
+          body: `Your team "${teamName.trim()}" is officially registered and confirmed for "${tournament.name}".`,
+          type: 'tournament',
+          data: {
+            tournamentId,
+            id: tournamentId,
+            screen: 'TournamentDetail',
+            action: 'registration_confirmed',
+          },
+        });
+      } catch (notifErr) {
+        console.warn('⚠️ Registration notification warning:', notifErr.message);
+      }
 
       return sendSuccess(
         res,
         {
-          registration,
-          message: 'Registration Submitted. Status: Pending Approval. The turf owner must approve the team.',
+          registration: outcome.registration,
+          summary: {
+            acceptedCount: outcome.acceptedCount,
+            totalTeams: outcome.totalTeams,
+            remainingSlots: outcome.remainingSlots,
+          },
+          message: `Team "${teamName.trim()}" registered successfully! Registration is confirmed.`,
         },
         201
       );
     } catch (err) {
       console.error('registerTeam error:', err);
+      if (err.code === 'TOURNAMENT_FULL') {
+        return sendError(res, 'This tournament is full. All team slots have been filled.', 400, 'TOURNAMENT_FULL');
+      }
       if (err.code === 'P2002') {
         return sendError(res, 'You have already submitted an application for this tournament', 400, 'DUPLICATE_REGISTRATION');
       }
-      return sendError(res, 'Failed to submit team registration', 500, 'REGISTRATION_FAILED');
+      return sendError(res, err.message || 'Failed to submit team registration', 500, 'REGISTRATION_FAILED');
     }
   },
 
@@ -2089,6 +2275,36 @@ const tournamentController = {
         return sendError(res, 'Access denied: You do not own this tournament or its turf', 403, 'FORBIDDEN');
       }
 
+      // Auto-heal legacy pending registrations for published tournaments
+      if (tournament.status === 'published') {
+        const pendingRegs = await prisma.tournamentRegistration.findMany({
+          where: { tournamentId, status: 'pending' },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (pendingRegs.length > 0) {
+          const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
+            ? Number(tournament.numberOfTeams)
+            : (tournament.participantCapacity || 16);
+          const creatorCount = getCreatorTeams(tournament).length;
+          const acceptedCountNow = await prisma.tournamentRegistration.count({
+            where: { tournamentId, status: 'accepted' },
+          });
+          const availableSlots = Math.max(0, totalTeams - (creatorCount + acceptedCountNow));
+          const toAccept = pendingRegs.slice(0, availableSlots);
+          if (toAccept.length > 0) {
+            await prisma.tournamentRegistration.updateMany({
+              where: { id: { in: toAccept.map((r) => r.id) } },
+              data: { status: 'accepted' },
+            });
+            const newAcceptedCount = creatorCount + acceptedCountNow + toAccept.length;
+            await prisma.tournament.update({
+              where: { id: tournamentId },
+              data: { currentParticipantsCount: newAcceptedCount },
+            });
+          }
+        }
+      }
+
       const registrations = await prisma.tournamentRegistration.findMany({
         where: { tournamentId },
         orderBy: { createdAt: 'desc' },
@@ -2100,7 +2316,9 @@ const tournamentController = {
         ? Number(tournament.numberOfTeams)
         : (tournament.participantCapacity || 16);
 
-      const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
+      const acceptedCount =
+        getCreatorTeams(tournament).length +
+        registrations.filter((r) => r.status === 'accepted').length;
       const pendingCount = registrations.filter((r) => r.status === 'pending').length;
       const rejectedCount = registrations.filter((r) => r.status === 'rejected').length;
       const remainingSlots = Math.max(0, totalTeams - acceptedCount);
@@ -2176,9 +2394,11 @@ const tournamentController = {
           ? Number(tournament.numberOfTeams)
           : (tournament.participantCapacity || 16);
 
-        const currentAccepted = await tx.tournamentRegistration.count({
-          where: { tournamentId, status: 'accepted' },
-        });
+        const currentAccepted =
+          getCreatorTeams(tournament).length +
+          (await tx.tournamentRegistration.count({
+            where: { tournamentId, status: 'accepted' },
+          }));
 
         if (currentAccepted >= totalTeams) {
           const err = new Error('Tournament is full. All team slots have been filled.');
@@ -2290,9 +2510,11 @@ const tournamentController = {
         ? Number(tournament.numberOfTeams)
         : (tournament.participantCapacity || 16);
 
-      const acceptedCount = await prisma.tournamentRegistration.count({
-        where: { tournamentId, status: 'accepted' },
-      });
+      const acceptedCount =
+        getCreatorTeams(tournament).length +
+        (await prisma.tournamentRegistration.count({
+          where: { tournamentId, status: 'accepted' },
+        }));
 
       if (wasAccepted) {
         await prisma.tournament.update({
@@ -2684,30 +2906,42 @@ const tournamentController = {
         );
       }
 
-      // Accepted team registrations ONLY
+      // Accepted teams ONLY: creator-filled teams + accepted registrations
       const acceptedRegistrations = (tournament.registrations || []).filter(
         (r) => r.status === 'accepted'
       );
+      const creatorTeams = getCreatorTeams(tournament);
+      const acceptedTotal = creatorTeams.length + acceptedRegistrations.length;
 
-      if (acceptedRegistrations.length < 2) {
+      if (acceptedTotal < 2) {
         return sendError(
           res,
-          `At least 2 accepted teams are required to generate tournament matches and brackets. Currently accepted: ${acceptedRegistrations.length} team(s).`,
+          `At least 2 accepted teams are required to generate tournament matches and brackets. Currently accepted: ${acceptedTotal} team(s).`,
           400,
           'INSUFFICIENT_TEAMS'
         );
       }
 
-      const teams = acceptedRegistrations.map((r, idx) => ({
-        id: r.id,
-        teamId: r.id,
-        name: r.teamName,
-        teamName: r.teamName,
-        captainName: r.captainName,
-        captainPhone: r.captainPhone,
-        players: Array.isArray(r.players) ? r.players : [],
-        seed: idx + 1,
-      }));
+      const teams = [
+        ...creatorTeams.map((tm) => ({
+          id: tm.id,
+          teamId: tm.id,
+          name: tm.name,
+          teamName: tm.name,
+          captainName: tm.captainName || null,
+          captainPhone: null,
+          players: tm.players,
+        })),
+        ...acceptedRegistrations.map((r) => ({
+          id: r.id,
+          teamId: r.id,
+          name: r.teamName,
+          teamName: r.teamName,
+          captainName: r.captainName,
+          captainPhone: r.captainPhone,
+          players: Array.isArray(r.players) ? r.players : [],
+        })),
+      ].map((tm, idx) => ({ ...tm, seed: idx + 1 }));
 
       const bracket = tournamentController.buildKnockoutBracket(teams, tournament.sport);
 

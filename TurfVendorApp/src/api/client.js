@@ -78,9 +78,9 @@ export const apiRequest = async (endpoint, options = {}) => {
   let lastResponse = null;
   let lastError = null;
 
-  // Release: Railway only. Dev: last working host first, then the rest.
+  // Release: Railway only. Dev: LOCAL_URL first when developing locally, then last working host, then the rest.
   const hostsToTry = (IS_DEV
-    ? [activeBaseUrl, ...CANDIDATE_URLS]
+    ? [LOCAL_URL, activeBaseUrl, ...CANDIDATE_URLS]
     : [RAILWAY_PROD_URL]
   ).filter((v, i, a) => v && a.indexOf(v) === i);
 

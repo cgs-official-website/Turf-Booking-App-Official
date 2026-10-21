@@ -198,14 +198,19 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
   const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
   const initialRegs = Array.isArray(tournament?.registrations) ? tournament.registrations : [];
-  const initialAcceptedCount = initialRegs.filter((r) => r.status === 'accepted').length;
-  const acceptedTeamsCount = tournament?.acceptedTeamsCount !== undefined
-    ? Number(tournament.acceptedTeamsCount)
-    : initialAcceptedCount;
-  const remainingSlots = tournament?.remainingSlots !== undefined
-    ? Number(tournament.remainingSlots)
-    : Math.max(0, totalTeams - acceptedTeamsCount);
-  const isFull = tournament?.isFull || remainingSlots <= 0;
+  // Teams the creator filled in directly (stored in tournament.teams, not as registrations)
+  // occupy a slot and count as accepted teams.
+  const creatorTeams = (Array.isArray(tournament?.teams) ? tournament.teams : []).filter(
+    (t) => t && Array.isArray(t.players) && t.players.length > 0
+  );
+  const initialAcceptedCount =
+    creatorTeams.length + initialRegs.filter((r) => r.status === 'accepted').length;
+  const acceptedTeamsCount = Math.max(
+    tournament?.acceptedTeamsCount !== undefined ? Number(tournament.acceptedTeamsCount) : 0,
+    initialAcceptedCount
+  );
+  const remainingSlots = Math.max(0, totalTeams - acceptedTeamsCount);
+  const isFull = remainingSlots <= 0;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const startStr = tournament?.startDate ? String(tournament.startDate).slice(0, 10) : '';
@@ -269,6 +274,18 @@ export default function TournamentDetailScreen({ route, navigation }) {
   }
 
   const lifecycleStatus = computedStatusKey;
+
+  // The creator keeps edit access after the turf owner approves, until the tournament
+  // is cancelled or finished.
+  const canEditTournament = Boolean(
+    isCreator &&
+    !isCancelled &&
+    !isRejected &&
+    lifecycleStatus !== 'completed'
+  );
+  const handleEditTournament = () => {
+    navigation.navigate('CreateTournament', { editTournament: tournament });
+  };
 
   const myRegistration = tournament?.myRegistration || null;
 
@@ -411,14 +428,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
       return;
     }
 
-    const acceptedList = Array.isArray(tournament?.acceptedTeams) && tournament.acceptedTeams.length > 0
-      ? tournament.acceptedTeams
-      : (tournament?.registrations || []).filter((r) => r.status === 'accepted');
-
-    if (acceptedList.length < 2) {
+    if (acceptedTeamsCount < 2) {
       Alert.alert(
         'Insufficient Accepted Teams',
-        `At least 2 accepted teams are required to generate tournament matches and bracket fixtures.\n\nCurrently accepted: ${acceptedList.length} team(s).\nCapacity: ${totalTeams} teams.`,
+        `At least 2 accepted teams are required to generate tournament matches and bracket fixtures.\n\nCurrently accepted: ${acceptedTeamsCount} team(s).\nCapacity: ${totalTeams} teams.`,
         [{ text: 'OK' }]
       );
       return;
@@ -426,7 +439,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
     Alert.alert(
       'Generate Tournament Bracket',
-      `Generate knockout match fixtures for the ${acceptedList.length} accepted teams?\n\nNote: Matches will be formed using ONLY accepted teams (not empty capacity slots). Only you (the tournament creator) can manage the matches, conduct tosses, and record scores.`,
+      `Generate knockout match fixtures for the ${acceptedTeamsCount} accepted teams?\n\nNote: Matches will be formed using ONLY accepted teams (not empty capacity slots). Only you (the tournament creator) can manage the matches, conduct tosses, and record scores.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -441,7 +454,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 setTournament(updated);
                 Alert.alert(
                   'Bracket Ready! ⚡',
-                  `Successfully generated match bracket for ${acceptedList.length} accepted teams. You can now conduct tosses, enter scores, and advance winners.`
+                  `Successfully generated match bracket for ${acceptedTeamsCount} accepted teams. You can now conduct tosses, enter scores, and advance winners.`
                 );
               }
             } catch (err) {
@@ -622,10 +635,16 @@ export default function TournamentDetailScreen({ route, navigation }) {
       return;
     }
 
+    const cleanedPhone = playerPhoneInput.replace(/\D/g, '').slice(0, 10);
+    if (playerPhoneInput.trim() && cleanedPhone.length !== 10) {
+      Alert.alert('Invalid Phone Number', 'Phone number must be exactly 10 numeric digits.');
+      return;
+    }
+
     const newPlayer = {
       id: `p_${Date.now()}`,
       name: playerNameInput.trim(),
-      phone: playerPhoneInput.trim() || undefined,
+      phone: cleanedPhone || undefined,
       isInvited: true,
       invitedAt: new Date().toISOString(),
     };
@@ -725,8 +744,16 @@ export default function TournamentDetailScreen({ route, navigation }) {
     ? tournament.teams.filter((t) => Array.isArray(t.players) && t.players.length > 0)
     : [];
 
-  const displayTeams = registrations.length > 0
-    ? [...acceptedSquads, ...pendingSquads, ...rejectedSquads].map((r, idx) => ({
+  const displayTeams = [
+    ...manualTeamsWithPlayers.map((t, idx) => ({
+      id: t.id || `manual_${idx}`,
+      name: t.name || `Team ${idx + 1}`,
+      captainName: t.captainName || null,
+      status: 'accepted',
+      players: Array.isArray(t.players) ? t.players : [],
+      isRegistration: false,
+    })),
+    ...[...acceptedSquads, ...pendingSquads, ...rejectedSquads].map((r, idx) => ({
       id: r.id || `reg_${idx}`,
       name: r.teamName || `Team ${idx + 1}`,
       captainName: r.captainName,
@@ -736,15 +763,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
       rejectionReason: r.rejectionReason,
       players: Array.isArray(r.players) ? r.players : [],
       isRegistration: true,
-    }))
-    : manualTeamsWithPlayers.map((t, idx) => ({
-      id: t.id || `manual_${idx}`,
-      name: t.name || `Team ${idx + 1}`,
-      captainName: t.captainName || null,
-      status: 'accepted',
-      players: Array.isArray(t.players) ? t.players : [],
-      isRegistration: false,
-    }));
+    })),
+  ];
 
   const maxPlayersPerTeam = tournament.playersPerTeam || 11;
 
@@ -767,6 +787,18 @@ export default function TournamentDetailScreen({ route, navigation }) {
             {isCommunity ? 'User Created Tournament' : 'Turf Hosted Tournament'}
           </Text>
         </View>
+
+        {/* Edit Header Action (creator only) */}
+        {canEditTournament && (
+          <TouchableOpacity
+            style={[styles.headerIconBtn, { backgroundColor: C.bgSoft, borderColor: C.border, marginRight: 8 }]}
+            onPress={handleEditTournament}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Edit tournament"
+          >
+            <Feather name="edit-2" size={18} color={C.primary} />
+          </TouchableOpacity>
+        )}
 
         {/* Share Header Action */}
         <TouchableOpacity
@@ -1190,7 +1222,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   ]}
                 >
                   {myRegistration.status === 'accepted'
-                    ? 'Accepted'
+                    ? 'Confirmed'
                     : myRegistration.status === 'rejected'
                       ? 'Rejected'
                       : 'Pending Approval'}
@@ -1243,6 +1275,20 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 👥 Squad: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{Array.isArray(myRegistration.players) ? myRegistration.players.length : tournament.playersPerTeam} Players</Text>
               </Text>
             </View>
+          </View>
+        )}
+
+        {/* ── Edit Tournament CTA (creator only) ── */}
+        {canEditTournament && (
+          <View style={styles.registerCtaWrap}>
+            <TouchableOpacity
+              style={[styles.registerBigBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: '#0F766E' }]}
+              onPress={handleEditTournament}
+              activeOpacity={0.88}
+            >
+              <Feather name="edit-2" size={16} color="#0F766E" style={{ marginRight: 8 }} />
+              <Text style={[styles.registerBigBtnText, { color: '#0F766E' }]}>Edit Tournament</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1434,25 +1480,22 @@ export default function TournamentDetailScreen({ route, navigation }) {
                     Generate Knockout Bracket
                   </Text>
                   <Text style={[styles.bracketEmptyDesc, { color: C.subtext }]}>
-                    As the Tournament Creator & Manager, you alone control the match fixtures. Matches will be generated using ONLY accepted teams ({(() => {
-                      const count = (tournament.acceptedTeams || []).length;
-                      return `${count} accepted`;
-                    })()}), not empty capacity slots.
+                    As the Tournament Creator & Manager, you alone control the match fixtures. Matches will be generated using ONLY accepted teams ({`${acceptedTeamsCount} accepted`}), not empty capacity slots.
                   </Text>
 
                   {/* Accepted Teams Stats Pill */}
                   <View style={[styles.acceptedTeamsStatPill, { backgroundColor: C.card, borderColor: C.border }]}>
                     <Ionicons name="people" size={15} color="#0F766E" style={{ marginRight: 6 }} />
                     <Text style={[styles.acceptedTeamsStatText, { color: C.text }]}>
-                      Accepted Teams: <Text style={{ fontWeight: '800', color: '#0F766E' }}>{(tournament.acceptedTeams || []).length}</Text> / {totalTeams}
+                      Accepted Teams: <Text style={{ fontWeight: '800', color: '#0F766E' }}>{acceptedTeamsCount}</Text> / {totalTeams}
                     </Text>
                   </View>
 
-                  {(tournament.acceptedTeams || []).length < 2 ? (
+                  {acceptedTeamsCount < 2 ? (
                     <View style={[styles.insufficientTeamsCard, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB', borderColor: '#F59E0B' }]}>
                       <Feather name="alert-circle" size={16} color="#D97706" style={{ marginRight: 8 }} />
                       <Text style={[styles.insufficientTeamsText, { color: dark ? '#FCD34D' : '#92400E' }]}>
-                        At least 2 accepted teams are required to generate tournament match fixtures. Currently accepted: {(tournament.acceptedTeams || []).length}.
+                        At least 2 accepted teams are required to generate tournament match fixtures. Currently accepted: {acceptedTeamsCount}.
                       </Text>
                     </View>
                   ) : (
@@ -1468,7 +1511,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         <>
                           <Ionicons name="flash" size={17} color="#FFFFFF" style={{ marginRight: 8 }} />
                           <Text style={styles.generateBracketBtnText}>
-                            Generate Matches & Bracket ({(tournament.acceptedTeams || []).length} Teams)
+                            Generate Matches & Bracket ({acceptedTeamsCount} Teams)
                           </Text>
                         </>
                       )}
@@ -1827,7 +1870,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={[styles.sectionHeading, { color: C.text, marginBottom: 2 }]}>Teams & Squads</Text>
               <Text style={[styles.sectionSubtitle, { color: C.subtext }]}>
-                {acceptedSquads.length} / {totalTeams} Teams Confirmed • {remainingSlots} Slots Left • Max {maxPlayersPerTeam} players/team
+                {acceptedTeamsCount} / {totalTeams} Teams Confirmed • {remainingSlots} Slots Left • Max {maxPlayersPerTeam} players/team
               </Text>
             </View>
           </View>
@@ -1849,7 +1892,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
               let statusBg = 'rgba(16, 185, 129, 0.15)';
               let statusBorder = '#10B981';
               let statusText = '#10B981';
-              let statusLabel = 'Accepted';
+              let statusLabel = 'Confirmed';
 
               if (team.status === 'pending') {
                 statusBg = 'rgba(245, 158, 11, 0.15)';
@@ -2115,9 +2158,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
               style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
               placeholder="e.g. 9876543210"
               placeholderTextColor={C.subtext}
-              keyboardType="phone-pad"
+              keyboardType="numeric"
+              maxLength={10}
               value={playerPhoneInput}
-              onChangeText={setPlayerPhoneInput}
+              onChangeText={(text) => setPlayerPhoneInput(text.replace(/\D/g, '').slice(0, 10))}
             />
 
             <View style={styles.modalBtnRow}>

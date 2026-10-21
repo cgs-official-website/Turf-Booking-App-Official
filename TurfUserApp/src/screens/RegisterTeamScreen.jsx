@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
@@ -27,6 +28,44 @@ export default function RegisterTeamScreen({ route, navigation }) {
   const playersPerTeam = tournament?.playersPerTeam
     ? Number(tournament.playersPerTeam)
     : 11;
+
+  const scrollViewRef = useRef(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const teamSectionY = useRef(0);
+  const playersSectionY = useRef(0);
+  const playerCardsY = useRef({});
+  const topInputsY = useRef({});
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates?.height || 280);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const scrollToField = (yOffset) => {
+    if (scrollViewRef.current && typeof yOffset === 'number') {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(0, yOffset - 50),
+          animated: true,
+        });
+      }, 50);
+    }
+  };
 
   // Form State
   const [teamName, setTeamName] = useState('');
@@ -202,10 +241,14 @@ export default function RegisterTeamScreen({ route, navigation }) {
       };
 
       const res = await registerTournamentTeamApi(tournament.id, payload);
+      const reg = res?.registration || res?.data?.registration;
+      const isAccepted = reg?.status === 'accepted';
 
       Alert.alert(
-        'Registration Submitted! 🎉',
-        `Your team "${teamName.trim()}" has been submitted for "${tournament.name}".\n\nStatus: Pending Approval\n\nThe turf owner will review and approve your team.`,
+        isAccepted ? 'Registration Confirmed! 🎉' : 'Registration Submitted! 🎉',
+        isAccepted
+          ? `Your team "${teamName.trim()}" is officially registered and confirmed for "${tournament.name}".`
+          : `Your team "${teamName.trim()}" has been submitted for "${tournament.name}".\n\nStatus: Pending Approval\n\nThe turf owner will review and approve your team.`,
         [
           {
             text: 'View Tournament',
@@ -257,8 +300,12 @@ export default function RegisterTeamScreen({ route, navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 120 : 60 },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Tournament Info Banner ── */}
@@ -295,14 +342,22 @@ export default function RegisterTeamScreen({ route, navigation }) {
           </View>
 
           {/* ── Section: Team & Captain Details ── */}
-          <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <View
+            style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}
+            onLayout={(e) => {
+              teamSectionY.current = e.nativeEvent.layout.y;
+            }}
+          >
             <View style={styles.sectionHeaderRow}>
               <Feather name="shield" size={18} color={C.primary} style={{ marginRight: 8 }} />
               <Text style={[styles.sectionHeading, { color: C.text }]}>Team & Captain Information</Text>
             </View>
 
             {/* Team Name */}
-            <View style={styles.inputGroup}>
+            <View
+              style={styles.inputGroup}
+              onLayout={(e) => { topInputsY.current.teamName = e.nativeEvent.layout.y; }}
+            >
               <Text style={[styles.inputLabel, { color: C.text }]}>
                 Team Name <Text style={{ color: '#EF4444' }}>*</Text>
               </Text>
@@ -314,6 +369,7 @@ export default function RegisterTeamScreen({ route, navigation }) {
                 placeholder="e.g. Chennai Super Strikers"
                 placeholderTextColor={C.subtext}
                 value={teamName}
+                onFocus={() => scrollToField(teamSectionY.current + (topInputsY.current.teamName || 0))}
                 onChangeText={(val) => {
                   setTeamName(val);
                   if (errors.teamName) setErrors((e) => ({ ...e, teamName: undefined }));
@@ -323,7 +379,10 @@ export default function RegisterTeamScreen({ route, navigation }) {
             </View>
 
             {/* Captain Name */}
-            <View style={styles.inputGroup}>
+            <View
+              style={styles.inputGroup}
+              onLayout={(e) => { topInputsY.current.captainName = e.nativeEvent.layout.y; }}
+            >
               <Text style={[styles.inputLabel, { color: C.text }]}>
                 Captain Name <Text style={{ color: '#EF4444' }}>*</Text>
               </Text>
@@ -335,6 +394,7 @@ export default function RegisterTeamScreen({ route, navigation }) {
                 placeholder="Full Name"
                 placeholderTextColor={C.subtext}
                 value={captainName}
+                onFocus={() => scrollToField(teamSectionY.current + (topInputsY.current.captainName || 0))}
                 onChangeText={(val) => {
                   setCaptainName(val);
                   if (errors.captainName) setErrors((e) => ({ ...e, captainName: undefined }));
@@ -344,7 +404,10 @@ export default function RegisterTeamScreen({ route, navigation }) {
             </View>
 
             {/* Captain Phone */}
-            <View style={styles.inputGroup}>
+            <View
+              style={styles.inputGroup}
+              onLayout={(e) => { topInputsY.current.captainPhone = e.nativeEvent.layout.y; }}
+            >
               <Text style={[styles.inputLabel, { color: C.text }]}>
                 Captain Phone Number <Text style={{ color: '#EF4444' }}>*</Text>
               </Text>
@@ -357,6 +420,7 @@ export default function RegisterTeamScreen({ route, navigation }) {
                   keyboardType="phone-pad"
                   maxLength={10}
                   value={captainPhone}
+                  onFocus={() => scrollToField(teamSectionY.current + (topInputsY.current.captainPhone || 0))}
                   onChangeText={(val) => {
                     setCaptainPhone(val);
                     if (errors.captainPhone) setErrors((e) => ({ ...e, captainPhone: undefined }));
@@ -367,7 +431,10 @@ export default function RegisterTeamScreen({ route, navigation }) {
             </View>
 
             {/* Captain Email (Optional) */}
-            <View style={styles.inputGroup}>
+            <View
+              style={styles.inputGroup}
+              onLayout={(e) => { topInputsY.current.captainEmail = e.nativeEvent.layout.y; }}
+            >
               <Text style={[styles.inputLabel, { color: C.text }]}>
                 Captain Email <Text style={[styles.optionalTag, { color: C.subtext }]}>- Optional</Text>
               </Text>
@@ -378,13 +445,19 @@ export default function RegisterTeamScreen({ route, navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={captainEmail}
+                onFocus={() => scrollToField(teamSectionY.current + (topInputsY.current.captainEmail || 0))}
                 onChangeText={setCaptainEmail}
               />
             </View>
           </View>
 
           {/* ── Section: Dynamic Players Roster ── */}
-          <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <View
+            style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}
+            onLayout={(e) => {
+              playersSectionY.current = e.nativeEvent.layout.y;
+            }}
+          >
             <View style={styles.playersHeaderRow}>
               <View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -429,6 +502,9 @@ export default function RegisterTeamScreen({ route, navigation }) {
                       borderColor: (nameError || phoneError) ? '#EF4444' : C.border,
                     },
                   ]}
+                  onLayout={(e) => {
+                    playerCardsY.current[pNum] = e.nativeEvent.layout.y;
+                  }}
                 >
                   <View style={styles.playerCardHeader}>
                     <View style={[styles.playerNumBadge, { backgroundColor: C.primary }]}>
@@ -455,6 +531,10 @@ export default function RegisterTeamScreen({ route, navigation }) {
                         placeholder={`Player ${pNum} Name`}
                         placeholderTextColor={C.subtext}
                         value={player.name}
+                        onFocus={() => {
+                          const cardY = playerCardsY.current[pNum] || 0;
+                          scrollToField(playersSectionY.current + cardY);
+                        }}
                         onChangeText={(val) => updatePlayer(idx, 'name', val)}
                       />
                       {nameError && <Text style={styles.errorTextSmall}>{nameError}</Text>}
@@ -477,6 +557,10 @@ export default function RegisterTeamScreen({ route, navigation }) {
                         keyboardType="phone-pad"
                         maxLength={10}
                         value={player.phone}
+                        onFocus={() => {
+                          const cardY = playerCardsY.current[pNum] || 0;
+                          scrollToField(playersSectionY.current + cardY + 30);
+                        }}
                         onChangeText={(val) => updatePlayer(idx, 'phone', val)}
                       />
                       {phoneError && <Text style={styles.errorTextSmall}>{phoneError}</Text>}
