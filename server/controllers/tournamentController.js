@@ -436,6 +436,78 @@ function roundNameFor(roundIdx, totalRounds) {
   return `Round of ${Math.pow(2, fromFinal + 1)}`;
 }
 
+function getMatchCodeAndLabel(roundIdx, matchIdx, totalRounds) {
+  const fromFinal = totalRounds - roundIdx;
+  if (fromFinal === 0) {
+    return {
+      matchCode: 'FINAL',
+      matchLabel: 'Final',
+    };
+  }
+  if (fromFinal === 1) {
+    return {
+      matchCode: `SF${matchIdx + 1}`,
+      matchLabel: `Semi-Final ${matchIdx + 1}`,
+    };
+  }
+  if (fromFinal === 2) {
+    return {
+      matchCode: `QF${matchIdx + 1}`,
+      matchLabel: `Quarter-Final ${matchIdx + 1}`,
+    };
+  }
+  const roundSize = Math.pow(2, fromFinal + 1);
+  return {
+    matchCode: `R${roundSize}-${matchIdx + 1}`,
+    matchLabel: `Round of ${roundSize} Match ${matchIdx + 1}`,
+  };
+}
+
+function parseCricketNumber(val) {
+  if (val === null || val === undefined || val === '') return null;
+  const n = Number(val);
+  return isNaN(n) ? null : Math.max(0, Math.floor(n));
+}
+
+function extractCricketDetails(inputObj = {}, fallbackTeamAStr = '', fallbackTeamBStr = '') {
+  let runsA = parseCricketNumber(inputObj?.runsA);
+  let wicketsA = parseCricketNumber(inputObj?.wicketsA);
+  let oversA = inputObj?.oversA !== undefined && inputObj?.oversA !== '' ? String(inputObj.oversA).trim() : null;
+
+  let runsB = parseCricketNumber(inputObj?.runsB);
+  let wicketsB = parseCricketNumber(inputObj?.wicketsB);
+  let oversB = inputObj?.oversB !== undefined && inputObj?.oversB !== '' ? String(inputObj.oversB).trim() : null;
+
+  if (runsA === null && fallbackTeamAStr) {
+    const m = String(fallbackTeamAStr).match(/^(\d+)(?:\s*\/\s*(\d+))?(?:\s*\(?([\d.]+)\s*(?:ov|overs)?\)?)?/i);
+    if (m) {
+      runsA = parseInt(m[1], 10) || 0;
+      wicketsA = m[2] !== undefined ? parseInt(m[2], 10) : 0;
+      oversA = m[3] ? m[3] : '0.0';
+    }
+  }
+
+  if (runsB === null && fallbackTeamBStr) {
+    const m = String(fallbackTeamBStr).match(/^(\d+)(?:\s*\/\s*(\d+))?(?:\s*\(?([\d.]+)\s*(?:ov|overs)?\)?)?/i);
+    if (m) {
+      runsB = parseInt(m[1], 10) || 0;
+      wicketsB = m[2] !== undefined ? parseInt(m[2], 10) : 0;
+      oversB = m[3] ? m[3] : '0.0';
+    }
+  }
+
+  return {
+    runsA: runsA !== null ? runsA : 0,
+    wicketsA: wicketsA !== null ? wicketsA : 0,
+    oversA: oversA || '0.0',
+    runsB: runsB !== null ? runsB : 0,
+    wicketsB: wicketsB !== null ? wicketsB : 0,
+    oversB: oversB || '0.0',
+    hasScoreA: runsA !== null,
+    hasScoreB: runsB !== null,
+  };
+}
+
 /**
  * Fire-and-forget: never make the API response wait for push notifications.
  */
@@ -1932,7 +2004,8 @@ const tournamentController = {
         where: { id: tournamentId },
         include: {
           registrations: true,
-          turf: { select: { id: true, name: true, city: true } },
+          turf: { select: { id: true, name: true, city: true, vendorId: true } },
+          vendor: { select: { id: true, name: true, phone: true } },
         },
       });
 
@@ -2106,24 +2179,29 @@ const tournamentController = {
 
       // Dispatch notifications in background
       try {
+        const registration = outcome.registration;
         const isUserCreated = tournament.creatorType === 'USER' || Boolean(tournament.userId);
         const creatorId = isUserCreated ? tournament.userId : tournament.vendorId;
         const creatorRole = isUserCreated ? 'user' : 'vendor';
 
-        // 1. Send notification ONLY to the tournament creator (never to turf vendor unless same account)
+        // 1. Send mobile push notification ONLY to the tournament creator (vendor or user)
         if (creatorId && creatorId !== userId) {
           notifyInBackground({
             recipientId: creatorId,
             recipientRole: creatorRole,
             title: 'New Team Registration',
-            body: `${teamName.trim()} registered for ${tournament.name}. Tap to review.`,
+            body: `Team "${registration.teamName}" has registered for your tournament "${tournament.name}". Review the application.`,
             type: 'tournament',
             data: {
-              tournamentId,
-              id: tournamentId,
+              tournamentId: tournament.id || tournamentId,
+              id: tournament.id || tournamentId,
               screen: 'TournamentDetail',
               tab: 'registrations',
-              action: 'team_registration_pending',
+              action: 'tournament_registration',
+              registrationId: registration.id,
+              teamName: registration.teamName,
+              captainName: registration.captainName,
+              turfId: tournament.turfId || tournament.turf?.id || '',
             },
           });
         }
@@ -2133,13 +2211,15 @@ const tournamentController = {
           recipientId: userId,
           recipientRole: 'user',
           title: 'Registration Submitted',
-          body: `Your team "${teamName.trim()}" has been submitted for ${tournament.name} and is awaiting organizer approval.`,
+          body: `Your team "${registration.teamName}" has been submitted for ${tournament.name} and is awaiting organizer approval.`,
           type: 'tournament',
           data: {
-            tournamentId,
-            id: tournamentId,
+            tournamentId: tournament.id || tournamentId,
+            id: tournament.id || tournamentId,
             screen: 'TournamentDetail',
             action: 'registration_pending',
+            registrationId: registration.id,
+            teamName: registration.teamName,
           },
         });
       } catch (notifErr) {
@@ -2753,12 +2833,22 @@ const tournamentController = {
         const nextMatchSlot = (m % 2 === 0) ? 'teamA' : 'teamB';
         const nextMatchId = isFinalRound ? null : `match_r${nextRoundIdx}_m${nextMatchIdx}`;
 
+        const codeInfo = getMatchCodeAndLabel(r, m, totalRounds);
+        let placeholderA = 'Team A';
+        let placeholderB = 'Team B';
+
         let teamA = null;
         let teamB = null;
 
         if (r === 1) {
           teamA = r1Pairs[m][0];
           teamB = r1Pairs[m][1];
+          placeholderB = (!teamB && r1Pairs[m][0]) ? 'BYE' : 'Team B';
+        } else {
+          const prevA = getMatchCodeAndLabel(r - 1, 2 * m, totalRounds);
+          const prevB = getMatchCodeAndLabel(r - 1, 2 * m + 1, totalRounds);
+          placeholderA = `Winner ${prevA.matchCode}`;
+          placeholderB = `Winner ${prevB.matchCode}`;
         }
 
         const isBye = Boolean(r === 1 && teamA && !teamB);
@@ -2771,12 +2861,17 @@ const tournamentController = {
           roundNumber: r,
           roundName,
           matchNumber: globalMatchCounter++,
+          matchCode: codeInfo.matchCode,
+          matchLabel: codeInfo.matchLabel,
+          placeholderA,
+          placeholderB,
           teamA,
           teamB,
           toss: null,
           score: null,
           status: initialStatus,
           winner: initialWinner,
+          loser: null,
           isBye,
           nextMatchId,
           nextMatchSlot,
@@ -2861,15 +2956,18 @@ const tournamentController = {
         return sendError(res, 'Access denied: Only the tournament manager (creator) can generate match brackets.', 403, 'FORBIDDEN');
       }
 
-      // The draw is FINAL: once generated nobody (host/vendor) can re-draw or edit pairings.
+      // The draw is FINAL: once generated nobody can re-draw unless force is requested before matches start
       const isAdminUser = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+      const hasCompletedMatches = tournament.bracket?.rounds?.some(r => r.matches?.some(m => m.status === 'completed' && !m.isBye));
       if (tournament.bracket && Array.isArray(tournament.bracket.rounds) && !isAdminUser) {
-        return sendError(
-          res,
-          'The random draw has already been conducted and is locked. Pairings cannot be changed.',
-          409,
-          'BRACKET_LOCKED'
-        );
+        if (hasCompletedMatches || !req.body?.force) {
+          return sendError(
+            res,
+            'The random draw has already been conducted and is locked. Pairings cannot be changed.',
+            409,
+            'BRACKET_LOCKED'
+          );
+        }
       }
 
       // Accepted teams ONLY: creator-filled teams + accepted registrations
@@ -3041,8 +3139,11 @@ const tournamentController = {
         winnerId: winnerTeamId,
         winnerName,
         decision: decision || 'bat',
+        electedTo: (decision || 'bat').toLowerCase(),
       };
-      targetMatch.status = 'toss';
+      if (targetMatch.status === 'pending' || targetMatch.status === 'waiting' || !targetMatch.status) {
+        targetMatch.status = 'toss';
+      }
 
       const updated = await prisma.tournament.update({
         where: { id },
@@ -3129,15 +3230,60 @@ const tournamentController = {
         return sendError(res, 'This match is completed and its result is locked.', 409, 'MATCH_LOCKED');
       }
 
-      if (score) {
-        // Keep only the fields the apps use; stops arbitrary/huge JSON being stored in the bracket
-        targetMatch.score = {
-          teamA: String(score.teamA ?? '').slice(0, 40),
-          teamB: String(score.teamB ?? '').slice(0, 40),
-          summary: String(score.summary ?? '').slice(0, 300),
-          updatedAt: new Date().toISOString(),
-        };
+      const bodyScore = req.body?.score && typeof req.body.score === 'object' ? req.body.score : {};
+      const directInput = {
+        runsA: req.body?.runsA !== undefined ? req.body.runsA : bodyScore.runsA,
+        wicketsA: req.body?.wicketsA !== undefined ? req.body.wicketsA : bodyScore.wicketsA,
+        oversA: req.body?.oversA !== undefined ? req.body.oversA : bodyScore.oversA,
+        runsB: req.body?.runsB !== undefined ? req.body.runsB : bodyScore.runsB,
+        wicketsB: req.body?.wicketsB !== undefined ? req.body.wicketsB : bodyScore.wicketsB,
+        oversB: req.body?.oversB !== undefined ? req.body.oversB : bodyScore.oversB,
+      };
+
+      const extracted = extractCricketDetails(
+        directInput,
+        req.body?.teamA || bodyScore.teamA || targetMatch.score?.teamA,
+        req.body?.teamB || bodyScore.teamB || targetMatch.score?.teamB
+      );
+
+      const runsA = extracted.runsA;
+      const wicketsA = extracted.wicketsA;
+      const oversA = extracted.oversA;
+      const runsB = extracted.runsB;
+      const wicketsB = extracted.wicketsB;
+      const oversB = extracted.oversB;
+
+      const teamAName = targetMatch.teamA?.name || targetMatch.teamA?.teamName || 'Team A';
+      const teamBName = targetMatch.teamB?.name || targetMatch.teamB?.teamName || 'Team B';
+
+      let leadText = '';
+      if (runsA > runsB) {
+        const diff = runsA - runsB;
+        leadText = `${teamAName} leads by ${diff} run${diff === 1 ? '' : 's'}`;
+      } else if (runsB > runsA) {
+        const diff = runsB - runsA;
+        leadText = `${teamBName} leads by ${diff} run${diff === 1 ? '' : 's'}`;
+      } else if (runsA === runsB && (runsA > 0 || wicketsA > 0 || wicketsB > 0)) {
+        leadText = 'Scores are level';
       }
+
+      const userSummary = String(req.body?.summary !== undefined ? req.body.summary : (bodyScore.summary !== undefined ? bodyScore.summary : (targetMatch.score?.summary || ''))).trim();
+      const matchSummary = userSummary || leadText;
+
+      targetMatch.score = {
+        runsA,
+        wicketsA,
+        oversA,
+        runsB,
+        wicketsB,
+        oversB,
+        teamA: `${runsA}/${wicketsA} (${oversA} ov)`,
+        teamB: `${runsB}/${wicketsB} (${oversB} ov)`,
+        summary: matchSummary,
+        leadText,
+        updatedAt: new Date().toISOString(),
+      };
+
       if (status) {
         targetMatch.status = status;
       } else if (!targetMatch.status || targetMatch.status === 'pending' || targetMatch.status === 'toss') {
@@ -3230,23 +3376,45 @@ const tournamentController = {
       }
 
       // ── SCORE-BASED RESULT ── the winner is decided by the entered score.
-      const scoreA = parseScoreValue(targetMatch.score?.teamA);
-      const scoreB = parseScoreValue(targetMatch.score?.teamB);
-      if (scoreA === null || scoreB === null) {
+      const bodyScore = req.body?.score && typeof req.body.score === 'object' ? req.body.score : {};
+      const directInput = {
+        runsA: req.body?.runsA !== undefined ? req.body.runsA : bodyScore.runsA,
+        wicketsA: req.body?.wicketsA !== undefined ? req.body.wicketsA : bodyScore.wicketsA,
+        oversA: req.body?.oversA !== undefined ? req.body.oversA : bodyScore.oversA,
+        runsB: req.body?.runsB !== undefined ? req.body.runsB : bodyScore.runsB,
+        wicketsB: req.body?.wicketsB !== undefined ? req.body.wicketsB : bodyScore.wicketsB,
+        oversB: req.body?.oversB !== undefined ? req.body.oversB : bodyScore.oversB,
+      };
+
+      const hasDirectScores = directInput.runsA !== undefined || directInput.runsB !== undefined;
+      const currentDetails = extractCricketDetails(
+        hasDirectScores ? directInput : targetMatch.score,
+        targetMatch.score?.teamA,
+        targetMatch.score?.teamB
+      );
+
+      if (!currentDetails.hasScoreA && !currentDetails.hasScoreB && !targetMatch.score) {
         return sendError(res, 'Enter the score of both teams before finishing the match.', 400, 'SCORE_REQUIRED');
       }
 
+      const runsA = currentDetails.runsA;
+      const wicketsA = currentDetails.wicketsA;
+      const oversA = currentDetails.oversA;
+      const runsB = currentDetails.runsB;
+      const wicketsB = currentDetails.wicketsB;
+      const oversB = currentDetails.oversB;
+
       let winnerTeamId;
       let decidedBy = 'score';
-      if (scoreA !== scoreB) {
-        winnerTeamId = scoreA > scoreB ? targetMatch.teamA.id : targetMatch.teamB.id;
+      if (runsA !== runsB) {
+        winnerTeamId = runsA > runsB ? targetMatch.teamA.id : targetMatch.teamB.id;
         if (requestedWinnerId && requestedWinnerId !== winnerTeamId) {
           return sendError(res, 'Winner does not match the entered score. Correct the score first.', 400, 'WINNER_SCORE_MISMATCH');
         }
       } else {
         // Scores level: a tie-breaker (penalties / super over / golden goal) result is required
         if (!requestedWinnerId) {
-          return sendError(res, 'Scores are tied. Select the tie-breaker winner (penalties / super over).', 400, 'TIE_NEEDS_TIEBREAK');
+          return sendError(res, 'Scores are tied. Select the tie-breaker winner (Super Over / Golden Goal).', 400, 'TIE_NEEDS_TIEBREAK');
         }
         winnerTeamId = requestedWinnerId;
         decidedBy = 'tiebreak';
@@ -3260,15 +3428,60 @@ const tournamentController = {
         return sendError(res, 'Invalid winner team: specified team is not in this match.', 400, 'INVALID_WINNER');
       }
       const losingTeamObj = winningTeamObj.id === targetMatch.teamA.id ? targetMatch.teamB : targetMatch.teamA;
+      const winnerName = winningTeamObj.name || winningTeamObj.teamName || 'Winner';
+
+      // Toss info to calculate win margin accurately
+      let teamABattedFirst = true;
+      if (targetMatch.toss) {
+        if (targetMatch.toss.winnerId === targetMatch.teamA.id) {
+          teamABattedFirst = targetMatch.toss.decision !== 'bowl';
+        } else if (targetMatch.toss.winnerId === targetMatch.teamB.id) {
+          teamABattedFirst = targetMatch.toss.decision === 'bowl';
+        }
+      }
+
+      let winMarginText = '';
+      if (decidedBy === 'tiebreak') {
+        winMarginText = `Won via Super Over${tiebreakNote ? ` (${tiebreakNote})` : ''}`;
+      } else if (winningTeamObj.id === targetMatch.teamA.id) {
+        if (teamABattedFirst) {
+          const diff = runsA - runsB;
+          winMarginText = `Won by ${diff} run${diff === 1 ? '' : 's'}`;
+        } else {
+          const wicketsLeft = Math.max(1, 10 - wicketsA);
+          winMarginText = `Won by ${wicketsLeft} wicket${wicketsLeft === 1 ? '' : 's'}`;
+        }
+      } else {
+        if (!teamABattedFirst) {
+          const diff = runsB - runsA;
+          winMarginText = `Won by ${diff} run${diff === 1 ? '' : 's'}`;
+        } else {
+          const wicketsLeft = Math.max(1, 10 - wicketsB);
+          winMarginText = `Won by ${wicketsLeft} wicket${wicketsLeft === 1 ? '' : 's'}`;
+        }
+      }
 
       targetMatch.winner = winningTeamObj;
       targetMatch.loser = losingTeamObj;
       targetMatch.decidedBy = decidedBy;
-      if (decidedBy === 'tiebreak' && tiebreakNote) {
-        targetMatch.score = { ...(targetMatch.score || {}), tiebreak: String(tiebreakNote).slice(0, 120) };
-      }
       targetMatch.completedAt = new Date().toISOString();
       targetMatch.status = 'completed';
+
+      targetMatch.score = {
+        runsA,
+        wicketsA,
+        oversA,
+        runsB,
+        wicketsB,
+        oversB,
+        teamA: `${runsA}/${wicketsA} (${oversA} ov)`,
+        teamB: `${runsB}/${wicketsB} (${oversB} ov)`,
+        winMarginText,
+        winnerName,
+        summary: `${winnerName.toUpperCase()} WON • ${winMarginText}`,
+        updatedAt: new Date().toISOString(),
+        ...(decidedBy === 'tiebreak' && tiebreakNote ? { tiebreak: String(tiebreakNote).slice(0, 120) } : {}),
+      };
 
       let isTournamentFinal = false;
 
@@ -3302,7 +3515,6 @@ const tournamentController = {
       });
 
       // Send FCM notification for match winner / champion
-      const winnerName = winningTeamObj.name || winningTeamObj.teamName;
       const notifTitle = isTournamentFinal ? '👑 Tournament Champion Declared!' : '🏆 Match Winner Advanced!';
       const notifBody = isTournamentFinal
         ? `${winnerName} has won the championship in "${tournament.name}"!`

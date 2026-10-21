@@ -207,8 +207,11 @@ export const fcmHelper = {
 
     const showVendorPopup = ({ title, body, data }) => {
       const isTournament = data?.type === 'tournament' || data?.screen === 'TournamentDetail';
-      const popupTitle = cleanText(title) || (isTournament ? 'Tournament Request' : 'New Notification');
-      const popupBody = cleanText(body) || (isTournament ? 'A user requested to host a tournament at your turf.' : 'Tap to check details.');
+      const isReg = data?.action === 'tournament_registration';
+      const defaultTitle = isReg ? 'New Team Registration' : (isTournament ? 'Tournament Request' : 'New Notification');
+      const defaultBody = isReg ? 'A new team has registered for your tournament.' : (isTournament ? 'A user requested to host a tournament at your turf.' : 'Tap to check details.');
+      const popupTitle = cleanText(title) || defaultTitle;
+      const popupBody = cleanText(body) || defaultBody;
 
       // Mobile level system notification with logo.png (shown in background/quit or heads-up)
       triggerSystemNotification({ title: popupTitle, body: popupBody, data });
@@ -221,7 +224,7 @@ export const fcmHelper = {
           [
             { text: 'Dismiss', style: 'cancel' },
             {
-              text: isTournament ? 'Review Request' : 'View Booking',
+              text: isReg ? 'Review Application' : (isTournament ? 'Review Request' : 'View Booking'),
               onPress: () => this.handleNotificationNavigation(navigationRef, data),
             },
           ],
@@ -238,11 +241,13 @@ export const fcmHelper = {
       const notifId = data.notificationId || remoteMessage?.messageId;
       if (notifId) shownNotificationIds.add(notifId);
 
+      const isReg = data?.action === 'tournament_registration';
+      const defaultTitle = isReg ? 'New Team Registration' : (data?.type === 'tournament' ? 'Tournament Request' : 'New Booking');
       const title =
         remoteMessage?.notification?.title ||
         data.notificationText ||
         data.title ||
-        (data.type === 'tournament' ? 'Tournament Request' : 'New Booking');
+        defaultTitle;
       const body =
         remoteMessage?.notification?.body ||
         data.notificationText ||
@@ -271,6 +276,29 @@ export const fcmHelper = {
         }
       })
       .catch((err) => console.warn('⚠️ getInitialNotification vendor error:', err.message));
+
+    // 3b. Check native local notification launch / click if available
+    const checkLocalNotificationLaunch = () => {
+      try {
+        if (NativeModules.LocalNotificationModule?.getInitialNotification) {
+          NativeModules.LocalNotificationModule.getInitialNotification()
+            .then((localData) => {
+              if (localData && (localData.screen || localData.type || localData.tournamentId || localData.bookingId)) {
+                console.log('🚀 Native local notification tapped:', localData);
+                this.handleNotificationNavigation(navigationRef, localData);
+              }
+            })
+            .catch(() => {});
+        }
+      } catch {}
+    };
+
+    checkLocalNotificationLaunch();
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkLocalNotificationLaunch();
+      }
+    });
 
     // 4. Token refresh listener
     const unsubscribeOnTokenRefresh = this.setupTokenRefreshListener();
@@ -314,6 +342,9 @@ export const fcmHelper = {
 
     return () => {
       clearInterval(pollInterval);
+      if (appStateSub && typeof appStateSub.remove === 'function') {
+        appStateSub.remove();
+      }
       unsubscribeOnMessage();
       unsubscribeOnNotificationOpenedApp();
       unsubscribeOnTokenRefresh();

@@ -76,4 +76,28 @@ class LocalNotificationModule(private val reactContext: ReactApplicationContext)
             e.printStackTrace()
         }
     }
+
+    @ReactMethod
+    fun getInitialNotification(promise: com.facebook.react.bridge.Promise) {
+        try {
+            val activity = currentActivity ?: reactContext.currentActivity
+            val intent = activity?.intent
+            val extras = intent?.extras
+            if (extras != null && (extras.containsKey("screen") || extras.containsKey("type") || extras.containsKey("tournamentId") || extras.containsKey("bookingId"))) {
+                val map = com.facebook.react.bridge.Arguments.createMap()
+                for (key in extras.keySet()) {
+                    val value = extras.get(key)
+                    if (value != null) {
+                        map.putString(key, value.toString())
+                    }
+                }
+                intent.replaceExtras(android.os.Bundle())
+                promise.resolve(map)
+                return
+            }
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.resolve(null)
+        }
+    }
 }

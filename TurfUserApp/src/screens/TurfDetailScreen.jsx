@@ -62,18 +62,19 @@ const shareTurf = async (turf) => {
 };
 
 export default function TurfDetailScreen({ route, navigation }) {
-  const id = route.params?.turfId ?? route.params?.id;
+  const id = route.params?.turfId ?? route.params?.id ?? route.params?.turf?.id ?? route.params?.turf?._id;
+  const initialTurf = route.params?.turf || null;
 
   const dispatch = useDispatch();
   const { C, dark } = useTheme();
   const wishlist = useSelector((s) => s.wishlist.wishlist || []);
 
-  const [turf, setTurf] = useState(null);
+  const [turf, setTurf] = useState(initialTurf);
   const [reviews, setReviews] = useState([]);
   const [imgIndex, setImgIndex] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalIndex, setModalIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialTurf);
   const [selectedSport, setSelectedSport] = useState(null);
   const [offers, setOffers] = useState([]);
 
@@ -81,15 +82,21 @@ export default function TurfDetailScreen({ route, navigation }) {
   const modalSliderRef = useRef(null);
 
   const fetchTurfDetails = useCallback(() => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     Promise.all([
       turfsApi.getTurf(id),
-      turfsApi.getReviews(id),
+      turfsApi.getReviews(id).catch(() => ({ reviews: [] })),
       turfsApi.getTurfOffers ? turfsApi.getTurfOffers(id).catch(() => ({ offers: [] })) : Promise.resolve({ offers: [] }),
     ])
       .then(([t, r, o]) => {
-        const loadedTurf = t?.turf || t;
-        setTurf(loadedTurf);
-        const rawReviews = r?.reviews || r?.items || [];
+        const loadedTurf = t?.turf || t?.data?.turf || t;
+        if (loadedTurf && (loadedTurf.id || loadedTurf._id || loadedTurf.name)) {
+          setTurf(loadedTurf);
+        }
+        const rawReviews = r?.reviews || r?.items || r?.data?.reviews || [];
         const sorted = [...rawReviews].sort((a, b) => (b.rating || 5) - (a.rating || 5));
         setReviews(sorted);
         const rawOffers = o?.offers || o?.data?.offers || (Array.isArray(o) ? o : []);
@@ -102,7 +109,9 @@ export default function TurfDetailScreen({ route, navigation }) {
           setSelectedSport(availableSports[0]);
         }
       })
-      .catch(() => { })
+      .catch((err) => {
+        console.warn('Failed to load turf details:', err?.message);
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -127,7 +136,25 @@ export default function TurfDetailScreen({ route, navigation }) {
     return () => sub.remove();
   }, [fetchTurfDetails]);
 
-  if (loading || !turf) {
+  if (!loading && !turf) {
+    return (
+      <View style={[styles.loadingBox, { backgroundColor: C.bg }]}>
+        <Feather name="alert-circle" size={42} color={C.error || '#EF4444'} />
+        <Text style={[styles.loadingText, { color: C.text, fontSize: 18, fontWeight: '700', marginTop: 12 }]}>Arena Details Unavailable</Text>
+        <Text style={{ color: C.subtext, fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: 16, paddingHorizontal: 24 }}>
+          Could not load the venue details. Please check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: C.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (loading && !turf) {
     return (
       <View style={[styles.loadingBox, { backgroundColor: C.bg }]}>
         <ActivityIndicator color={C.primary} size="large" />
@@ -213,7 +240,6 @@ export default function TurfDetailScreen({ route, navigation }) {
       setImgIndex(nextIdx);
     }
   };
-
   const slidePrev = () => {
     if (imgIndex > 0) {
       const prevIdx = imgIndex - 1;

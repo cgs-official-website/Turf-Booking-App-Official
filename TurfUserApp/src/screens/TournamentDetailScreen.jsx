@@ -64,6 +64,60 @@ const formatDate = (dateStr) => {
   }
 };
 
+export function getMatchCricketScore(match) {
+  const score = match?.score || {};
+  let runsA = score.runsA !== undefined && score.runsA !== null ? Number(score.runsA) : null;
+  let wicketsA = score.wicketsA !== undefined && score.wicketsA !== null ? Number(score.wicketsA) : null;
+  let oversA = score.oversA !== undefined && score.oversA !== null && score.oversA !== '' ? String(score.oversA) : null;
+
+  let runsB = score.runsB !== undefined && score.runsB !== null ? Number(score.runsB) : null;
+  let wicketsB = score.wicketsB !== undefined && score.wicketsB !== null ? Number(score.wicketsB) : null;
+  let oversB = score.oversB !== undefined && score.oversB !== null && score.oversB !== '' ? String(score.oversB) : null;
+
+  if (runsA === null && score.teamA) {
+    const m = String(score.teamA).match(/^(\d+)(?:\s*\/\s*(\d+))?(?:\s*\(?([\d.]+)\s*(?:ov|overs)?\)?)?/i);
+    if (m) {
+      runsA = parseInt(m[1], 10) || 0;
+      wicketsA = m[2] !== undefined ? parseInt(m[2], 10) : 0;
+      oversA = m[3] ? m[3] : '0.0';
+    }
+  }
+
+  if (runsB === null && score.teamB) {
+    const m = String(score.teamB).match(/^(\d+)(?:\s*\/\s*(\d+))?(?:\s*\(?([\d.]+)\s*(?:ov|overs)?\)?)?/i);
+    if (m) {
+      runsB = parseInt(m[1], 10) || 0;
+      wicketsB = m[2] !== undefined ? parseInt(m[2], 10) : 0;
+      oversB = m[3] ? m[3] : '0.0';
+    }
+  }
+
+  const hasScoreA = runsA !== null;
+  const hasScoreB = runsB !== null;
+
+  return {
+    runsA: runsA !== null ? runsA : 0,
+    wicketsA: wicketsA !== null ? wicketsA : 0,
+    oversA: oversA || '0.0',
+    runsB: runsB !== null ? runsB : 0,
+    wicketsB: wicketsB !== null ? wicketsB : 0,
+    oversB: oversB || '0.0',
+    hasScoreA,
+    hasScoreB,
+    hasScore: hasScoreA || hasScoreB,
+    summary: score.summary || '',
+    leadText: score.leadText || '',
+    winMarginText: score.winMarginText || '',
+  };
+}
+
+export const getTeamDisplayName = (team, placeholder = 'TBD') => {
+  if (team) {
+    return team.name || team.teamName || 'Team';
+  }
+  return placeholder || 'TBD';
+};
+
 export default function TournamentDetailScreen({ route, navigation }) {
   const targetId =
     route.params?.tournamentId ||
@@ -108,17 +162,22 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [tossWinnerId, setTossWinnerId] = useState('');
   const [tossDecision, setTossDecision] = useState('bat');
 
-  // Score Modal State
+  // Score Modal State (Structured Cricket)
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
   const [selectedMatchForScore, setSelectedMatchForScore] = useState(null);
-  const [teamAScoreInput, setTeamAScoreInput] = useState('');
-  const [teamBScoreInput, setTeamBScoreInput] = useState('');
+  const [runsAInput, setRunsAInput] = useState('');
+  const [wicketsAInput, setWicketsAInput] = useState('');
+  const [oversAInput, setOversAInput] = useState('');
+  const [runsBInput, setRunsBInput] = useState('');
+  const [wicketsBInput, setWicketsBInput] = useState('');
+  const [oversBInput, setOversBInput] = useState('');
   const [matchSummaryInput, setMatchSummaryInput] = useState('');
 
-  // Winner & Advance Modal State
+  // Winner & Advance Modal State (Tiebreak)
   const [winnerModalVisible, setWinnerModalVisible] = useState(false);
   const [selectedMatchForWinner, setSelectedMatchForWinner] = useState(null);
   const [winnerTeamId, setWinnerTeamId] = useState('');
+  const [tiebreakNoteInput, setTiebreakNoteInput] = useState('Super Over');
 
   // Team Registration Approval State (Tournament Creator Only)
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
@@ -518,27 +577,34 @@ export default function TournamentDetailScreen({ route, navigation }) {
       Alert.alert('Match Incomplete', 'Both teams must be determined before entering scores.');
       return;
     }
+    const cs = getMatchCricketScore(match);
     setSelectedMatchForScore(match);
-    setTeamAScoreInput(match.score?.teamA || '');
-    setTeamBScoreInput(match.score?.teamB || '');
+    setRunsAInput(cs.hasScoreA ? String(cs.runsA) : '');
+    setWicketsAInput(cs.hasScoreA ? String(cs.wicketsA) : '');
+    setOversAInput(cs.hasScoreA ? String(cs.oversA) : '');
+    setRunsBInput(cs.hasScoreB ? String(cs.runsB) : '');
+    setWicketsBInput(cs.hasScoreB ? String(cs.wicketsB) : '');
+    setOversBInput(cs.hasScoreB ? String(cs.oversB) : '');
     setMatchSummaryInput(match.score?.summary || '');
     setScoreModalVisible(true);
   };
 
   const handleSaveScore = async () => {
     if (!selectedMatchForScore) return;
-    if (!teamAScoreInput.trim() && !teamBScoreInput.trim()) {
-      Alert.alert('Required', 'Please enter at least one team score.');
+    if (runsAInput.trim() === '' && runsBInput.trim() === '') {
+      Alert.alert('Required', 'Please enter runs for at least one team.');
       return;
     }
     setBracketActionLoading(true);
     try {
       const res = await updateMatchScoreApi(tournament.id, selectedMatchForScore.id, {
-        score: {
-          teamA: teamAScoreInput.trim(),
-          teamB: teamBScoreInput.trim(),
-          summary: matchSummaryInput.trim(),
-        },
+        runsA: runsAInput.trim() === '' ? 0 : parseInt(runsAInput, 10),
+        wicketsA: wicketsAInput.trim() === '' ? 0 : parseInt(wicketsAInput, 10),
+        oversA: oversAInput.trim() || '0.0',
+        runsB: runsBInput.trim() === '' ? 0 : parseInt(runsBInput, 10),
+        wicketsB: wicketsBInput.trim() === '' ? 0 : parseInt(wicketsBInput, 10),
+        oversB: oversBInput.trim() || '0.0',
+        summary: matchSummaryInput.trim(),
         status: 'live',
       });
       const updated = res?.tournament || res?.data?.tournament;
@@ -554,55 +620,61 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
   };
 
-  const handleOpenWinnerModal = (match) => {
+  const handleFinishMatch = (match) => {
     if (!isCreator) return;
-    if (!match.teamA || !match.teamB) {
-      Alert.alert('Match Incomplete', 'Both teams must be present to confirm a winner.');
+    const isFinal = !match.nextMatchId;
+    const cs = getMatchCricketScore(match);
+    if (!cs.hasScore) {
+      Alert.alert('Score Required', 'Please enter the match score before finishing this match.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Update Score', onPress: () => handleOpenScoreModal(match) },
+      ]);
       return;
     }
-    setSelectedMatchForWinner(match);
-    setWinnerTeamId(match.winner?.id || match.teamA.id);
-    setWinnerModalVisible(true);
-  };
 
-  const handleConfirmWinner = async () => {
-    if (!selectedMatchForWinner || !winnerTeamId) {
-      Alert.alert('Required', 'Please select the winning team.');
-      return;
+    const teamAName = getTeamDisplayName(match.teamA, match.placeholderA);
+    const teamBName = getTeamDisplayName(match.teamB, match.placeholderB);
+
+    let previewSummary = '';
+    if (cs.runsA > cs.runsB) {
+      previewSummary = `${teamAName} (${cs.runsA}/${cs.wicketsA}) leads ${teamBName} (${cs.runsB}/${cs.wicketsB})`;
+    } else if (cs.runsB > cs.runsA) {
+      previewSummary = `${teamBName} (${cs.runsB}/${cs.wicketsB}) leads ${teamAName} (${cs.runsA}/${cs.wicketsA})`;
+    } else {
+      previewSummary = 'Scores are tied. Tie-breaker winner will be requested.';
     }
-    const isFinal = !selectedMatchForWinner.nextMatchId;
-    const teamObj = selectedMatchForWinner.teamA?.id === winnerTeamId
-      ? selectedMatchForWinner.teamA
-      : selectedMatchForWinner.teamB;
-    const teamName = teamObj?.name || teamObj?.teamName || 'Selected Team';
 
     Alert.alert(
-      isFinal ? 'Declare Tournament Champion 👑' : 'Advance Winner 🏆',
-      isFinal
-        ? `Declare ${teamName} as the official Champion of "${tournament.name}"? This will complete the tournament.`
-        : `Confirm ${teamName} as the winner and advance them to the next round?`,
+      isFinal ? 'Finish Final & Crown Champion 👑' : 'Finish Match & Advance Winner 🏁',
+      `${previewSummary}\n\n` +
+        (isFinal
+          ? 'The team with the higher score will be crowned Tournament Champion. Continue?'
+          : 'The team with the higher score wins and automatically advances to the next round fixture. Continue?'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: isFinal ? 'Declare Champion 👑' : 'Advance Winner 🏆',
-          style: 'default',
+          text: 'Finish Match',
           onPress: async () => {
             setBracketActionLoading(true);
             try {
-              const res = await confirmMatchWinnerApi(tournament.id, selectedMatchForWinner.id, {
-                winnerTeamId,
-              });
+              const res = await confirmMatchWinnerApi(tournament.id, match.id, {});
               const updated = res?.tournament || res?.data?.tournament;
-              if (updated) {
-                setTournament(updated);
-              }
-              setWinnerModalVisible(false);
+              if (updated) setTournament(updated);
               Alert.alert(
                 isFinal ? '👑 Champion Crowned!' : '🏆 Winner Advanced!',
-                res?.message || `${teamName} has been recorded as the winner.`
+                res?.message || 'Match completed successfully.'
               );
             } catch (err) {
-              Alert.alert('Winner Error', err.message || 'Failed to confirm winner.');
+              if (err.code === 'TIE_NEEDS_TIEBREAK') {
+                setSelectedMatchForWinner(match);
+                setWinnerTeamId(match.teamA.id);
+                setWinnerModalVisible(true);
+              } else if (err.code === 'SCORE_REQUIRED') {
+                Alert.alert('Score Needed', err.message);
+                handleOpenScoreModal(match);
+              } else {
+                Alert.alert('Error', err.message || 'Failed to finish match');
+              }
             } finally {
               setBracketActionLoading(false);
             }
@@ -670,6 +742,25 @@ export default function TournamentDetailScreen({ route, navigation }) {
     } finally {
       setProcessingRegId(null);
       setSelectedTeamForReject(null);
+    }
+  };
+
+  const handleSaveTiebreak = async () => {
+    if (!selectedMatchForWinner || !winnerTeamId) return;
+    setBracketActionLoading(true);
+    try {
+      const res = await confirmMatchWinnerApi(tournament.id, selectedMatchForWinner.id, {
+        winnerTeamId,
+        tiebreakNote: tiebreakNoteInput.trim() || 'Super Over',
+      });
+      const updated = res?.tournament || res?.data?.tournament;
+      if (updated) setTournament(updated);
+      setWinnerModalVisible(false);
+      Alert.alert('Winner Confirmed! 🏆', res?.message || 'Tie-breaker winner recorded.');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to confirm winner.');
+    } finally {
+      setBracketActionLoading(false);
     }
   };
 
@@ -1045,10 +1136,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
               </Text>
             </View>
 
-            {tournament.turf && (
+            {Boolean(tournament.turf || tournament.turfId) && (
               <TouchableOpacity
                 style={[styles.viewTurfBtn, { borderColor: C.primary }]}
-                onPress={() => navigation.navigate('TurfDetail', { turfId: tournament.turf.id || tournament.turfId, turf: tournament.turf })}
+                onPress={() => navigation.navigate('TurfDetail', { turfId: tournament.turf?.id || tournament.turfId, turf: tournament.turf })}
               >
                 <Text style={[styles.viewTurfText, { color: C.primary }]}>View Arena</Text>
                 <Feather name="arrow-right" size={12} color={C.primary} style={{ marginLeft: 4 }} />
@@ -1680,35 +1771,27 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
                     {(round.matches || []).map((match, mIdx) => {
                       const isCompleted = match.status === 'completed';
-                      const isLive = match.status === 'live';
-                      const isTossDone = match.status === 'toss';
+                      const isLive = match.status === 'live' || match.status === 'toss';
                       const isBye = Boolean(match.isBye);
                       const hasBothTeams = Boolean(match.teamA && match.teamB);
                       const isMatchFinal = !match.nextMatchId;
+                      const cs = getMatchCricketScore(match);
 
-                      const teamAWon = match.winner && match.teamA && match.winner.id === match.teamA.id;
-                      const teamBWon = match.winner && match.teamB && match.winner.id === match.teamB.id;
+                      const teamAWon = isCompleted && match.winner && match.teamA && match.winner.id === match.teamA.id;
+                      const teamBWon = isCompleted && match.winner && match.teamB && match.winner.id === match.teamB.id;
 
-                      let statusBadgeBg = '#E2E8F0';
-                      let statusBadgeText = '#475569';
-                      let statusBadgeLabel = 'Upcoming';
+                      let statusBadgeBg = 'rgba(100, 116, 139, 0.12)';
+                      let statusBadgeText = '#64748B';
+                      let statusBadgeLabel = 'UPCOMING';
 
                       if (isCompleted) {
                         statusBadgeBg = 'rgba(16, 185, 129, 0.15)';
                         statusBadgeText = '#10B981';
-                        statusBadgeLabel = 'Completed';
+                        statusBadgeLabel = 'COMPLETED';
                       } else if (isLive) {
                         statusBadgeBg = 'rgba(239, 68, 68, 0.15)';
                         statusBadgeText = '#EF4444';
-                        statusBadgeLabel = '● LIVE';
-                      } else if (isTossDone) {
-                        statusBadgeBg = 'rgba(245, 158, 11, 0.15)';
-                        statusBadgeText = '#D97706';
-                        statusBadgeLabel = 'Toss Done';
-                      } else if (isBye) {
-                        statusBadgeBg = 'rgba(100, 116, 139, 0.12)';
-                        statusBadgeText = '#64748B';
-                        statusBadgeLabel = 'BYE';
+                        statusBadgeLabel = 'LIVE';
                       }
 
                       return (
@@ -1722,9 +1805,9 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         >
                           {/* Match Card Top Row */}
                           <View style={styles.matchCardTopRow}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text style={[styles.matchNumberText, { color: C.subtext }]}>
-                                {round.name} • Match #{match.matchNumber || mIdx + 1}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                              <Text style={[styles.matchNumberText, { color: C.text }]}>
+                                {round.name.toUpperCase()} • {match.matchCode ? `${match.matchCode} (MATCH ${match.matchNumber || mIdx + 1})` : `MATCH ${match.matchNumber || mIdx + 1}`}
                               </Text>
                               {isMatchFinal && (
                                 <View style={[styles.finalBadgePill, { backgroundColor: '#F59E0B' }]}>
@@ -1745,121 +1828,140 @@ export default function TournamentDetailScreen({ route, navigation }) {
                             <View style={[styles.tossBannerRow, { backgroundColor: dark ? '#1E293B' : '#FEF3C7', borderColor: '#F59E0B' }]}>
                               <Text style={{ fontSize: 13, marginRight: 6 }}>🪙</Text>
                               <Text style={[styles.tossBannerText, { color: dark ? '#FCD34D' : '#92400E' }]}>
-                                <Text style={{ fontWeight: '800' }}>{match.toss.winnerName}</Text> won the toss & elected to{' '}
+                                <Text style={{ fontWeight: '800' }}>{match.toss.winnerName}</Text> won the toss and elected to{' '}
                                 <Text style={{ fontWeight: '800', textTransform: 'uppercase' }}>{match.toss.decision}</Text>.
                               </Text>
                             </View>
                           )}
 
-                          {/* Teams Display Row */}
-                          <View style={styles.teamsVersusBox}>
-                            {/* Team A */}
-                            <View
-                              style={[
-                                styles.bracketTeamRow,
-                                teamAWon ? { backgroundColor: 'rgba(16, 185, 129, 0.1)' } : null,
-                              ]}
-                            >
-                              <View style={styles.teamInfoCol}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                  <Text
-                                    style={[
-                                      styles.bracketTeamName,
-                                      { color: C.text },
-                                      teamAWon ? { color: '#047857', fontWeight: '800' } : null,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {match.teamA?.name || match.teamA?.teamName || 'TBD (Waiting)'}
-                                  </Text>
-                                  {teamAWon && (
-                                    <View style={styles.winnerCheckBadge}>
-                                      <Feather name="check" size={11} color="#FFFFFF" />
-                                    </View>
-                                  )}
+                          {/* ── Structured Team A Box ── */}
+                          <View
+                            style={[
+                              styles.teamBlockBox,
+                              { backgroundColor: C.card, borderColor: C.border },
+                              teamAWon ? { backgroundColor: 'rgba(16, 185, 129, 0.08)', borderColor: '#10B981' } : null,
+                            ]}
+                          >
+                            <View style={styles.teamTitleRow}>
+                              <Text
+                                style={[
+                                  styles.teamHeadingText,
+                                  { color: C.text },
+                                  teamAWon ? { color: '#047857', fontWeight: '900' } : null,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {getTeamDisplayName(match.teamA, match.placeholderA).toUpperCase()}
+                              </Text>
+                              {teamAWon && (
+                                <View style={[styles.winnerBadgePill, { backgroundColor: '#10B981' }]}>
+                                  <Text style={styles.winnerBadgePillText}>{isMatchFinal ? 'CHAMPION' : 'WINNER'}</Text>
                                 </View>
-                                {Boolean(match.teamA?.captainName) && (
-                                  <Text style={[styles.bracketCaptainName, { color: C.subtext }]}>
-                                    Capt: {match.teamA.captainName}
-                                  </Text>
-                                )}
-                              </View>
-
-                              {/* Team A Score Pill */}
-                              {Boolean(match.score?.teamA) ? (
-                                <View style={[styles.matchScorePill, { backgroundColor: C.card, borderColor: C.border }]}>
-                                  <Text style={[styles.matchScorePillText, { color: C.text }]}>
-                                    {match.score.teamA}
-                                  </Text>
-                                </View>
-                              ) : null}
+                              )}
                             </View>
+                            {Boolean(match.teamA?.captainName) && (
+                              <Text style={[styles.captainSubText, { color: C.subtext }]}>
+                                Capt: {match.teamA.captainName}
+                              </Text>
+                            )}
 
-                            {/* Versus Divider */}
-                            <View style={styles.versusDividerRow}>
-                              <View style={[styles.versusLine, { backgroundColor: C.border }]} />
+                            {cs.hasScoreA ? (
+                              <View style={styles.cricketScoreDisplayRow}>
+                                <Text style={[styles.cricketScoreRunsText, { color: C.text }]}>
+                                  {cs.runsA} / {cs.wicketsA}
+                                </Text>
+                                <Text style={[styles.cricketScoreOversText, { color: C.subtext }]}>
+                                  {cs.oversA} overs
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text style={[styles.scorePendingPlaceholder, { color: C.subtext }]}>
+                                Score not entered
+                              </Text>
+                            )}
+                          </View>
+
+                          {/* Versus Divider */}
+                          <View style={styles.versusDividerRow}>
+                            <View style={[styles.versusLine, { backgroundColor: C.border }]} />
+                            <View style={[styles.versusPill, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
                               <Text style={[styles.versusText, { color: C.subtext }]}>
                                 {isBye ? 'BYE' : 'VS'}
                               </Text>
-                              <View style={[styles.versusLine, { backgroundColor: C.border }]} />
                             </View>
-
-                            {/* Team B */}
-                            <View
-                              style={[
-                                styles.bracketTeamRow,
-                                teamBWon ? { backgroundColor: 'rgba(16, 185, 129, 0.1)' } : null,
-                              ]}
-                            >
-                              <View style={styles.teamInfoCol}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                  <Text
-                                    style={[
-                                      styles.bracketTeamName,
-                                      { color: C.text },
-                                      teamBWon ? { color: '#047857', fontWeight: '800' } : null,
-                                    ]}
-                                    numberOfLines={1}
-                                  >
-                                    {isBye
-                                      ? '(Advances Automatically)'
-                                      : (match.teamB?.name || match.teamB?.teamName || 'TBD (Waiting)')}
-                                  </Text>
-                                  {teamBWon && (
-                                    <View style={styles.winnerCheckBadge}>
-                                      <Feather name="check" size={11} color="#FFFFFF" />
-                                    </View>
-                                  )}
-                                </View>
-                                {Boolean(match.teamB?.captainName) && (
-                                  <Text style={[styles.bracketCaptainName, { color: C.subtext }]}>
-                                    Capt: {match.teamB.captainName}
-                                  </Text>
-                                )}
-                              </View>
-
-                              {/* Team B Score Pill */}
-                              {Boolean(match.score?.teamB) ? (
-                                <View style={[styles.matchScorePill, { backgroundColor: C.card, borderColor: C.border }]}>
-                                  <Text style={[styles.matchScorePillText, { color: C.text }]}>
-                                    {match.score.teamB}
-                                  </Text>
-                                </View>
-                              ) : null}
-                            </View>
+                            <View style={[styles.versusLine, { backgroundColor: C.border }]} />
                           </View>
 
-                          {/* Match Summary Note if Entered */}
-                          {Boolean(match.score?.summary) && (
-                            <View style={[styles.scoreSummaryBox, { backgroundColor: C.card, borderColor: C.border }]}>
-                              <Ionicons name="chatbubble-ellipses-outline" size={13} color="#0F766E" style={{ marginRight: 6 }} />
-                              <Text style={[styles.scoreSummaryText, { color: C.text }]} numberOfLines={2}>
-                                {match.score.summary}
+                          {/* ── Structured Team B Box ── */}
+                          <View
+                            style={[
+                              styles.teamBlockBox,
+                              { backgroundColor: C.card, borderColor: C.border },
+                              teamBWon ? { backgroundColor: 'rgba(16, 185, 129, 0.08)', borderColor: '#10B981' } : null,
+                            ]}
+                          >
+                            <View style={styles.teamTitleRow}>
+                              <Text
+                                style={[
+                                  styles.teamHeadingText,
+                                  { color: C.text },
+                                  teamBWon ? { color: '#047857', fontWeight: '900' } : null,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {isBye
+                                  ? '(Advances Automatically)'
+                                  : getTeamDisplayName(match.teamB, match.placeholderB).toUpperCase()}
+                              </Text>
+                              {teamBWon && (
+                                <View style={[styles.winnerBadgePill, { backgroundColor: '#10B981' }]}>
+                                  <Text style={styles.winnerBadgePillText}>{isMatchFinal ? 'CHAMPION' : 'WINNER'}</Text>
+                                </View>
+                              )}
+                            </View>
+                            {Boolean(match.teamB?.captainName) && (
+                              <Text style={[styles.captainSubText, { color: C.subtext }]}>
+                                Capt: {match.teamB.captainName}
+                              </Text>
+                            )}
+
+                            {cs.hasScoreB ? (
+                              <View style={styles.cricketScoreDisplayRow}>
+                                <Text style={[styles.cricketScoreRunsText, { color: C.text }]}>
+                                  {cs.runsB} / {cs.wicketsB}
+                                </Text>
+                                <Text style={[styles.cricketScoreOversText, { color: C.subtext }]}>
+                                  {cs.oversB} overs
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text style={[styles.scorePendingPlaceholder, { color: C.subtext }]}>
+                                Score not entered
+                              </Text>
+                            )}
+                          </View>
+
+                          {/* Dynamic Cricket Match Status / Completed Win Banner */}
+                          {isCompleted && Boolean(match.score?.winMarginText || match.score?.summary) && (
+                            <View style={[styles.completedResultBox, { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: '#10B981' }]}>
+                              <Text style={[styles.completedWinnerText, { color: '#047857' }]}>
+                                {getTeamDisplayName(match.winner).toUpperCase()} WON
+                              </Text>
+                              <Text style={[styles.completedMarginText, { color: '#065F46' }]}>
+                                {match.score?.winMarginText || match.score?.summary}
                               </Text>
                             </View>
                           )}
 
-                          {/* ── STRICT CREATOR MANAGEMENT CONTROLS ── */}
+                          {!isCompleted && Boolean(cs.leadText || match.score?.summary) && (
+                            <View style={[styles.liveLeadBox, { backgroundColor: 'rgba(2, 132, 199, 0.08)', borderColor: '#0284C7' }]}>
+                              <Text style={[styles.liveLeadText, { color: '#0284C7' }]}>
+                                {cs.leadText || match.score?.summary}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* ── CREATOR MANAGER CONTROLS ── */}
                           {isCreator && !isCompleted && hasBothTeams && (
                             <View style={[styles.managerControlsBar, { backgroundColor: C.card, borderColor: C.border }]}>
                               <View style={styles.managerControlsHeader}>
@@ -1890,11 +1992,11 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                 >
                                   <Feather name="edit-3" size={13} color="#0284C7" style={{ marginRight: 4 }} />
                                   <Text style={[styles.managerActionBtnText, { color: '#0284C7' }]}>
-                                    {match.score ? 'Edit Score' : 'Score'}
+                                    Update Score
                                   </Text>
                                 </TouchableOpacity>
 
-                                {/* Winner / Advance Control */}
+                                {/* Finish Match Control */}
                                 <TouchableOpacity
                                   style={[
                                     styles.managerActionBtn,
@@ -1904,27 +2006,17 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                       flex: 1.3,
                                     },
                                   ]}
-                                  onPress={() => handleOpenWinnerModal(match)}
+                                  onPress={() => handleFinishMatch(match)}
                                   activeOpacity={0.85}
                                 >
                                   <Text style={{ fontSize: 13, marginRight: 4 }}>
-                                    {isMatchFinal ? '👑' : '🏆'}
+                                    {isMatchFinal ? '👑' : '🏁'}
                                   </Text>
                                   <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
-                                    {isMatchFinal ? 'Crown Champion' : 'Advance Winner'}
+                                    {isMatchFinal ? 'Finish Final' : 'Finish Match'}
                                   </Text>
                                 </TouchableOpacity>
                               </View>
-                            </View>
-                          )}
-
-                          {/* ── VIEW ONLY NOTICE FOR OTHER USERS ── */}
-                          {!isCreator && isCompleted && (
-                            <View style={styles.viewOnlyWinnerNotice}>
-                              <Ionicons name="trophy" size={13} color="#10B981" style={{ marginRight: 5 }} />
-                              <Text style={[styles.viewOnlyWinnerText, { color: '#047857' }]}>
-                                Match Winner: <Text style={{ fontWeight: '800' }}>{match.winner?.name || match.winner?.teamName}</Text>
-                              </Text>
                             </View>
                           )}
                         </View>
@@ -2496,7 +2588,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border, maxHeight: '90%' }, SHADOW.card]}>
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Feather name="edit-3" size={20} color="#0284C7" style={{ marginRight: 8 }} />
@@ -2515,41 +2607,103 @@ export default function TournamentDetailScreen({ route, navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Team A Score */}
-            <Text style={[styles.modalInputLabel, { color: C.text }]}>
-              {selectedMatchForScore?.teamA?.name || 'Team A'} Score:
-            </Text>
-            <TextInput
-              style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
-              placeholder={isCricket ? "e.g. 142/6 (10.0 ov)" : "e.g. 2"}
-              placeholderTextColor={C.subtext}
-              value={teamAScoreInput}
-              onChangeText={setTeamAScoreInput}
-            />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Team A Entry Box */}
+              <View style={[styles.scoreEntryTeamBox, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                <Text style={[styles.scoreEntryTeamName, { color: C.text }]}>
+                  {getTeamDisplayName(selectedMatchForScore?.teamA, selectedMatchForScore?.placeholderA)}
+                </Text>
+                <View style={styles.scoreInputFieldsRow}>
+                  <View style={styles.scoreFieldCol}>
+                    <Text style={[styles.fieldLabel, { color: C.subtext }]}>Runs</Text>
+                    <TextInput
+                      style={[styles.scoreFieldInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+                      keyboardType="number-pad"
+                      value={runsAInput}
+                      onChangeText={setRunsAInput}
+                      placeholder="0"
+                      placeholderTextColor={C.subtext}
+                    />
+                  </View>
+                  <View style={styles.scoreFieldCol}>
+                    <Text style={[styles.fieldLabel, { color: C.subtext }]}>Wickets</Text>
+                    <TextInput
+                      style={[styles.scoreFieldInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+                      keyboardType="number-pad"
+                      value={wicketsAInput}
+                      onChangeText={setWicketsAInput}
+                      placeholder="0"
+                      placeholderTextColor={C.subtext}
+                    />
+                  </View>
+                  <View style={styles.scoreFieldCol}>
+                    <Text style={[styles.fieldLabel, { color: C.subtext }]}>Overs</Text>
+                    <TextInput
+                      style={[styles.scoreFieldInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+                      keyboardType="decimal-pad"
+                      value={oversAInput}
+                      onChangeText={setOversAInput}
+                      placeholder="0.0"
+                      placeholderTextColor={C.subtext}
+                    />
+                  </View>
+                </View>
+              </View>
 
-            {/* Team B Score */}
-            <Text style={[styles.modalInputLabel, { color: C.text }]}>
-              {selectedMatchForScore?.teamB?.name || 'Team B'} Score:
-            </Text>
-            <TextInput
-              style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
-              placeholder={isCricket ? "e.g. 138/9 (10.0 ov)" : "e.g. 1"}
-              placeholderTextColor={C.subtext}
-              value={teamBScoreInput}
-              onChangeText={setTeamBScoreInput}
-            />
+              {/* Team B Entry Box */}
+              <View style={[styles.scoreEntryTeamBox, { backgroundColor: C.bgSoft, borderColor: C.border, marginTop: 10 }]}>
+                <Text style={[styles.scoreEntryTeamName, { color: C.text }]}>
+                  {getTeamDisplayName(selectedMatchForScore?.teamB, selectedMatchForScore?.placeholderB)}
+                </Text>
+                <View style={styles.scoreInputFieldsRow}>
+                  <View style={styles.scoreFieldCol}>
+                    <Text style={[styles.fieldLabel, { color: C.subtext }]}>Runs</Text>
+                    <TextInput
+                      style={[styles.scoreFieldInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+                      keyboardType="number-pad"
+                      value={runsBInput}
+                      onChangeText={setRunsBInput}
+                      placeholder="0"
+                      placeholderTextColor={C.subtext}
+                    />
+                  </View>
+                  <View style={styles.scoreFieldCol}>
+                    <Text style={[styles.fieldLabel, { color: C.subtext }]}>Wickets</Text>
+                    <TextInput
+                      style={[styles.scoreFieldInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+                      keyboardType="number-pad"
+                      value={wicketsBInput}
+                      onChangeText={setWicketsBInput}
+                      placeholder="0"
+                      placeholderTextColor={C.subtext}
+                    />
+                  </View>
+                  <View style={styles.scoreFieldCol}>
+                    <Text style={[styles.fieldLabel, { color: C.subtext }]}>Overs</Text>
+                    <TextInput
+                      style={[styles.scoreFieldInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+                      keyboardType="decimal-pad"
+                      value={oversBInput}
+                      onChangeText={setOversBInput}
+                      placeholder="0.0"
+                      placeholderTextColor={C.subtext}
+                    />
+                  </View>
+                </View>
+              </View>
 
-            {/* Summary Note */}
-            <Text style={[styles.modalInputLabel, { color: C.subtext, fontSize: 12 }]}>
-              Match Summary / Status Note (Optional):
-            </Text>
-            <TextInput
-              style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
-              placeholder="e.g. Spartans CC won by 4 runs or Inning break"
-              placeholderTextColor={C.subtext}
-              value={matchSummaryInput}
-              onChangeText={setMatchSummaryInput}
-            />
+              {/* Summary Note */}
+              <Text style={[styles.modalInputLabel, { color: C.subtext, fontSize: 12, marginTop: 12 }]}>
+                Match Summary / Status Note (Optional):
+              </Text>
+              <TextInput
+                style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
+                placeholder="e.g. Spartans CC won by 4 runs or Inning break"
+                placeholderTextColor={C.subtext}
+                value={matchSummaryInput}
+                onChangeText={setMatchSummaryInput}
+              />
+            </ScrollView>
 
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
@@ -2575,7 +2729,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Select Winner & Advance Modal (Creator Only) ── */}
+      {/* ── Select Winner & Advance Modal (Tie-Breaker Only) ── */}
       <Modal visible={winnerModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -2589,10 +2743,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 </Text>
                 <View>
                   <Text style={[styles.modalTitle, { color: C.text }]}>
-                    {!selectedMatchForWinner?.nextMatchId ? 'Declare Champion 👑' : 'Confirm Match Winner 🏆'}
+                    Tie-breaker Decision
                   </Text>
                   <Text style={[styles.modalSub, { color: C.subtext }]}>
-                    {!selectedMatchForWinner?.nextMatchId ? 'Tournament Final Match' : selectedMatchForWinner?.roundName}
+                    Scores are tied ({selectedMatchForWinner?.roundName})
                   </Text>
                 </View>
               </View>
@@ -2605,7 +2759,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
             </View>
 
             <Text style={[styles.modalInputLabel, { color: C.text }]}>
-              Select the winning team to {!selectedMatchForWinner?.nextMatchId ? 'crown as tournament champion:' : 'advance to the next round:'}
+              Select the tie-breaker winner:
             </Text>
 
             <View style={{ marginVertical: 8 }}>
@@ -2634,13 +2788,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       winnerTeamId === selectedMatchForWinner?.teamA?.id ? { fontWeight: '800', color: '#047857' } : null,
                     ]}
                   >
-                    {selectedMatchForWinner?.teamA?.name || 'Team A'}
+                    {getTeamDisplayName(selectedMatchForWinner?.teamA, selectedMatchForWinner?.placeholderA)}
                   </Text>
-                  {Boolean(selectedMatchForWinner?.score?.teamA) && (
-                    <Text style={[styles.winnerScoreText, { color: C.subtext }]}>
-                      Score: {selectedMatchForWinner.score.teamA}
-                    </Text>
-                  )}
                 </View>
               </TouchableOpacity>
 
@@ -2669,22 +2818,22 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       winnerTeamId === selectedMatchForWinner?.teamB?.id ? { fontWeight: '800', color: '#047857' } : null,
                     ]}
                   >
-                    {selectedMatchForWinner?.teamB?.name || 'Team B'}
+                    {getTeamDisplayName(selectedMatchForWinner?.teamB, selectedMatchForWinner?.placeholderB)}
                   </Text>
-                  {Boolean(selectedMatchForWinner?.score?.teamB) && (
-                    <Text style={[styles.winnerScoreText, { color: C.subtext }]}>
-                      Score: {selectedMatchForWinner.score.teamB}
-                    </Text>
-                  )}
                 </View>
               </TouchableOpacity>
             </View>
 
-            <Text style={[styles.winnerNoticeNote, { color: C.subtext }]}>
-              {!selectedMatchForWinner?.nextMatchId
-                ? '👑 Declaring this winner will crown the team as Tournament Champion and finalize the bracket.'
-                : '🏆 Advancing will automatically place this winner into their scheduled next-round bracket slot.'}
+            <Text style={[styles.modalInputLabel, { color: C.subtext, fontSize: 12, marginTop: 4 }]}>
+              Tie-breaker Note:
             </Text>
+            <TextInput
+              style={[styles.modalTextInput, { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border }]}
+              placeholder="e.g. Won by 2 runs in Super Over"
+              placeholderTextColor={C.subtext}
+              value={tiebreakNoteInput}
+              onChangeText={setTiebreakNoteInput}
+            />
 
             <View style={styles.modalBtnRow}>
               <TouchableOpacity
@@ -2701,7 +2850,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                     backgroundColor: !selectedMatchForWinner?.nextMatchId ? '#D97706' : '#10B981',
                   },
                 ]}
-                onPress={handleConfirmWinner}
+                onPress={handleSaveTiebreak}
                 disabled={bracketActionLoading}
               >
                 {bracketActionLoading ? (
@@ -4020,5 +4169,114 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+  teamBlockBox: {
+    padding: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  teamTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamHeadingText: {
+    fontSize: 14,
+    fontWeight: '800',
+    flex: 1,
+  },
+  winnerBadgePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    marginLeft: 8,
+  },
+  winnerBadgePillText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  captainSubText: {
+    fontSize: 10.5,
+    marginTop: 1,
+    fontWeight: '600',
+  },
+  cricketScoreDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 4,
+  },
+  cricketScoreRunsText: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  cricketScoreOversText: {
+    fontSize: 12,
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  scorePendingPlaceholder: {
+    fontSize: 11.5,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  completedResultBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  completedWinnerText: {
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  completedMarginText: {
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  liveLeadBox: {
+    marginTop: 10,
+    padding: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  liveLeadText: {
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  scoreEntryTeamBox: {
+    padding: 12,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  scoreEntryTeamName: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  scoreInputFieldsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  scoreFieldCol: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  scoreFieldInput: {
+    borderWidth: 1,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

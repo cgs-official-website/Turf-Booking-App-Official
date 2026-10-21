@@ -8,6 +8,7 @@ apply plugin: "com.facebook.react"
  */
 react {
     debuggableVariants = []
+    nodeExecutableAndArgs = ["node", "--max-old-space-size=8192"]
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '..'
     // root = file("../")
