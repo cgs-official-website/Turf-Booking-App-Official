@@ -126,14 +126,17 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
             );
             return;
         }
+        const two = acceptedCount === 2;
         Alert.alert(
-            'Conduct Random Draw 🎲',
-            `Randomly pair the ${acceptedCount} accepted teams into knockout fixtures? Registration will close and the draw is FINAL (cannot be changed or redone).`,
+            two ? 'Create Final Match 🏏' : 'Conduct Random Draw 🎲',
+            two
+                ? 'Only 2 teams are accepted, so they will play a single Final match. Registration will close. Continue?'
+                : `Randomly pair the ${acceptedCount} accepted teams into knockout fixtures? Registration will close and the draw is FINAL (cannot be changed or redone).`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Draw Now',
-                    onPress: () => run(() => generateBracketApi(tournament.id, {}), 'Bracket Ready ⚡'),
+                    text: two ? 'Create Match' : 'Draw Now',
+                    onPress: () => run(() => generateBracketApi(tournament.id, {}), two ? 'Match Ready ⚡' : 'Bracket Ready ⚡'),
                 },
             ]
         );
@@ -333,9 +336,9 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 {!bracket ? (
                     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center' }]}>
                         <Feather name="git-merge" size={34} color={colors.primary} />
-                        <Text style={[styles.title, { color: colors.text, marginTop: 10 }]}>Bracket not generated</Text>
+                        <Text style={[styles.title, { color: colors.text, marginTop: 10 }]}>{acceptedCount === 2 ? 'Match not created' : 'Bracket not generated'}</Text>
                         <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
-                            Accept team applications, then generate fixtures. Teams are paired by a RANDOM DRAW - nobody (not even you) can choose or change who plays whom, and the draw cannot be redone.
+                            {acceptedCount === 2 ? 'Only 2 teams are accepted, so they simply play each other in the Final. No draw is needed.' : 'Accept team applications, then generate fixtures. Teams are paired by a RANDOM DRAW - nobody (not even you) can choose or change who plays whom, and the draw cannot be redone.'}
                         </Text>
                         {canManage && (
                             <TouchableOpacity
@@ -347,7 +350,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                 {busy ? (
                                     <ActivityIndicator color="#FFFFFF" />
                                 ) : (
-                                    <Text style={styles.primaryBtnText}>🎲 Random Draw ({acceptedCount} teams)</Text>
+                                    <Text style={styles.primaryBtnText}>{acceptedCount === 2 ? '🏏 Create Match (2 teams)' : `🎲 Random Draw (${acceptedCount} teams)`}</Text>
                                 )}
                             </TouchableOpacity>
                         )}
