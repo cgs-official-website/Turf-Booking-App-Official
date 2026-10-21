@@ -112,3 +112,26 @@ export const updateMatchScoreApi = (tournamentId, matchId, data) => {
 export const confirmMatchWinnerApi = (tournamentId, matchId, data) => {
   return client.post(`/tournaments/${tournamentId}/matches/${matchId}/winner`, data);
 };
+
+/**
+ * Fetch all team registrations for a tournament (Creator only)
+ */
+export const getTournamentRegistrationsApi = (tournamentId) => {
+  return client.get(`/tournaments/${tournamentId}/registrations`);
+};
+
+/**
+ * Accept a pending team registration (Creator only)
+ */
+export const acceptTournamentRegistrationApi = (tournamentId, regId) => {
+  return client.post(`/tournaments/${tournamentId}/registrations/${regId}/accept`);
+};
+
+/**
+ * Reject a pending team registration (Creator only)
+ */
+export const rejectTournamentRegistrationApi = (tournamentId, regId, rejectionReason) => {
+  return client.post(`/tournaments/${tournamentId}/registrations/${regId}/reject`, {
+    rejectionReason,
+  });
+};

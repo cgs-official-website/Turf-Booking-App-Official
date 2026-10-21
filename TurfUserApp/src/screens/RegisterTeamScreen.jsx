@@ -248,7 +248,7 @@ export default function RegisterTeamScreen({ route, navigation }) {
         isAccepted ? 'Registration Confirmed! 🎉' : 'Registration Submitted! 🎉',
         isAccepted
           ? `Your team "${teamName.trim()}" is officially registered and confirmed for "${tournament.name}".`
-          : `Your team "${teamName.trim()}" has been submitted for "${tournament.name}".\n\nStatus: Pending Approval\n\nThe turf owner will review and approve your team.`,
+          : `Your team "${teamName.trim()}" has been submitted for "${tournament.name}".\n\nStatus: Pending Approval\n\nThe tournament organizer will review and approve your team.`,
         [
           {
             text: 'View Tournament',

@@ -170,6 +170,14 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   };
 
   const handleAcceptTeam = (reg) => {
+    if (tournament?.creatorType === 'USER' || tournament?.source === 'USER CREATED' || Boolean(tournament?.userId)) {
+      Alert.alert(
+        'Organizer Approval Required',
+        'This tournament was created by an athlete/community member. Only the tournament creator can review and accept team applications.'
+      );
+      return;
+    }
+
     const totalTeams = tournament?.numberOfTeams || tournament?.totalTeams || tournament?.participantCapacity || 16;
     const acceptedCount = registrations.filter((r) => r.status === 'accepted').length;
     const slotsLeft = Math.max(0, totalTeams - acceptedCount);
@@ -215,6 +223,14 @@ const TournamentDetailScreen = ({ route, navigation }) => {
   };
 
   const handleOpenReject = (reg) => {
+    if (tournament?.creatorType === 'USER' || tournament?.source === 'USER CREATED' || Boolean(tournament?.userId)) {
+      Alert.alert(
+        'Organizer Approval Required',
+        'This tournament was created by an athlete/community member. Only the tournament creator can review and reject team applications.'
+      );
+      return;
+    }
+
     setSelectedRegForReject(reg);
     setRejectionReasonInput('');
     setRejectModalVisible(true);
@@ -397,7 +413,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
 
   const isPublished = tournament.status === 'published';
   const isCricket = (tournament.sport || '').toLowerCase().includes('cricket');
-  const isUserCreated = tournament.creatorType === 'USER' || tournament.source === 'USER CREATED';
+  const isUserCreated = tournament.creatorType === 'USER' || tournament.source === 'USER CREATED' || Boolean(tournament.userId);
   const turfName = tournament.turfName || tournament.turf?.name || 'Partner Facility';
   const turfCity = tournament.turf?.city || tournament.turf?.address || 'Tamil Nadu';
   const maxPlayers = tournament.playersPerTeam || 11;
@@ -1180,36 +1196,53 @@ const TournamentDetailScreen = ({ route, navigation }) => {
 
                       {/* Pending Action Buttons: Accept / Reject */}
                       {isPending && (
-                        <View style={styles.regActionRow}>
-                          <TouchableOpacity
+                        isUserCreated ? (
+                          <View
                             style={[
-                              styles.acceptRegBtn,
-                              { backgroundColor: slotsLeft > 0 ? '#10B981' : '#94A3B8' },
+                              styles.userCreatedNoticeBox,
+                              {
+                                backgroundColor: isDark ? 'rgba(124, 58, 237, 0.08)' : '#F5F3FF',
+                                borderColor: isDark ? 'rgba(124, 58, 237, 0.3)' : '#DDD6FE',
+                              },
                             ]}
-                            onPress={() => handleAcceptTeam(reg)}
-                            disabled={isBusy || slotsLeft <= 0}
-                            activeOpacity={0.85}
                           >
-                            {isBusy ? (
-                              <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                              <>
-                                <Feather name="check" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                                <Text style={styles.acceptRegBtnText}>Accept Team</Text>
-                              </>
-                            )}
-                          </TouchableOpacity>
+                            <Feather name="info" size={14} color="#7C3AED" style={{ marginRight: 6 }} />
+                            <Text style={[styles.userCreatedNoticeText, { color: isDark ? '#DDD6FE' : '#6D28D9' }]}>
+                              Team approvals for this user-created tournament are managed directly by the tournament creator.
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={styles.regActionRow}>
+                            <TouchableOpacity
+                              style={[
+                                styles.acceptRegBtn,
+                                { backgroundColor: slotsLeft > 0 ? '#10B981' : '#94A3B8' },
+                              ]}
+                              onPress={() => handleAcceptTeam(reg)}
+                              disabled={isBusy || slotsLeft <= 0}
+                              activeOpacity={0.85}
+                            >
+                              {isBusy ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                              ) : (
+                                <>
+                                  <Feather name="check" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                                  <Text style={styles.acceptRegBtnText}>Accept Team</Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
 
-                          <TouchableOpacity
-                            style={[styles.rejectRegBtn, { borderColor: '#EF4444' }]}
-                            onPress={() => handleOpenReject(reg)}
-                            disabled={isBusy}
-                            activeOpacity={0.8}
-                          >
-                            <Feather name="x" size={14} color="#EF4444" style={{ marginRight: 4 }} />
-                            <Text style={styles.rejectRegBtnText}>Reject</Text>
-                          </TouchableOpacity>
-                        </View>
+                            <TouchableOpacity
+                              style={[styles.rejectRegBtn, { borderColor: '#EF4444' }]}
+                              onPress={() => handleOpenReject(reg)}
+                              disabled={isBusy}
+                              activeOpacity={0.8}
+                            >
+                              <Feather name="x" size={14} color="#EF4444" style={{ marginRight: 4 }} />
+                              <Text style={styles.rejectRegBtnText}>Reject</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )
                       )}
                     </View>
                   );
@@ -2299,6 +2332,20 @@ const styles = StyleSheet.create({
   reasonChipText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  userCreatedNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  userCreatedNoticeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
   },
 });
 

@@ -758,40 +758,6 @@ const tournamentController = {
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
-      // Auto-heal legacy pending registrations for published tournaments
-      if (tournament.status === 'published' && Array.isArray(tournament.registrations)) {
-        const pendingRegs = tournament.registrations.filter((r) => r.status === 'pending');
-        if (pendingRegs.length > 0) {
-          const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
-            ? Number(tournament.numberOfTeams)
-            : (tournament.participantCapacity || 16);
-          const creatorCount = getCreatorTeams(tournament).length;
-          let currentAccepted =
-            creatorCount + tournament.registrations.filter((r) => r.status === 'accepted').length;
-
-          const toPromoteIds = [];
-          for (const reg of pendingRegs) {
-            if (currentAccepted < totalTeams) {
-              toPromoteIds.push(reg.id);
-              reg.status = 'accepted';
-              currentAccepted++;
-            }
-          }
-
-          if (toPromoteIds.length > 0) {
-            await prisma.tournamentRegistration.updateMany({
-              where: { id: { in: toPromoteIds } },
-              data: { status: 'accepted' },
-            });
-            await prisma.tournament.update({
-              where: { id: tournament.id },
-              data: { currentParticipantsCount: currentAccepted },
-            });
-            tournament.currentParticipantsCount = currentAccepted;
-          }
-        }
-      }
-
       // Gated access: If tournament is not published, only owner, turf vendor, or admin can access
       if (tournament.status !== 'published') {
         const currentUserId = req.user?.id || req.user?.uid;
@@ -2114,7 +2080,7 @@ const tournamentController = {
           throw err;
         }
 
-        // Create the registration with 'accepted' (confirmed) status directly
+        // Create the registration with 'pending' status awaiting tournament creator approval
         const registration = await tx.tournamentRegistration.create({
           data: {
             tournamentId,
@@ -2124,22 +2090,15 @@ const tournamentController = {
             captainPhone: captainPhone.trim(),
             captainEmail: captainEmail ? captainEmail.trim().toLowerCase() : null,
             players: cleanedPlayers,
-            status: 'accepted',
+            status: 'pending',
           },
         });
 
-        const newAcceptedCount = currentAccepted + 1;
-        const remainingSlots = Math.max(0, totalTeams - newAcceptedCount);
-
-        // Keep currentParticipantsCount on tournament updated
-        await tx.tournament.update({
-          where: { id: tournamentId },
-          data: { currentParticipantsCount: newAcceptedCount },
-        });
+        const remainingSlots = Math.max(0, totalTeams - currentAccepted);
 
         return {
           registration,
-          acceptedCount: newAcceptedCount,
+          acceptedCount: currentAccepted,
           totalTeams,
           remainingSlots,
         };
@@ -2147,35 +2106,40 @@ const tournamentController = {
 
       // Dispatch notifications in background
       try {
-        const creatorId = tournament.userId || tournament.vendorId;
-        const creatorRole = tournament.userId ? 'user' : 'vendor';
+        const isUserCreated = tournament.creatorType === 'USER' || Boolean(tournament.userId);
+        const creatorId = isUserCreated ? tournament.userId : tournament.vendorId;
+        const creatorRole = isUserCreated ? 'user' : 'vendor';
+
+        // 1. Send notification ONLY to the tournament creator (never to turf vendor unless same account)
         if (creatorId && creatorId !== userId) {
           notifyInBackground({
             recipientId: creatorId,
             recipientRole: creatorRole,
-            title: '👥 New Team Registered!',
-            body: `Team "${teamName.trim()}" registered for your tournament "${tournament.name}". (${outcome.acceptedCount}/${totalTeams} teams confirmed)`,
+            title: 'New Team Registration',
+            body: `${teamName.trim()} registered for ${tournament.name}. Tap to review.`,
             type: 'tournament',
             data: {
               tournamentId,
               id: tournamentId,
               screen: 'TournamentDetail',
-              action: 'team_registered',
+              tab: 'registrations',
+              action: 'team_registration_pending',
             },
           });
         }
 
+        // 2. Send submission receipt notification to the registering user
         notifyInBackground({
           recipientId: userId,
           recipientRole: 'user',
-          title: '🎉 Registration Confirmed!',
-          body: `Your team "${teamName.trim()}" is officially registered and confirmed for "${tournament.name}".`,
+          title: 'Registration Submitted',
+          body: `Your team "${teamName.trim()}" has been submitted for ${tournament.name} and is awaiting organizer approval.`,
           type: 'tournament',
           data: {
             tournamentId,
             id: tournamentId,
             screen: 'TournamentDetail',
-            action: 'registration_confirmed',
+            action: 'registration_pending',
           },
         });
       } catch (notifErr) {
@@ -2191,7 +2155,7 @@ const tournamentController = {
             totalTeams: outcome.totalTeams,
             remainingSlots: outcome.remainingSlots,
           },
-          message: `Team "${teamName.trim()}" registered successfully! Registration is confirmed.`,
+          message: `Team "${teamName.trim()}" registered successfully! Your application is pending organizer approval.`,
         },
         201
       );
@@ -2237,18 +2201,17 @@ const tournamentController = {
   },
 
   /**
+   * GET /api/v1/tournaments/:id/registrations
    * GET /api/v1/vendor/tournaments/:id/registrations
-   * Vendor retrieves all team registrations for their tournament
+   * Tournament creator (User or Vendor) retrieves all team registrations for their tournament
    */
   async getTournamentRegistrations(req, res) {
     try {
       const tournamentId = (req.params?.id || req.params?.tournamentId || '').trim();
-      const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id || req.user?.uid;
+      const currentCallerId = req.user?.id || req.user?.uid || req.vendor?.id;
 
-      console.log(`📡 [VendorAPI] getTournamentRegistrations requested for tournament: "${tournamentId}", vendor: "${currentVendorId}"`);
-
-      if (!currentVendorId) {
-        return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
+      if (!currentCallerId) {
+        return sendError(res, 'Authentication required', 401, 'AUTH_REQUIRED');
       }
 
       const tournament = await prisma.tournament.findUnique({
@@ -2259,58 +2222,23 @@ const tournamentController = {
       });
 
       if (!tournament) {
-        console.warn(`⚠️ [VendorAPI] Tournament "${tournamentId}" not found in database`);
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
-      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
-      const isOwner = Boolean(
-        (tournament.vendorId && tournament.vendorId === currentVendorId) ||
-        (tournament.turf?.vendorId && tournament.turf.vendorId === currentVendorId) ||
-        (tournament.userId && tournament.userId === currentVendorId)
-      );
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || req.vendor?.role === 'admin';
+      const isUserTournament = tournament.creatorType === 'USER' || Boolean(tournament.userId);
+      const isOwner = isUserTournament
+        ? (currentCallerId && currentCallerId === tournament.userId)
+        : (currentCallerId && (currentCallerId === tournament.vendorId || (tournament.turf?.vendorId && tournament.turf.vendorId === currentCallerId)));
 
       if (!isOwner && !isAdmin) {
-        console.warn(`⛔ [VendorAPI] Vendor "${currentVendorId}" is not owner of tournament "${tournamentId}" (turf vendor: "${tournament.turf?.vendorId}", tourn vendor: "${tournament.vendorId}")`);
-        return sendError(res, 'Access denied: You do not own this tournament or its turf', 403, 'FORBIDDEN');
-      }
-
-      // Auto-heal legacy pending registrations for published tournaments
-      if (tournament.status === 'published') {
-        const pendingRegs = await prisma.tournamentRegistration.findMany({
-          where: { tournamentId, status: 'pending' },
-          orderBy: { createdAt: 'asc' },
-        });
-        if (pendingRegs.length > 0) {
-          const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
-            ? Number(tournament.numberOfTeams)
-            : (tournament.participantCapacity || 16);
-          const creatorCount = getCreatorTeams(tournament).length;
-          const acceptedCountNow = await prisma.tournamentRegistration.count({
-            where: { tournamentId, status: 'accepted' },
-          });
-          const availableSlots = Math.max(0, totalTeams - (creatorCount + acceptedCountNow));
-          const toAccept = pendingRegs.slice(0, availableSlots);
-          if (toAccept.length > 0) {
-            await prisma.tournamentRegistration.updateMany({
-              where: { id: { in: toAccept.map((r) => r.id) } },
-              data: { status: 'accepted' },
-            });
-            const newAcceptedCount = creatorCount + acceptedCountNow + toAccept.length;
-            await prisma.tournament.update({
-              where: { id: tournamentId },
-              data: { currentParticipantsCount: newAcceptedCount },
-            });
-          }
-        }
+        return sendError(res, 'Access denied: You do not have permission to manage registrations for this tournament', 403, 'FORBIDDEN');
       }
 
       const registrations = await prisma.tournamentRegistration.findMany({
         where: { tournamentId },
         orderBy: { createdAt: 'desc' },
       });
-
-      console.log(`✅ [VendorAPI] Returning ${registrations.length} registrations for tournament "${tournament.name}" (${tournamentId})`);
 
       const totalTeams = tournament.numberOfTeams !== null && tournament.numberOfTeams !== undefined
         ? Number(tournament.numberOfTeams)
@@ -2341,17 +2269,18 @@ const tournamentController = {
   },
 
   /**
+   * POST /api/v1/tournaments/:id/registrations/:regId/accept
    * POST /api/v1/vendor/tournaments/:id/registrations/:regId/accept
-   * Vendor accepts a pending team registration (atomic slot verification)
+   * Tournament creator accepts a pending team registration (atomic slot verification)
    */
   async acceptRegistration(req, res) {
     try {
       const tournamentId = (req.params?.id || req.params?.tournamentId || '').trim();
       const regId = (req.params?.regId || req.params?.registrationId || '').trim();
-      const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id || req.user?.uid;
+      const currentCallerId = req.user?.id || req.user?.uid || req.vendor?.id;
 
-      if (!currentVendorId) {
-        return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
+      if (!currentCallerId) {
+        return sendError(res, 'Authentication required', 401, 'AUTH_REQUIRED');
       }
 
       const tournament = await prisma.tournament.findUnique({
@@ -2363,15 +2292,14 @@ const tournamentController = {
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
-      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
-      const isOwner = Boolean(
-        (tournament.vendorId && tournament.vendorId === currentVendorId) ||
-        (tournament.turf?.vendorId && tournament.turf.vendorId === currentVendorId) ||
-        (tournament.userId && tournament.userId === currentVendorId)
-      );
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || req.vendor?.role === 'admin';
+      const isUserTournament = tournament.creatorType === 'USER' || Boolean(tournament.userId);
+      const isOwner = isUserTournament
+        ? (currentCallerId && currentCallerId === tournament.userId)
+        : (currentCallerId && (currentCallerId === tournament.vendorId || (tournament.turf?.vendorId && tournament.turf.vendorId === currentCallerId)));
 
       if (!isOwner && !isAdmin) {
-        return sendError(res, 'Access denied: You cannot manage registrations for this tournament', 403, 'FORBIDDEN');
+        return sendError(res, 'Access denied: Only the tournament creator can approve registrations for this tournament', 403, 'FORBIDDEN');
       }
 
       // Perform atomic transaction
@@ -2431,6 +2359,25 @@ const tournamentController = {
         };
       });
 
+      // Dispatch acceptance notification to registering user
+      try {
+        notifyInBackground({
+          recipientId: outcome.registration.userId,
+          recipientRole: 'user',
+          title: '🎉 Team Accepted!',
+          body: `Your team "${outcome.registration.teamName}" has been accepted for "${tournament.name}".`,
+          type: 'tournament',
+          data: {
+            tournamentId,
+            id: tournamentId,
+            screen: 'TournamentDetail',
+            action: 'team_accepted',
+          },
+        });
+      } catch (notifErr) {
+        console.warn('⚠️ Acceptance notification warning:', notifErr.message);
+      }
+
       return sendSuccess(res, {
         registration: outcome.registration,
         summary: {
@@ -2453,18 +2400,19 @@ const tournamentController = {
   },
 
   /**
+   * POST /api/v1/tournaments/:id/registrations/:regId/reject
    * POST /api/v1/vendor/tournaments/:id/registrations/:regId/reject
-   * Vendor rejects a team registration
+   * Tournament creator rejects a team registration
    */
   async rejectRegistration(req, res) {
     try {
       const tournamentId = (req.params?.id || req.params?.tournamentId || '').trim();
       const regId = (req.params?.regId || req.params?.registrationId || '').trim();
       const { reason, rejectionReason } = req.body;
-      const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id || req.user?.uid;
+      const currentCallerId = req.user?.id || req.user?.uid || req.vendor?.id;
 
-      if (!currentVendorId) {
-        return sendError(res, 'Vendor authentication required', 401, 'AUTH_REQUIRED');
+      if (!currentCallerId) {
+        return sendError(res, 'Authentication required', 401, 'AUTH_REQUIRED');
       }
 
       const tournament = await prisma.tournament.findUnique({
@@ -2476,15 +2424,14 @@ const tournamentController = {
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
-      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
-      const isOwner = Boolean(
-        (tournament.vendorId && tournament.vendorId === currentVendorId) ||
-        (tournament.turf?.vendorId && tournament.turf.vendorId === currentVendorId) ||
-        (tournament.userId && tournament.userId === currentVendorId)
-      );
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || req.vendor?.role === 'admin';
+      const isUserTournament = tournament.creatorType === 'USER' || Boolean(tournament.userId);
+      const isOwner = isUserTournament
+        ? (currentCallerId && currentCallerId === tournament.userId)
+        : (currentCallerId && (currentCallerId === tournament.vendorId || (tournament.turf?.vendorId && tournament.turf.vendorId === currentCallerId)));
 
       if (!isOwner && !isAdmin) {
-        return sendError(res, 'Access denied: You cannot manage registrations for this tournament', 403, 'FORBIDDEN');
+        return sendError(res, 'Access denied: Only the tournament creator can reject registrations for this tournament', 403, 'FORBIDDEN');
       }
 
       const reg = await prisma.tournamentRegistration.findUnique({
@@ -2524,6 +2471,25 @@ const tournamentController = {
       }
 
       const remainingSlots = Math.max(0, totalTeams - acceptedCount);
+
+      // Dispatch rejection notification to registering user
+      try {
+        notifyInBackground({
+          recipientId: reg.userId,
+          recipientRole: 'user',
+          title: 'Team Application Update',
+          body: `Your application for "${tournament.name}" was declined. Reason: ${effectiveReason}`,
+          type: 'tournament',
+          data: {
+            tournamentId,
+            id: tournamentId,
+            screen: 'TournamentDetail',
+            action: 'team_rejected',
+          },
+        });
+      } catch (notifErr) {
+        console.warn('⚠️ Rejection notification warning:', notifErr.message);
+      }
 
       return sendSuccess(res, {
         registration: updated,

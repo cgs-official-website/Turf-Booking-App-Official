@@ -35,4 +35,11 @@ router.get('/:id', optionalAuth, tournamentController.getTournamentById);
 router.post('/:id/register', verifySessionToken, tournamentController.registerTeam);
 router.get('/:id/my-registration', verifySessionToken, tournamentController.getMyRegistration);
 
+// Team Registration Management Endpoints (User Tournament Creator)
+router.get('/:id/registrations', verifySessionToken, tournamentController.getTournamentRegistrations);
+router.post('/:id/registrations/:regId/accept', verifySessionToken, tournamentController.acceptRegistration);
+router.patch('/:id/registrations/:regId/accept', verifySessionToken, tournamentController.acceptRegistration);
+router.post('/:id/registrations/:regId/reject', verifySessionToken, tournamentController.rejectRegistration);
+router.patch('/:id/registrations/:regId/reject', verifySessionToken, tournamentController.rejectRegistration);
+
 module.exports = router;

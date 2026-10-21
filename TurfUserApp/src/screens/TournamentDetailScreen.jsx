@@ -34,6 +34,8 @@ import {
   conductMatchTossApi,
   updateMatchScoreApi,
   confirmMatchWinnerApi,
+  acceptTournamentRegistrationApi,
+  rejectTournamentRegistrationApi,
 } from '../api/tournaments';
 
 const DEFAULT_SPORT_IMAGES = {
@@ -117,6 +119,12 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [winnerModalVisible, setWinnerModalVisible] = useState(false);
   const [selectedMatchForWinner, setSelectedMatchForWinner] = useState(null);
   const [winnerTeamId, setWinnerTeamId] = useState('');
+
+  // Team Registration Approval State (Tournament Creator Only)
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedTeamForReject, setSelectedTeamForReject] = useState(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [processingRegId, setProcessingRegId] = useState(null);
 
   const loadDetails = useCallback(async () => {
     if (!targetId) {
@@ -602,6 +610,67 @@ export default function TournamentDetailScreen({ route, navigation }) {
         },
       ]
     );
+  };
+
+  // Accept Pending Team Registration (Tournament Creator Only)
+  const handleAcceptTeamRegistration = (team) => {
+    if (remainingSlots <= 0) {
+      Alert.alert('Tournament Full', 'All team slots have been filled. You cannot accept more teams.');
+      return;
+    }
+
+    Alert.alert(
+      'Accept Team Registration',
+      `Accept "${team.name}" into "${tournament.name}"? This team will count as an accepted squad.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Accept Team',
+          style: 'default',
+          onPress: async () => {
+            setProcessingRegId(team.id);
+            try {
+              const res = await acceptTournamentRegistrationApi(tournament.id, team.id);
+              Alert.alert('Team Accepted! 🎉', res?.message || `"${team.name}" has been accepted.`);
+              await loadDetails();
+            } catch (err) {
+              const msg = err.response?.data?.message || err.message || 'Failed to accept team.';
+              Alert.alert('Accept Failed', msg);
+            } finally {
+              setProcessingRegId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Open Reject Modal (Tournament Creator Only)
+  const handleOpenRejectModal = (team) => {
+    setSelectedTeamForReject(team);
+    setRejectionReasonInput('');
+    setRejectModalVisible(true);
+  };
+
+  // Confirm Reject Registration (Tournament Creator Only)
+  const handleConfirmReject = async () => {
+    if (!selectedTeamForReject) return;
+    const regId = selectedTeamForReject.id;
+    const reason = rejectionReasonInput.trim() || 'Application declined by organizer';
+
+    setProcessingRegId(regId);
+    setRejectModalVisible(false);
+    try {
+      await rejectTournamentRegistrationApi(tournament.id, regId, reason);
+      Alert.alert('Application Rejected', `"${selectedTeamForReject.name}" has been rejected.`);
+      await loadDetails();
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to reject team.';
+      Alert.alert('Reject Failed', msg);
+    } finally {
+      setProcessingRegId(null);
+      setSelectedTeamForReject(null);
+    }
   };
 
   // Open Add Player Modal
@@ -1245,7 +1314,9 @@ export default function TournamentDetailScreen({ route, navigation }) {
               <View style={[styles.noticeCard, { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: '#F59E0B' }]}>
                 <Feather name="clock" size={16} color="#D97706" style={{ marginRight: 8 }} />
                 <Text style={[styles.noticeText, { color: '#B45309' }]}>
-                  Your application has been submitted and is awaiting turf owner approval.
+                  {isCommunity
+                    ? 'Your application has been submitted and is awaiting tournament organizer approval.'
+                    : 'Your application has been submitted and is awaiting turf owner approval.'}
                 </Text>
               </View>
             )}
@@ -2021,6 +2092,40 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       <Text style={styles.rejectedReasonValue}>{team.rejectionReason}</Text>
                     </View>
                   )}
+
+                  {/* Pending Action Buttons for Tournament Creator: Accept / Reject */}
+                  {isCreator && team.isRegistration && team.status === 'pending' && (
+                    <View style={styles.creatorActionRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.creatorAcceptBtn,
+                          { backgroundColor: remainingSlots > 0 ? '#10B981' : '#94A3B8' },
+                        ]}
+                        onPress={() => handleAcceptTeamRegistration(team)}
+                        disabled={processingRegId === team.id || remainingSlots <= 0}
+                        activeOpacity={0.85}
+                      >
+                        {processingRegId === team.id ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <>
+                            <Feather name="check" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                            <Text style={styles.creatorActionBtnText}>Accept Team</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.creatorRejectBtn, { borderColor: '#EF4444' }]}
+                        onPress={() => handleOpenRejectModal(team)}
+                        disabled={processingRegId === team.id}
+                        activeOpacity={0.8}
+                      >
+                        <Feather name="x" size={14} color="#EF4444" style={{ marginRight: 4 }} />
+                        <Text style={[styles.creatorActionBtnText, { color: '#EF4444' }]}>Reject</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })
@@ -2605,6 +2710,71 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   <Text style={styles.modalSaveText}>
                     {!selectedMatchForWinner?.nextMatchId ? 'Crown Champion 👑' : 'Confirm & Advance 🏆'}
                   </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Rejection Reason Modal (Tournament Creator Only) ── */}
+      <Modal
+        visible={rejectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRejectModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Feather name="alert-circle" size={20} color="#EF4444" style={{ marginRight: 8 }} />
+                <Text style={[styles.modalTitle, { color: C.text }]}>Reject Team Application</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setRejectModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Feather name="x" size={20} color={C.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalInputLabel, { color: C.subtext, marginTop: 4, marginBottom: 8 }]}>
+              Reason for declining "{selectedTeamForReject?.name}" (optional):
+            </Text>
+            <TextInput
+              style={[
+                styles.modalTextInput,
+                { backgroundColor: C.bgSoft, color: C.text, borderColor: C.border, minHeight: 70, textAlignVertical: 'top' },
+              ]}
+              placeholder="e.g. Squad criteria not met, slot filled, etc."
+              placeholderTextColor={C.subtext}
+              multiline
+              numberOfLines={3}
+              value={rejectionReasonInput}
+              onChangeText={setRejectionReasonInput}
+            />
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { borderColor: C.border }]}
+                onPress={() => setRejectModalVisible(false)}
+              >
+                <Text style={[styles.modalCancelText, { color: C.subtext }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, { backgroundColor: '#EF4444' }]}
+                onPress={handleConfirmReject}
+                disabled={Boolean(processingRegId)}
+              >
+                {processingRegId ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Confirm Reject</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -3818,5 +3988,37 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginVertical: 8,
     fontStyle: 'italic',
+  },
+  creatorActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(150, 150, 150, 0.15)',
+  },
+  creatorAcceptBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: RADIUS.md,
+  },
+  creatorRejectBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    backgroundColor: 'transparent',
+  },
+  creatorActionBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });
