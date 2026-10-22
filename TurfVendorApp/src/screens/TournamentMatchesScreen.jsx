@@ -26,6 +26,7 @@ import MatchSetupWizardModal from '../components/MatchSetupWizardModal';
 import CricketScorerModal from '../components/CricketScorerModal';
 import PlayerPerformanceModal from '../components/PlayerPerformanceModal';
 import TournamentAwardsLeaderboardsModal from '../components/TournamentAwardsLeaderboardsModal';
+import LiveScoreboardModal from '../components/LiveScoreboardModal';
 
 /**
  * Extracts structured cricket scores from a match object or fallback strings
@@ -132,6 +133,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
     const [setupMatch, setSetupMatch] = useState(null);
     const [liveScorerMatch, setLiveScorerMatch] = useState(null);
     const [performanceMatch, setPerformanceMatch] = useState(null);
+    const [scoreboardMatch, setScoreboardMatch] = useState(null);
     const [showAwardsModal, setShowAwardsModal] = useState(false);
 
     // Tiebreaker modal (Scores level)
@@ -273,8 +275,39 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         }
     };
 
+    const executeFinishApi = async (m, finalLiveCricket) => {
+        setBusy(true);
+        const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
+        try {
+            const payload = finalLiveCricket ? { liveCricket: finalLiveCricket } : {};
+            const res = await confirmMatchWinnerApi(tournament.id, m.id, payload);
+            applyResult(res);
+            setLiveScorerMatch(null);
+            Alert.alert(
+                isFinal ? '👑 Champion Crowned!' : (m.isThirdPlaceMatch ? '🥉 3rd Place Decided!' : '🏆 Winner Advanced!'),
+                res?.message || 'Match completed successfully.'
+            );
+        } catch (err) {
+            if (err.code === 'TIE_NEEDS_TIEBREAK') {
+                setWinnerMatch(m);
+                setWinnerId(m.teamA?.id);
+            } else {
+                Alert.alert('Error', err.message || 'Failed to finish match');
+            }
+        } finally {
+            setBusy(false);
+        }
+    };
+
     // Finish match
-    const finishMatch = (m) => {
+    const finishMatch = (m, finalLiveCricket) => {
+        // If caller passed finalLiveCricket (e.g. from CricketScorerModal confirmation dialog),
+        // execute finish API directly to avoid double native confirmation dialogs
+        if (finalLiveCricket) {
+            executeFinishApi(m, finalLiveCricket);
+            return;
+        }
+
         const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
         const cs = getMatchCricketScore(m);
         if (!cs.hasScore) {
@@ -306,27 +339,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 { text: 'Cancel', style: 'cancel' },
                 {
                     text: 'Finish Match',
-                    onPress: async () => {
-                        setBusy(true);
-                        try {
-                            const res = await confirmMatchWinnerApi(tournament.id, m.id, {});
-                            applyResult(res);
-                            setLiveScorerMatch(null);
-                            Alert.alert(
-                                isFinal ? '👑 Champion Crowned!' : (m.isThirdPlaceMatch ? '🥉 3rd Place Decided!' : '🏆 Winner Advanced!'),
-                                res?.message || 'Match completed successfully.'
-                            );
-                        } catch (err) {
-                            if (err.code === 'TIE_NEEDS_TIEBREAK') {
-                                setWinnerMatch(m);
-                                setWinnerId(m.teamA.id);
-                            } else {
-                                Alert.alert('Error', err.message || 'Failed to finish match');
-                            }
-                        } finally {
-                            setBusy(false);
-                        }
-                    },
+                    onPress: () => executeFinishApi(m),
                 },
             ]
         );
@@ -705,48 +718,59 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                             )}
 
                                             {/* ── PROFESSIONAL ACTION BUTTONS ── */}
-                                            {canManage && bothTeams && !m.isBye && (
-                                                <View style={styles.actionsRow}>
-                                                    {!done && !isLive && (
+                                            <View style={styles.actionsRow}>
+                                                {/* Manager Controls: Setup & Start */}
+                                                {canManage && bothTeams && !m.isBye && !done && !isLive && (
+                                                    <TouchableOpacity
+                                                        style={[styles.actionBtnPrimary, { backgroundColor: colors.primary }]}
+                                                        onPress={() => setSetupMatch(m)}
+                                                    >
+                                                        <Feather name="play-circle" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                                        <Text style={styles.actionBtnPrimaryText}>Setup & Start Match</Text>
+                                                    </TouchableOpacity>
+                                                )}
+
+                                                {/* Manager Controls: Live Scorer & Finish Match */}
+                                                {canManage && bothTeams && !m.isBye && isLive && (
+                                                    <>
                                                         <TouchableOpacity
-                                                            style={[styles.actionBtnPrimary, { backgroundColor: colors.primary }]}
-                                                            onPress={() => setSetupMatch(m)}
+                                                            style={[styles.actionBtnLive, { backgroundColor: '#EF4444' }]}
+                                                            onPress={() => setLiveScorerMatch(m)}
                                                         >
-                                                            <Feather name="play-circle" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                                                            <Text style={styles.actionBtnPrimaryText}>Setup & Start Match</Text>
+                                                            <Feather name="edit-2" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                                            <Text style={styles.actionBtnPrimaryText}>Live Scorer</Text>
                                                         </TouchableOpacity>
-                                                    )}
 
-                                                    {isLive && (
-                                                        <>
-                                                            <TouchableOpacity
-                                                                style={[styles.actionBtnLive, { backgroundColor: '#EF4444' }]}
-                                                                onPress={() => setLiveScorerMatch(m)}
-                                                            >
-                                                                <Feather name="edit-2" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                                                                <Text style={styles.actionBtnPrimaryText}>Live Scorer</Text>
-                                                            </TouchableOpacity>
-
-                                                            <TouchableOpacity
-                                                                style={[styles.actionBtnOutline, { borderColor: '#10B981' }]}
-                                                                onPress={() => finishMatch(m)}
-                                                            >
-                                                                <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>Finish Match</Text>
-                                                            </TouchableOpacity>
-                                                        </>
-                                                    )}
-
-                                                    {/* Player Ratings Button */}
-                                                    {(done || isLive) && (
                                                         <TouchableOpacity
-                                                            style={[styles.actionBtnRatings, { borderColor: colors.border }]}
-                                                            onPress={() => setPerformanceMatch(m)}
+                                                            style={[styles.actionBtnOutline, { borderColor: '#10B981' }]}
+                                                            onPress={() => finishMatch(m)}
                                                         >
-                                                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 12 }}>🎖️ Player Ratings</Text>
+                                                            <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>Finish Match</Text>
                                                         </TouchableOpacity>
-                                                    )}
-                                                </View>
-                                            )}
+                                                    </>
+                                                )}
+
+                                                {/* Full Scorecard for Live & Completed */}
+                                                {(isLive || done || cs.hasScore) && (
+                                                    <TouchableOpacity
+                                                        style={[styles.actionBtnOutline, { borderColor: colors.border }]}
+                                                        onPress={() => setScoreboardMatch(m)}
+                                                    >
+                                                        <Feather name="bar-chart-2" size={13} color={colors.text} style={{ marginRight: 4 }} />
+                                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>Full Scorecard</Text>
+                                                    </TouchableOpacity>
+                                                )}
+
+                                                {/* Player Ratings Button */}
+                                                {(done || isLive) && (
+                                                    <TouchableOpacity
+                                                        style={[styles.actionBtnRatings, { borderColor: colors.border }]}
+                                                        onPress={() => setPerformanceMatch(m)}
+                                                    >
+                                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>🎖️ Player Ratings</Text>
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
                                         </View>
                                     );
                                 })}
@@ -784,8 +808,15 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 match={liveScorerMatch}
                 tournament={tournament}
                 onSyncLiveCricket={handleSyncLiveCricket}
-                onFinishMatch={() => finishMatch(liveScorerMatch)}
+                onFinishMatch={(latestLive) => finishMatch(liveScorerMatch, latestLive)}
                 busy={busy}
+            />
+
+            {/* Live & Completed Scoreboard Modal */}
+            <LiveScoreboardModal
+                visible={Boolean(scoreboardMatch)}
+                onClose={() => setScoreboardMatch(null)}
+                match={scoreboardMatch}
             />
 
             {/* Player Performance & Awards Modal */}

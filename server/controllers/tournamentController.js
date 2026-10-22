@@ -3022,7 +3022,8 @@ const tournamentController = {
         if (m.isBye && m.winner && m.nextMatchId) {
           const nextM = r2.matches.find((nm) => nm.id === m.nextMatchId);
           if (nextM) {
-            nextM[m.nextMatchSlot] = m.winner;
+            const slot = m.nextMatchSlot || (!nextM.teamA ? 'teamA' : 'teamB');
+            nextM[slot] = m.winner;
             if (nextM.teamA && nextM.teamB) {
               nextM.status = 'pending';
             }
@@ -3716,7 +3717,7 @@ const tournamentController = {
     try {
       const id = (req.params?.id || req.params?.tournamentId || '').trim();
       const matchId = (req.params?.matchId || req.body?.matchId || '').trim();
-      const { winnerTeamId: requestedWinnerId, tiebreakNote } = req.body;
+      const { winnerTeamId: requestedWinnerId, tiebreakNote, liveCricket: finalLiveCricket } = req.body;
 
       if (!id || !matchId) {
         return sendError(res, 'Tournament ID and Match ID are required', 400, 'MISSING_PARAMS');
@@ -3767,8 +3768,23 @@ const tournamentController = {
       if (!targetMatch.teamA || !targetMatch.teamB) {
         return sendError(res, 'Both teams must be decided before finishing a match.', 400, 'MATCH_NOT_READY');
       }
+
+      // Idempotent: If match was already completed, return existing completed match
       if (targetMatch.status === 'completed') {
-        return sendError(res, 'This match is already completed and locked.', 409, 'MATCH_LOCKED');
+        const formatted = formatTournament(tournament, req.user || req.vendor);
+        return sendSuccess(res, {
+          tournament: formatted,
+          bracket: formatted.bracket,
+          match: targetMatch,
+          winner: targetMatch.winner,
+          alreadyCompleted: true,
+          message: 'Match is already completed.',
+        });
+      }
+
+      // Ingest latest liveCricket state directly if provided in finish payload
+      if (finalLiveCricket && typeof finalLiveCricket === 'object') {
+        targetMatch.liveCricket = finalLiveCricket;
       }
 
       // ── SCORE-BASED RESULT ── the winner is decided by the entered score.
@@ -3786,7 +3802,12 @@ const tournamentController = {
       if (targetMatch.liveCricket) {
         const inn1 = targetMatch.liveCricket.innings1;
         const inn2 = targetMatch.liveCricket.innings2;
-        const isTeamAInn1 = inn1 && inn1.battingTeamId === targetMatch.teamA?.id;
+        const isTeamAInn1 = inn1 && (
+          String(inn1.battingTeamId) === String(targetMatch.teamA?.id) ||
+          String(inn1.battingTeamId) === String(targetMatch.teamA?.teamId) ||
+          String(inn1.battingTeamName || '').trim().toLowerCase() === String(targetMatch.teamA?.name || targetMatch.teamA?.teamName || '').trim().toLowerCase()
+        );
+
         if (inn1) {
           if (isTeamAInn1) {
             if (directInput.runsA === undefined) directInput.runsA = inn1.runs;
@@ -3818,10 +3839,6 @@ const tournamentController = {
         targetMatch.score?.teamB
       );
 
-      if (!currentDetails.hasScoreA && !currentDetails.hasScoreB && !targetMatch.score) {
-        return sendError(res, 'Enter the score of both teams before finishing the match.', 400, 'SCORE_REQUIRED');
-      }
-
       const runsA = currentDetails.runsA;
       const wicketsA = currentDetails.wicketsA;
       const oversA = currentDetails.oversA;
@@ -3829,15 +3846,28 @@ const tournamentController = {
       const wicketsB = currentDetails.wicketsB;
       const oversB = currentDetails.oversB;
 
+      // Validate that real match scoring exists
+      const hasAnyDeliveries = Boolean(
+        targetMatch.liveCricket && (
+          (targetMatch.liveCricket.innings1 && (targetMatch.liveCricket.innings1.legalBalls > 0 || targetMatch.liveCricket.innings1.runs > 0)) ||
+          (targetMatch.liveCricket.innings2 && (targetMatch.liveCricket.innings2.legalBalls > 0 || targetMatch.liveCricket.innings2.runs > 0))
+        )
+      );
+      const hasAnyScore = runsA > 0 || runsB > 0 || wicketsA > 0 || wicketsB > 0 || hasAnyDeliveries;
+
+      if (!hasAnyScore && !targetMatch.score) {
+        return sendError(res, 'Please score deliveries before finishing this match.', 400, 'SCORE_REQUIRED');
+      }
+
       let winnerTeamId;
       let decidedBy = 'score';
       if (runsA !== runsB) {
-        winnerTeamId = runsA > runsB ? targetMatch.teamA.id : targetMatch.teamB.id;
-        if (requestedWinnerId && requestedWinnerId !== winnerTeamId) {
+        winnerTeamId = runsA > runsB ? (targetMatch.teamA.id || targetMatch.teamA.teamId) : (targetMatch.teamB.id || targetMatch.teamB.teamId);
+        if (requestedWinnerId && String(requestedWinnerId) !== String(winnerTeamId)) {
           return sendError(res, 'Winner does not match the entered score. Correct the score first.', 400, 'WINNER_SCORE_MISMATCH');
         }
       } else {
-        // Scores level: a tie-breaker (penalties / super over / golden goal) result is required
+        // Genuine tie (scores are equal after scoring): a tie-breaker result is required
         if (!requestedWinnerId) {
           return sendError(res, 'Scores are tied. Select the tie-breaker winner (Super Over / Golden Goal).', 400, 'TIE_NEEDS_TIEBREAK');
         }
@@ -3845,30 +3875,50 @@ const tournamentController = {
         decidedBy = 'tiebreak';
       }
 
-      const winningTeamObj = targetMatch.teamA?.id === winnerTeamId
+      const winningTeamObj = (
+        String(targetMatch.teamA?.id) === String(winnerTeamId) ||
+        String(targetMatch.teamA?.teamId) === String(winnerTeamId) ||
+        String(targetMatch.teamA?.name || '').trim().toLowerCase() === String(winnerTeamId || '').trim().toLowerCase()
+      )
         ? targetMatch.teamA
-        : (targetMatch.teamB?.id === winnerTeamId ? targetMatch.teamB : null);
+        : (
+          (String(targetMatch.teamB?.id) === String(winnerTeamId) ||
+           String(targetMatch.teamB?.teamId) === String(winnerTeamId) ||
+           String(targetMatch.teamB?.name || '').trim().toLowerCase() === String(winnerTeamId || '').trim().toLowerCase())
+            ? targetMatch.teamB
+            : null
+        );
 
       if (!winningTeamObj) {
         return sendError(res, 'Invalid winner team: specified team is not in this match.', 400, 'INVALID_WINNER');
       }
-      const losingTeamObj = winningTeamObj.id === targetMatch.teamA.id ? targetMatch.teamB : targetMatch.teamA;
+      const isTeamAWinner = (
+        String(winningTeamObj.id) === String(targetMatch.teamA.id) ||
+        String(winningTeamObj.teamId) === String(targetMatch.teamA.teamId) ||
+        String(winningTeamObj.name || '').trim().toLowerCase() === String(targetMatch.teamA.name || '').trim().toLowerCase()
+      );
+      const losingTeamObj = isTeamAWinner ? targetMatch.teamB : targetMatch.teamA;
       const winnerName = winningTeamObj.name || winningTeamObj.teamName || 'Winner';
 
       // Toss info to calculate win margin accurately
       let teamABattedFirst = true;
       if (targetMatch.toss) {
-        if (targetMatch.toss.winnerId === targetMatch.teamA.id) {
+        if (String(targetMatch.toss.winnerId) === String(targetMatch.teamA.id) || String(targetMatch.toss.winnerId) === String(targetMatch.teamA.teamId)) {
           teamABattedFirst = targetMatch.toss.decision !== 'bowl';
-        } else if (targetMatch.toss.winnerId === targetMatch.teamB.id) {
+        } else if (String(targetMatch.toss.winnerId) === String(targetMatch.teamB.id) || String(targetMatch.toss.winnerId) === String(targetMatch.teamB.teamId)) {
           teamABattedFirst = targetMatch.toss.decision === 'bowl';
         }
+      } else if (targetMatch.liveCricket?.innings1) {
+        teamABattedFirst = (
+          String(targetMatch.liveCricket.innings1.battingTeamId) === String(targetMatch.teamA.id) ||
+          String(targetMatch.liveCricket.innings1.battingTeamId) === String(targetMatch.teamA.teamId)
+        );
       }
 
       let winMarginText = '';
       if (decidedBy === 'tiebreak') {
         winMarginText = `Won via Super Over${tiebreakNote ? ` (${tiebreakNote})` : ''}`;
-      } else if (winningTeamObj.id === targetMatch.teamA.id) {
+      } else if (isTeamAWinner) {
         if (teamABattedFirst) {
           const diff = runsA - runsB;
           winMarginText = `Won by ${diff} run${diff === 1 ? '' : 's'}`;
@@ -3910,9 +3960,13 @@ const tournamentController = {
 
       // Calculate player performances & match awards
       if (targetMatch.liveCricket) {
-        const perfResult = cricketEngine.calculateMatchPerformances(targetMatch);
-        targetMatch.playerPerformances = perfResult.performances;
-        targetMatch.awards = perfResult.awards;
+        try {
+          const perfResult = cricketEngine.calculateMatchPerformances(targetMatch);
+          targetMatch.playerPerformances = perfResult.performances;
+          targetMatch.awards = perfResult.awards;
+        } catch (perfErr) {
+          console.warn('calculateMatchPerformances error in confirmMatchWinner:', perfErr.message);
+        }
       }
 
       let isTournamentFinal = false;
@@ -3941,7 +3995,8 @@ const tournamentController = {
         for (const round of bracket.rounds) {
           const nextMatch = (round.matches || []).find((m) => m.id === targetMatch.nextMatchId);
           if (nextMatch) {
-            nextMatch[targetMatch.nextMatchSlot] = winningTeamObj;
+            const slot = targetMatch.nextMatchSlot || (!nextMatch.teamA ? 'teamA' : 'teamB');
+            nextMatch[slot] = winningTeamObj;
             if (nextMatch.teamA && nextMatch.teamB) {
               nextMatch.status = 'pending';
             }
@@ -3966,12 +4021,17 @@ const tournamentController = {
         console.warn('calculateTournamentLeaders error in confirmMatchWinner:', leaderErr.message);
       }
 
+      const updateData = {
+        bracket,
+        updatedAt: new Date(),
+      };
+      if (isTournamentFinal) {
+        updateData.status = 'completed';
+      }
+
       const updated = await prisma.tournament.update({
         where: { id },
-        data: {
-          bracket,
-          updatedAt: new Date(),
-        },
+        data: updateData,
         include: { turf: true, user: true, registrations: true },
       });
 

@@ -786,8 +786,41 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
   };
 
-  const handleFinishMatch = (match) => {
+  const executeFinishMatch = async (match, finalLiveCricket) => {
+    setBracketActionLoading(true);
+    const isFinal = !match.nextMatchId;
+    try {
+      const payload = finalLiveCricket ? { liveCricket: finalLiveCricket } : {};
+      const res = await confirmMatchWinnerApi(tournament.id, match.id, payload);
+      const updated = res?.tournament || res?.data?.tournament;
+      if (updated) setTournament(updated);
+      setLiveScorerMatch(null);
+      Alert.alert(
+        isFinal ? '👑 Champion Crowned!' : '🏆 Winner Advanced!',
+        res?.message || 'Match completed successfully.'
+      );
+    } catch (err) {
+      if (err.code === 'TIE_NEEDS_TIEBREAK') {
+        setSelectedMatchForWinner(match);
+        setWinnerTeamId(match.teamA?.id);
+        setWinnerModalVisible(true);
+      } else if (err.code === 'SCORE_REQUIRED') {
+        Alert.alert('Score Needed', err.message);
+        handleOpenScoreModal(match);
+      } else {
+        Alert.alert('Error', err.message || 'Failed to finish match');
+      }
+    } finally {
+      setBracketActionLoading(false);
+    }
+  };
+
+  const handleFinishMatch = (match, finalLiveCricket) => {
     if (!isCreator) return;
+    if (finalLiveCricket) {
+      executeFinishMatch(match, finalLiveCricket);
+      return;
+    }
     const isFinal = !match.nextMatchId;
     const cs = getMatchCricketScore(match);
     if (!cs.hasScore) {
@@ -820,31 +853,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Finish Match',
-          onPress: async () => {
-            setBracketActionLoading(true);
-            try {
-              const res = await confirmMatchWinnerApi(tournament.id, match.id, {});
-              const updated = res?.tournament || res?.data?.tournament;
-              if (updated) setTournament(updated);
-              Alert.alert(
-                isFinal ? '👑 Champion Crowned!' : '🏆 Winner Advanced!',
-                res?.message || 'Match completed successfully.'
-              );
-            } catch (err) {
-              if (err.code === 'TIE_NEEDS_TIEBREAK') {
-                setSelectedMatchForWinner(match);
-                setWinnerTeamId(match.teamA.id);
-                setWinnerModalVisible(true);
-              } else if (err.code === 'SCORE_REQUIRED') {
-                Alert.alert('Score Needed', err.message);
-                handleOpenScoreModal(match);
-              } else {
-                Alert.alert('Error', err.message || 'Failed to finish match');
-              }
-            } finally {
-              setBracketActionLoading(false);
-            }
-          },
+          onPress: () => executeFinishMatch(match),
         },
       ]
     );
@@ -2553,7 +2562,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                           })()}
 
                           {/* Full Scorecard & Player Ratings for Completed/Live matches */}
-                          {(isCompleted || isLive) && (
+                          {(isCompleted || isLive || cs.hasScore) && (
                             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                               <TouchableOpacity
                                 style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: C.border }}
@@ -3582,7 +3591,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         match={liveScorerMatch}
         tournament={tournament}
         onSyncLiveCricket={handleSyncLiveCricket}
-        onFinishMatch={() => handleFinishMatch(liveScorerMatch)}
+        onFinishMatch={(latestLive) => handleFinishMatch(liveScorerMatch, latestLive)}
         busy={bracketActionLoading}
       />
 

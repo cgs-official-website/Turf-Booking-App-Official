@@ -911,7 +911,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
         </View>
 
         {/* ── Matches & Scoring (vendor-created tournaments: vendor enters scores) ── */}
-        {tournament.status === 'published' && (
+        {(tournament.status === 'published' || tournament.status === 'completed') && (
           <TouchableOpacity
             style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.primary, flexDirection: 'row', alignItems: 'center' }, SHADOWS.sm]}
             onPress={() => navigation.navigate('TournamentMatches', { tournamentId: tournament.id })}

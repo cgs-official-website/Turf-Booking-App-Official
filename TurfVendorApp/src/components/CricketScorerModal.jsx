@@ -343,7 +343,9 @@ export default function CricketScorerModal({
           text: 'Confirm & Finish',
           style: 'default',
           onPress: () => {
-            onFinishMatch();
+            if (onFinishMatch) {
+              onFinishMatch(liveState);
+            }
           },
         },
       ]

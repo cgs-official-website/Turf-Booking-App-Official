@@ -300,8 +300,44 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
     }
   };
 
+  // Direct finish API executor
+  const executeFinishApi = async (m, finalLiveCricket = null) => {
+    setBusy(true);
+    const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
+    try {
+      const payload = {};
+      if (finalLiveCricket) {
+        payload.liveCricket = finalLiveCricket;
+      } else if (m.liveCricket) {
+        payload.liveCricket = m.liveCricket;
+      }
+      const res = await confirmMatchWinnerApi(tournament.id, m.id, payload);
+      applyResult(res);
+      setLiveScorerMatch(null);
+      Alert.alert(
+        isFinal ? '👑 Champion Crowned!' : (m.isThirdPlaceMatch ? '🥉 3rd Place Decided!' : '🏆 Winner Advanced!'),
+        res?.message || 'Match completed successfully.'
+      );
+    } catch (err) {
+      if (err.code === 'TIE_NEEDS_TIEBREAK') {
+        setWinnerMatch(m);
+        setWinnerId(m.teamA?.id || m.teamA?.teamId);
+      } else {
+        Alert.alert('Error', err.message || 'Failed to finish match');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Finish match & advance winner
-  const finishMatch = (m) => {
+  const finishMatch = (m, finalLiveCricket = null) => {
+    // If called from inside the scorer modal, the user already confirmed in the modal!
+    if (finalLiveCricket) {
+      executeFinishApi(m, finalLiveCricket);
+      return;
+    }
+
     const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
     const cs = getMatchCricketScore(m);
     if (!cs.hasScore) {
@@ -333,27 +369,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Finish Match',
-          onPress: async () => {
-            setBusy(true);
-            try {
-              const res = await confirmMatchWinnerApi(tournament.id, m.id, {});
-              applyResult(res);
-              setLiveScorerMatch(null);
-              Alert.alert(
-                isFinal ? '👑 Champion Crowned!' : (m.isThirdPlaceMatch ? '🥉 3rd Place Decided!' : '🏆 Winner Advanced!'),
-                res?.message || 'Match completed successfully.'
-              );
-            } catch (err) {
-              if (err.code === 'TIE_NEEDS_TIEBREAK') {
-                setWinnerMatch(m);
-                setWinnerId(m.teamA.id);
-              } else {
-                Alert.alert('Error', err.message || 'Failed to finish match');
-              }
-            } finally {
-              setBusy(false);
-            }
-          },
+          onPress: () => executeFinishApi(m, null),
         },
       ]
     );
@@ -864,7 +880,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         match={liveScorerMatch}
         tournament={tournament}
         onSyncLiveCricket={handleSyncLiveCricket}
-        onFinishMatch={() => finishMatch(liveScorerMatch)}
+        onFinishMatch={(latestLive) => finishMatch(liveScorerMatch, latestLive)}
         busy={busy}
       />
 
