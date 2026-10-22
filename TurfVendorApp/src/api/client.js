@@ -78,16 +78,17 @@ export const apiRequest = async (endpoint, options = {}) => {
   let lastResponse = null;
   let lastError = null;
 
-  // Release: Railway only. Dev: LOCAL_URL first when developing locally, then last working host, then the rest.
+  // Release: Railway only. Dev: activeBaseUrl first if already verified, then LOCAL_URL, then candidate hosts.
   const hostsToTry = (IS_DEV
-    ? [LOCAL_URL, activeBaseUrl, ...CANDIDATE_URLS]
+    ? [activeBaseUrl, LOCAL_URL, ...CANDIDATE_URLS]
     : [RAILWAY_PROD_URL]
   ).filter((v, i, a) => v && a.indexOf(v) === i);
 
   for (const host of hostsToTry) {
     const controller = new AbortController();
-    // Local hosts fail fast (3s) so a dead LAN IP never blocks; Railway gets 30s
-    const timeoutMs = isFormData ? 45000 : isLocalHost(host) ? 3000 : 30000;
+    // Confirmed active host gets 25s for heavy queries; untried local hosts fail fast (5s); Railway gets 30s
+    const isConfirmedActive = Boolean(activeBaseUrl && host === activeBaseUrl);
+    const timeoutMs = isFormData ? 45000 : isConfirmedActive ? 25000 : isLocalHost(host) ? 5000 : 30000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(`${host}${endpoint}`, {

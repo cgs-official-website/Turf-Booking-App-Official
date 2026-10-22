@@ -149,12 +149,19 @@ export const fcmHelper = {
         } else {
           return nav('TurfUnderReview');
         }
-      } else if (type === 'tournament' || payload.screen === 'TournamentDetail') {
+      } else if (
+        type === 'tournament' ||
+        payload.screen === 'TournamentDetail' ||
+        payload.tournamentId ||
+        payload.action?.startsWith?.('tournament') ||
+        payload.action === 'bracket_generated'
+      ) {
         const tournamentId = payload.tournamentId || payload.id;
+        const initialTab = payload.tab || (payload.action === 'tournament_registration' ? 'registrations' : undefined);
         if (tournamentId) {
-          return nav('TournamentDetail', { tournamentId, id: tournamentId });
+          return nav('TournamentDetail', { tournamentId, id: tournamentId, initialTab, tab: initialTab });
         }
-        return nav('Tournaments');
+        return nav('TournamentList');
       } else {
         return nav('Notifications');
       }

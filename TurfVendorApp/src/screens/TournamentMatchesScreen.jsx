@@ -10,8 +10,6 @@ import {
     RefreshControl,
     Modal,
     TextInput,
-    KeyboardAvoidingView,
-    Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
 import { useTheme } from '../context/ThemeContext';
@@ -23,6 +21,11 @@ import {
     updateMatchScoreApi,
     confirmMatchWinnerApi,
 } from '../api/tournaments';
+import ScheduleSelectorModal from '../components/ScheduleSelectorModal';
+import MatchSetupWizardModal from '../components/MatchSetupWizardModal';
+import CricketScorerModal from '../components/CricketScorerModal';
+import PlayerPerformanceModal from '../components/PlayerPerformanceModal';
+import TournamentAwardsLeaderboardsModal from '../components/TournamentAwardsLeaderboardsModal';
 
 /**
  * Extracts structured cricket scores from a match object or fallback strings
@@ -36,6 +39,36 @@ export function getMatchCricketScore(match) {
     let runsB = score.runsB !== undefined && score.runsB !== null ? Number(score.runsB) : null;
     let wicketsB = score.wicketsB !== undefined && score.wicketsB !== null ? Number(score.wicketsB) : null;
     let oversB = score.oversB !== undefined && score.oversB !== null && score.oversB !== '' ? String(score.oversB) : null;
+
+    // Read directly from liveCricket if present
+    if (match?.liveCricket) {
+        const lc = match.liveCricket;
+        const inn1 = lc.innings1;
+        const inn2 = lc.innings2;
+        const isTeamAInn1 = inn1 && inn1.battingTeamId === match.teamA?.id;
+        if (inn1) {
+            if (isTeamAInn1) {
+                if (runsA === null) runsA = inn1.runs;
+                if (wicketsA === null) wicketsA = inn1.wickets;
+                if (!oversA || oversA === '0.0') oversA = inn1.overs;
+            } else {
+                if (runsB === null) runsB = inn1.runs;
+                if (wicketsB === null) wicketsB = inn1.wickets;
+                if (!oversB || oversB === '0.0') oversB = inn1.overs;
+            }
+        }
+        if (inn2) {
+            if (isTeamAInn1) {
+                if (runsB === null) runsB = inn2.runs;
+                if (wicketsB === null) wicketsB = inn2.wickets;
+                if (!oversB || oversB === '0.0') oversB = inn2.overs;
+            } else {
+                if (runsA === null) runsA = inn2.runs;
+                if (wicketsA === null) wicketsA = inn2.wickets;
+                if (!oversA || oversA === '0.0') oversA = inn2.overs;
+            }
+        }
+    }
 
     if (runsA === null && score.teamA) {
         const m = String(score.teamA).match(/^(\d+)(?:\s*\/\s*(\d+))?(?:\s*\(?([\d.]+)\s*(?:ov|overs)?\)?)?/i);
@@ -84,15 +117,9 @@ export const getTeamDisplayName = (team, placeholder = 'TBD') => {
     return placeholder || 'TBD';
 };
 
-/**
- * Vendor "Matches & Scoring" screen.
- * - Generate knockout bracket from accepted teams (2, 4, 8 teams...)
- * - Toss, structured live cricket score entry (Runs, Wickets, Overs)
- * - Automatic winner determination, advancement, and championship crowning
- */
 const TournamentMatchesScreen = ({ route, navigation }) => {
     const tournamentId = route.params?.tournamentId || route.params?.id;
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
 
     const [tournament, setTournament] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -100,20 +127,12 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
     const [busy, setBusy] = useState(false);
     const [roundTab, setRoundTab] = useState('all');
 
-    // Toss modal
-    const [tossMatch, setTossMatch] = useState(null);
-    const [tossWinnerId, setTossWinnerId] = useState('');
-    const [tossDecision, setTossDecision] = useState('bat');
-
-    // Structured Score modal (Runs, Wickets, Overs)
-    const [scoreMatch, setScoreMatch] = useState(null);
-    const [runsA, setRunsA] = useState('');
-    const [wicketsA, setWicketsA] = useState('');
-    const [oversA, setOversA] = useState('');
-    const [runsB, setRunsB] = useState('');
-    const [wicketsB, setWicketsB] = useState('');
-    const [oversB, setOversB] = useState('');
-    const [summary, setSummary] = useState('');
+    // New Modals for Professional Cricket Flow
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [setupMatch, setSetupMatch] = useState(null);
+    const [liveScorerMatch, setLiveScorerMatch] = useState(null);
+    const [performanceMatch, setPerformanceMatch] = useState(null);
+    const [showAwardsModal, setShowAwardsModal] = useState(false);
 
     // Tiebreaker modal (Scores level)
     const [winnerMatch, setWinnerMatch] = useState(null);
@@ -122,7 +141,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
 
     useLayoutEffect(() => {
         navigation.setOptions({
-            headerTitle: 'Matches & Scoring',
+            headerTitle: 'Cricket Matches & Scoring',
             headerStyle: { backgroundColor: colors.background, elevation: 0, shadowOpacity: 0 },
             headerTintColor: colors.text,
             headerTitleStyle: { color: colors.text, fontWeight: '700' },
@@ -147,23 +166,35 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         load();
     }, [load]);
 
-    // Live scores: refresh every 15s when fixtures exist
+    // Live score auto-refresh
     useEffect(() => {
         if (!tournament?.bracket) return undefined;
         const t = setInterval(() => {
-            if (!busy && !tossMatch && !scoreMatch && !winnerMatch) load();
-        }, 15000);
+            if (!busy && !setupMatch && !liveScorerMatch && !winnerMatch) load();
+        }, 12000);
         return () => clearInterval(t);
-    }, [tournament?.bracket, busy, tossMatch, scoreMatch, winnerMatch, load]);
+    }, [tournament?.bracket, busy, setupMatch, liveScorerMatch, winnerMatch, load]);
 
-    const isCricket = String(tournament?.sport || '').toLowerCase().includes('cricket');
     const canManage = Boolean(tournament && tournament.creatorType !== 'USER' && tournament.canEdit);
     const bracket = tournament?.bracket && Array.isArray(tournament.bracket.rounds) ? tournament.bracket : null;
     const acceptedCount = (tournament?.acceptedTeams || []).length;
+    const cupsCount = Number(bracket?.cupsCount || tournament?.prizeDetails?.cupsCount || 1);
 
     const applyResult = (res) => {
         const updated = res?.tournament || res?.data?.tournament;
-        if (updated) setTournament(updated);
+        if (updated) {
+            setTournament(updated);
+            if (liveScorerMatch) {
+                const rounds = updated.bracket?.rounds || [];
+                for (const r of rounds) {
+                    const found = (r.matches || []).find((m) => m.id === liveScorerMatch.id);
+                    if (found) {
+                        setLiveScorerMatch(found);
+                        break;
+                    }
+                }
+            }
+        }
     };
 
     const run = async (fn, okTitle, okMsg) => {
@@ -181,91 +212,73 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         }
     };
 
-    const handleGenerate = () => {
-        if (acceptedCount < 2) {
-            Alert.alert(
-                'Not enough teams',
-                `At least 2 accepted teams are required.\nCurrently accepted: ${acceptedCount}.\n\nAccept team applications from the Tournament Details screen first.`
-            );
-            return;
-        }
-        const two = acceptedCount === 2;
-        Alert.alert(
-            two ? 'Create Final Match 🏏' : 'Conduct Random Draw 🎲',
-            two
-                ? 'Only 2 teams are accepted, so exactly one Final match will be created. Registration will close. Continue?'
-                : `Randomly pair the ${acceptedCount} accepted teams into knockout fixtures? First-round teams are randomly shuffled from the actual accepted teams. Continue?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: two ? 'Create Match' : 'Draw Now',
-                    onPress: () => run(() => generateBracketApi(tournament.id, { force: true }), two ? 'Match Ready ⚡' : 'Bracket Ready ⚡'),
-                },
-            ]
-        );
-    };
-
-    const openToss = (m) => {
-        setTossMatch(m);
-        setTossWinnerId(m.toss?.wonBy || m.toss?.winnerId || m.teamA?.id);
-        setTossDecision(m.toss?.decision || (isCricket ? 'bat' : 'kickoff'));
-    };
-
-    const saveToss = async () => {
+    // Auto schedule handler
+    const handleAutoSchedule = async (cups) => {
         const ok = await run(
-            () => conductMatchTossApi(tournament.id, tossMatch.id, { winnerTeamId: tossWinnerId, decision: tossDecision }),
-            'Toss Recorded 🪙'
+            () => generateBracketApi(tournament.id, { scheduleType: 'auto', force: true, cupsCount: cups }),
+            'Knockout Draw Ready ⚡',
+            'Rounds generated successfully.'
         );
-        if (ok) setTossMatch(null);
+        if (ok) setShowScheduleModal(false);
     };
 
-    const openScore = (m) => {
-        const cs = getMatchCricketScore(m);
-        setScoreMatch(m);
-        setRunsA(cs.hasScoreA ? String(cs.runsA) : '');
-        setWicketsA(cs.hasScoreA ? String(cs.wicketsA) : '');
-        setOversA(cs.hasScoreA ? String(cs.oversA) : '');
-        setRunsB(cs.hasScoreB ? String(cs.runsB) : '');
-        setWicketsB(cs.hasScoreB ? String(cs.wicketsB) : '');
-        setOversB(cs.hasScoreB ? String(cs.oversB) : '');
-        setSummary(m.score?.summary || '');
-    };
-
-    const saveScore = async () => {
-        if (runsA.trim() === '' && runsB.trim() === '') {
-            Alert.alert('Required', 'Please enter runs for at least one team.');
-            return;
-        }
+    // Manual fixture handler
+    const handleManualSchedule = async (fixtureData) => {
         const ok = await run(
-            () =>
-                updateMatchScoreApi(tournament.id, scoreMatch.id, {
-                    runsA: runsA.trim() === '' ? 0 : parseInt(runsA, 10),
-                    wicketsA: wicketsA.trim() === '' ? 0 : parseInt(wicketsA, 10),
-                    oversA: oversA.trim() || '0.0',
-                    runsB: runsB.trim() === '' ? 0 : parseInt(runsB, 10),
-                    wicketsB: wicketsB.trim() === '' ? 0 : parseInt(wicketsB, 10),
-                    oversB: oversB.trim() || '0.0',
-                    summary: summary.trim(),
-                    status: 'live',
-                }),
-            'Score Updated 📝'
+            () => generateBracketApi(tournament.id, {
+                scheduleType: 'manual',
+                manualAction: 'create_match',
+                roundName: fixtureData.roundName,
+                teamAId: fixtureData.teamAId,
+                teamBId: fixtureData.teamBId,
+                cupsCount,
+            }),
+            'Fixture Scheduled 📅',
+            'Match added to the tournament schedule.'
         );
-        if (ok) setScoreMatch(null);
+        if (ok) setShowScheduleModal(false);
     };
 
-    // Finish match: validates score, automatically determines winner, advances winner to next round or crowns champion
+    // Start match from Setup Wizard
+    const handleStartMatchSetup = async (setupPayload) => {
+        setBusy(true);
+        try {
+            const res = await conductMatchTossApi(tournament.id, setupMatch.id, setupPayload);
+            applyResult(res);
+            const updatedMatch = res?.match || setupMatch;
+            setSetupMatch(null);
+            // Open live ball-by-ball scorer immediately
+            setLiveScorerMatch(updatedMatch);
+        } catch (err) {
+            Alert.alert('Setup Failed', err.message || 'Failed to start match');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    // Sync ball-by-ball state from live scorer
+    const handleSyncLiveCricket = async (liveCricket) => {
+        if (!liveScorerMatch) return;
+        try {
+            const res = await updateMatchScoreApi(tournament.id, liveScorerMatch.id, {
+                liveCricket,
+                status: 'live',
+            });
+            applyResult(res);
+            if (res?.match) {
+                setLiveScorerMatch(res.match);
+            }
+        } catch (err) {
+            console.warn('Sync live cricket error:', err.message);
+        }
+    };
+
+    // Finish match
     const finishMatch = (m) => {
-        const isFinal = !m.nextMatchId;
+        const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
         const cs = getMatchCricketScore(m);
         if (!cs.hasScore) {
-            Alert.alert(
-                'Score Required',
-                'Please enter the match score before finishing this match.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Update Score', onPress: () => openScore(m) },
-                ]
-            );
+            Alert.alert('Score Required', 'Please score deliveries before finishing this match.');
             return;
         }
 
@@ -282,11 +295,13 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         }
 
         Alert.alert(
-            isFinal ? 'Finish Final & Crown Champion 👑' : 'Finish Match & Advance Winner 🏁',
+            isFinal ? 'Finish Final & Crown Champion 👑' : (m.isThirdPlaceMatch ? 'Finish 3rd Place Playoff 🥉' : 'Finish Match & Advance Winner 🏁'),
             `${previewSummary}\n\n` +
             (isFinal
                 ? 'The team with the higher score will be crowned Tournament Champion. Continue?'
-                : 'The team with the higher score wins and automatically advances to the next round fixture. Continue?'),
+                : (m.isThirdPlaceMatch
+                    ? 'Confirm winner for 3rd Place and runner for 4th Place. Continue?'
+                    : 'The team with the higher score wins and automatically advances. Continue?')),
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -296,17 +311,15 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                         try {
                             const res = await confirmMatchWinnerApi(tournament.id, m.id, {});
                             applyResult(res);
+                            setLiveScorerMatch(null);
                             Alert.alert(
-                                isFinal ? '👑 Champion Crowned!' : '🏆 Winner Advanced!',
+                                isFinal ? '👑 Champion Crowned!' : (m.isThirdPlaceMatch ? '🥉 3rd Place Decided!' : '🏆 Winner Advanced!'),
                                 res?.message || 'Match completed successfully.'
                             );
                         } catch (err) {
                             if (err.code === 'TIE_NEEDS_TIEBREAK') {
                                 setWinnerMatch(m);
                                 setWinnerId(m.teamA.id);
-                            } else if (err.code === 'SCORE_REQUIRED') {
-                                Alert.alert('Score needed', err.message);
-                                openScore(m);
                             } else {
                                 Alert.alert('Error', err.message || 'Failed to finish match');
                             }
@@ -329,6 +342,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
             });
             applyResult(res);
             setWinnerMatch(null);
+            setLiveScorerMatch(null);
             Alert.alert('Result saved', res?.message || 'Winner advanced successfully.');
         } catch (err) {
             Alert.alert('Error', err.message || 'Failed to save result');
@@ -347,9 +361,9 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
     const statusMeta = (m) => {
         if (m.status === 'completed') return { label: m.isBye ? 'BYE' : 'COMPLETED', bg: '#10B981' };
         if (m.status === 'live') return { label: 'LIVE', bg: '#EF4444' };
-        if (m.status === 'toss') return { label: 'LIVE', bg: '#EF4444' };
-        if (m.status === 'pending') return { label: 'UPCOMING', bg: '#64748B' };
-        return { label: 'UPCOMING', bg: '#94A3B8' };
+        if (m.status === 'toss') return { label: 'TOSS DONE', bg: '#F59E0B' };
+        if (m.status === 'pending') return { label: 'READY', bg: '#3B82F6' };
+        return { label: 'WAITING', bg: '#94A3B8' };
     };
 
     const Choice = ({ selected, label, onPress }) => (
@@ -398,21 +412,55 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                     />
                 }
             >
-                {/* Tournament Info Banner */}
+                {/* Tournament Header Card */}
                 <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
-                    <Text style={[styles.title, { color: colors.text }]}>{tournament.name}</Text>
-                    <Text style={{ color: colors.textSecondary, marginTop: 4, fontWeight: '600' }}>
-                        {bracket ? `${bracket.teamsCount || acceptedCount} Teams • ${bracket.totalRounds || bracket.rounds.length} Rounds` : `${tournament.sport} • ${acceptedCount} accepted teams`}
-                    </Text>
-                    {!canManage && (
-                        <View style={styles.notice}>
-                            <Feather name="eye" size={14} color="#92400E" />
-                            <Text style={styles.noticeText}>
-                                View only. Scores for this tournament are managed by its organizer.
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.title, { color: colors.text }]}>{tournament.name}</Text>
+                            <Text style={{ color: colors.textSecondary, marginTop: 4, fontWeight: '600' }}>
+                                {tournament.sport} • {acceptedCount} Registered Teams • {cupsCount} Cup{cupsCount > 1 ? 's' : ''}
                             </Text>
                         </View>
-                    )}
+                        {canManage && (
+                            <TouchableOpacity
+                                style={[styles.scheduleBtnPill, { backgroundColor: colors.primary }]}
+                                onPress={() => setShowScheduleModal(true)}
+                            >
+                                <Feather name="calendar" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                                <Text style={styles.scheduleBtnText}>Schedule</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
+
+                {/* Awards & Leaderboards Header Button */}
+                <TouchableOpacity
+                    style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: isDark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7',
+                        borderWidth: 1,
+                        borderColor: '#F59E0B',
+                        paddingVertical: 10,
+                        paddingHorizontal: 14,
+                        borderRadius: 12,
+                        marginBottom: 12,
+                    }}
+                    onPress={() => setShowAwardsModal(true)}
+                    activeOpacity={0.85}
+                >
+                    <Text style={{ fontSize: 16, marginRight: 8 }}>🏆</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>
+                            Awards & Player Leaderboards
+                        </Text>
+                        <Text style={{ fontSize: 11, color: isDark ? '#FCD34D' : '#92400E' }}>
+                            {bracket?.winner ? 'Official final winners & rankings' : 'Live standings: Runs, Wickets, SR, Econ, Fielding'}
+                        </Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={isDark ? '#FBBF24' : '#B45309'} />
+                </TouchableOpacity>
 
                 {/* Champion Banner */}
                 {Boolean(bracket?.winner) && (
@@ -420,41 +468,95 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                         <Text style={styles.championLabel}>👑 TOURNAMENT CHAMPION</Text>
                         <Text style={styles.championName}>{getTeamDisplayName(bracket.winner)}</Text>
                         {Boolean(bracket.runnerUp) && (
-                            <Text style={{ color: '#92400E', marginTop: 4, fontWeight: '600' }}>
+                            <Text style={{ color: '#92400E', marginTop: 4, fontWeight: '700' }}>
                                 🥈 Runner-up: {getTeamDisplayName(bracket.runnerUp)}
                             </Text>
                         )}
+                        {Boolean(bracket.thirdPlace) && (
+                            <Text style={{ color: '#92400E', marginTop: 2, fontWeight: '600' }}>
+                                🥉 3rd Place: {getTeamDisplayName(bracket.thirdPlace)}
+                                {Boolean(bracket.fourthPlace) && ` • 4th: ${getTeamDisplayName(bracket.fourthPlace)}`}
+                            </Text>
+                        )}
+                        <TouchableOpacity
+                            style={{
+                                marginTop: 10,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: '#D97706',
+                                paddingVertical: 8,
+                                paddingHorizontal: 14,
+                                borderRadius: 8,
+                            }}
+                            onPress={() => setShowAwardsModal(true)}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 12, marginRight: 6 }}>
+                                🏆 View Final Awards & Leaderboards
+                            </Text>
+                            <Feather name="arrow-right" size={14} color="#FFFFFF" />
+                        </TouchableOpacity>
                     </View>
                 )}
 
-                {/* Bracket Not Yet Generated */}
+                {/* 1. TOURNAMENT SCHEDULE SELECTION (If not yet scheduled) */}
                 {!bracket ? (
-                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', paddingVertical: 24 }]}>
-                        <Feather name="git-merge" size={36} color={colors.primary} />
-                        <Text style={[styles.title, { color: colors.text, marginTop: 12 }]}>
-                            {acceptedCount === 2 ? 'Final Match Not Created' : 'Bracket Not Generated'}
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, padding: 18 }]}>
+                        <Text style={[styles.schedulePromptTitle, { color: colors.text }]}>
+                            How do you want to schedule?
                         </Text>
-                        <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 6, paddingHorizontal: 12 }}>
-                            {acceptedCount === 2
-                                ? '2 accepted teams are ready. Generate the bracket to create the Final match fixture.'
-                                : `Accept team applications, then generate fixtures. ${acceptedCount} accepted teams will be randomly shuffled into the first-round fixtures.`}
+                        <Text style={[styles.schedulePromptSub, { color: colors.textSecondary }]}>
+                            {acceptedCount} registered & accepted teams ready for action
                         </Text>
-                        {canManage && (
-                            <TouchableOpacity
-                                style={[styles.primaryBtn, { backgroundColor: colors.primary, opacity: busy ? 0.6 : 1 }]}
-                                onPress={handleGenerate}
-                                disabled={busy}
-                                activeOpacity={0.85}
-                            >
-                                {busy ? (
-                                    <ActivityIndicator color="#FFFFFF" />
-                                ) : (
-                                    <Text style={styles.primaryBtnText}>
-                                        {acceptedCount === 2 ? '🏏 Create Final Match (2 teams)' : `🎲 Conduct Random Draw (${acceptedCount} teams)`}
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
-                        )}
+
+                        {/* AUTO CARD */}
+                        <TouchableOpacity
+                            style={[styles.scheduleOptionCard, { borderColor: '#10B981', backgroundColor: isDark ? 'rgba(16, 185, 129, 0.08)' : '#ECFDF5' }]}
+                            onPress={() => handleAutoSchedule(cupsCount)}
+                            activeOpacity={0.8}
+                            disabled={busy}
+                        >
+                            <View style={[styles.optIconBox, { backgroundColor: '#10B981' }]}>
+                                <Feather name="shuffle" size={20} color="#FFFFFF" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text style={[styles.optTitle, { color: colors.text }]}>AUTO</Text>
+                                    <View style={[styles.badgeTag, { backgroundColor: '#10B981' }]}>
+                                        <Text style={styles.badgeTagText}>ONE TAP</Text>
+                                    </View>
+                                </View>
+                                <Text style={[styles.optDesc, { color: colors.textSecondary }]}>
+                                    Randomly pair registered/accepted teams and generate correct rounds based on team count.
+                                </Text>
+                            </View>
+                            <Feather name="chevron-right" size={20} color="#10B981" />
+                        </TouchableOpacity>
+
+                        {/* MANUAL CARD */}
+                        <TouchableOpacity
+                            style={[styles.scheduleOptionCard, { borderColor: '#3B82F6', backgroundColor: isDark ? 'rgba(59, 130, 246, 0.08)' : '#EFF6FF', marginTop: 12 }]}
+                            onPress={() => setShowScheduleModal(true)}
+                            activeOpacity={0.8}
+                            disabled={busy}
+                        >
+                            <View style={[styles.optIconBox, { backgroundColor: '#3B82F6' }]}>
+                                <Feather name="edit-3" size={20} color="#FFFFFF" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text style={[styles.optTitle, { color: colors.text }]}>MANUAL</Text>
+                                    <View style={[styles.badgeTag, { backgroundColor: '#3B82F6' }]}>
+                                        <Text style={styles.badgeTagText}>CUSTOM</Text>
+                                    </View>
+                                </View>
+                                <Text style={[styles.optDesc, { color: colors.textSecondary }]}>
+                                    Select round (League / QF / SF / Final), then pick Team A vs Team B from registered teams.
+                                </Text>
+                            </View>
+                            <Feather name="chevron-right" size={20} color="#3B82F6" />
+                        </TouchableOpacity>
                     </View>
                 ) : (
                     <>
@@ -473,14 +575,14 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
 
                         {/* Matches List */}
                         {visibleRounds.map((round) => (
-                            <View key={round.roundNumber} style={{ marginBottom: 12 }}>
+                            <View key={round.roundNumber} style={{ marginBottom: 14 }}>
                                 <Text style={[styles.roundTitle, { color: colors.text }]}>{round.name.toUpperCase()}</Text>
                                 {(round.matches || []).map((m) => {
                                     const meta = statusMeta(m);
                                     const bothTeams = Boolean(m.teamA && m.teamB);
                                     const done = m.status === 'completed';
-                                    const isLive = m.status === 'live' || m.status === 'toss';
-                                    const finalMatch = !m.nextMatchId;
+                                    const isLive = m.status === 'live';
+                                    const finalMatch = !m.nextMatchId && !m.isThirdPlaceMatch;
                                     const cs = getMatchCricketScore(m);
 
                                     const teamAWon = done && m.winner?.id === m.teamA?.id;
@@ -489,17 +591,18 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                     return (
                                         <View
                                             key={m.id}
-                                            style={[styles.matchCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}
+                                            style={[styles.matchCard, { backgroundColor: colors.card, borderColor: isLive ? '#EF4444' : colors.border }, SHADOWS.sm]}
                                         >
-                                            {/* Match Card Top Row */}
+                                            {/* Top Row */}
                                             <View style={styles.matchHeader}>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                    <Text style={[styles.matchRoundTag, { color: colors.primary }]}>
+                                                    {m.isThirdPlaceMatch && <Text style={{ fontSize: 13, marginRight: 4 }}>🥉</Text>}
+                                                    <Text style={[styles.matchRoundTag, { color: isLive ? '#EF4444' : colors.primary }]}>
                                                         {(m.roundName || round.name).toUpperCase()}
                                                     </Text>
                                                     <Text style={{ color: colors.textSecondary, marginHorizontal: 6, fontWeight: '700' }}>•</Text>
                                                     <Text style={[styles.matchNumberTag, { color: colors.text }]}>
-                                                        {m.matchCode ? `${m.matchCode} (MATCH ${m.matchNumber})` : `MATCH ${m.matchNumber}`}
+                                                        {m.matchCode || `M#${m.matchNumber}`}
                                                     </Text>
                                                 </View>
                                                 <View style={[styles.badge, { backgroundColor: meta.bg }]}>
@@ -509,14 +612,14 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
 
                                             {/* Toss Banner */}
                                             {Boolean(m.toss) && (
-                                                <View style={styles.tossBanner}>
-                                                    <Text style={styles.tossBannerText}>
-                                                        🪙 <Text style={{ fontWeight: '800' }}>{m.toss.winnerName}</Text> won the toss and elected to <Text style={{ fontWeight: '800' }}>{String(m.toss.decision || 'bat').toUpperCase()}</Text>
+                                                <View style={[styles.tossBanner, { backgroundColor: isDark ? 'rgba(217, 119, 6, 0.12)' : '#FEF3C7', borderColor: '#F59E0B' }]}>
+                                                    <Text style={[styles.tossBannerText, { color: isDark ? '#FBBF24' : '#92400E' }]}>
+                                                        🪙 <Text style={{ fontWeight: '800' }}>{m.toss.winnerName}</Text> won toss & elected to <Text style={{ fontWeight: '800' }}>{String(m.toss.decision || 'bat').toUpperCase()}</Text>
                                                     </Text>
                                                 </View>
                                             )}
 
-                                            {/* ── Structured Team A Box ── */}
+                                            {/* Team A Box */}
                                             <View style={[styles.teamBlock, teamAWon && styles.winningTeamBlock]}>
                                                 <View style={styles.teamTitleRow}>
                                                     <Text style={[styles.teamHeadingName, { color: colors.text }, teamAWon && styles.winnerText]}>
@@ -524,7 +627,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                     </Text>
                                                     {teamAWon && (
                                                         <View style={[styles.winnerBadgePill, { backgroundColor: '#10B981' }]}>
-                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION' : 'WINNER'}</Text>
+                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION 👑' : (m.isThirdPlaceMatch ? '3RD PLACE 🥉' : 'WINNER')}</Text>
                                                         </View>
                                                     )}
                                                 </View>
@@ -534,12 +637,12 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                             {cs.runsA} / {cs.wicketsA}
                                                         </Text>
                                                         <Text style={[styles.oversText, { color: colors.textSecondary }]}>
-                                                            {cs.oversA} overs
+                                                            {cs.oversA} ov
                                                         </Text>
                                                     </View>
                                                 ) : (
-                                                    <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2, fontStyle: 'italic' }}>
-                                                        Score not entered
+                                                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2, fontStyle: 'italic' }}>
+                                                        Yet to bat
                                                     </Text>
                                                 )}
                                             </View>
@@ -553,7 +656,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                 <View style={[styles.vsLine, { backgroundColor: colors.border }]} />
                                             </View>
 
-                                            {/* ── Structured Team B Box ── */}
+                                            {/* Team B Box */}
                                             <View style={[styles.teamBlock, teamBWon && styles.winningTeamBlock]}>
                                                 <View style={styles.teamTitleRow}>
                                                     <Text style={[styles.teamHeadingName, { color: colors.text }, teamBWon && styles.winnerText]}>
@@ -561,7 +664,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                     </Text>
                                                     {teamBWon && (
                                                         <View style={[styles.winnerBadgePill, { backgroundColor: '#10B981' }]}>
-                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION' : 'WINNER'}</Text>
+                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION 👑' : (m.isThirdPlaceMatch ? '3RD PLACE 🥉' : 'WINNER')}</Text>
                                                         </View>
                                                     )}
                                                 </View>
@@ -571,17 +674,17 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                             {cs.runsB} / {cs.wicketsB}
                                                         </Text>
                                                         <Text style={[styles.oversText, { color: colors.textSecondary }]}>
-                                                            {cs.oversB} overs
+                                                            {cs.oversB} ov
                                                         </Text>
                                                     </View>
                                                 ) : (
-                                                    <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2, fontStyle: 'italic' }}>
-                                                        Score not entered
+                                                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2, fontStyle: 'italic' }}>
+                                                        Yet to bat
                                                     </Text>
                                                 )}
                                             </View>
 
-                                            {/* Dynamic Cricket Match Status / Lead / Completed Win Banner */}
+                                            {/* Result or Live Status */}
                                             {done && Boolean(m.score?.winMarginText || m.score?.summary) && (
                                                 <View style={styles.completedResultBox}>
                                                     <Text style={styles.completedWinnerText}>
@@ -601,35 +704,47 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                 </View>
                                             )}
 
-                                            {/* Vendor Action Buttons */}
-                                            {canManage && bothTeams && !m.isBye && !done && (
+                                            {/* ── PROFESSIONAL ACTION BUTTONS ── */}
+                                            {canManage && bothTeams && !m.isBye && (
                                                 <View style={styles.actionsRow}>
-                                                    <TouchableOpacity
-                                                        style={[styles.actionBtn, { borderColor: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.06)' }]}
-                                                        onPress={() => openToss(m)}
-                                                    >
-                                                        <Text style={{ color: '#B45309', fontWeight: '700', fontSize: 13 }}>
-                                                            🪙 {m.toss ? 'Edit Toss' : 'Toss'}
-                                                        </Text>
-                                                    </TouchableOpacity>
+                                                    {!done && !isLive && (
+                                                        <TouchableOpacity
+                                                            style={[styles.actionBtnPrimary, { backgroundColor: colors.primary }]}
+                                                            onPress={() => setSetupMatch(m)}
+                                                        >
+                                                            <Feather name="play-circle" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                                            <Text style={styles.actionBtnPrimaryText}>Setup & Start Match</Text>
+                                                        </TouchableOpacity>
+                                                    )}
 
-                                                    <TouchableOpacity
-                                                        style={[styles.actionBtn, { borderColor: '#0284C7', backgroundColor: 'rgba(2, 132, 199, 0.06)' }]}
-                                                        onPress={() => openScore(m)}
-                                                    >
-                                                        <Text style={{ color: '#0284C7', fontWeight: '700', fontSize: 13 }}>
-                                                            📝 Update Score
-                                                        </Text>
-                                                    </TouchableOpacity>
+                                                    {isLive && (
+                                                        <>
+                                                            <TouchableOpacity
+                                                                style={[styles.actionBtnLive, { backgroundColor: '#EF4444' }]}
+                                                                onPress={() => setLiveScorerMatch(m)}
+                                                            >
+                                                                <Feather name="edit-2" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                                                <Text style={styles.actionBtnPrimaryText}>Live Scorer</Text>
+                                                            </TouchableOpacity>
 
-                                                    <TouchableOpacity
-                                                        style={[styles.actionBtn, { backgroundColor: finalMatch ? '#D97706' : colors.primary, borderColor: 'transparent' }]}
-                                                        onPress={() => finishMatch(m)}
-                                                    >
-                                                        <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>
-                                                            {finalMatch ? '👑 Finish Final' : '🏁 Finish Match'}
-                                                        </Text>
-                                                    </TouchableOpacity>
+                                                            <TouchableOpacity
+                                                                style={[styles.actionBtnOutline, { borderColor: '#10B981' }]}
+                                                                onPress={() => finishMatch(m)}
+                                                            >
+                                                                <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>Finish Match</Text>
+                                                            </TouchableOpacity>
+                                                        </>
+                                                    )}
+
+                                                    {/* Player Ratings Button */}
+                                                    {(done || isLive) && (
+                                                        <TouchableOpacity
+                                                            style={[styles.actionBtnRatings, { borderColor: colors.border }]}
+                                                            onPress={() => setPerformanceMatch(m)}
+                                                        >
+                                                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 12 }}>🎖️ Player Ratings</Text>
+                                                        </TouchableOpacity>
+                                                    )}
                                                 </View>
                                             )}
                                         </View>
@@ -641,175 +756,51 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 )}
             </ScrollView>
 
-            {/* Toss Modal */}
-            <Modal visible={Boolean(tossMatch)} transparent animationType="slide" onRequestClose={() => setTossMatch(null)}>
-                <View style={styles.modalBackdrop}>
-                    <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.title, { color: colors.text }]}>Match Toss</Text>
-                        <Text style={[styles.label, { color: colors.textSecondary }]}>Toss Winner</Text>
-                        <View style={styles.rowWrap}>
-                            <Choice
-                                selected={tossWinnerId === tossMatch?.teamA?.id}
-                                label={getTeamDisplayName(tossMatch?.teamA)}
-                                onPress={() => setTossWinnerId(tossMatch.teamA.id)}
-                            />
-                            <Choice
-                                selected={tossWinnerId === tossMatch?.teamB?.id}
-                                label={getTeamDisplayName(tossMatch?.teamB)}
-                                onPress={() => setTossWinnerId(tossMatch.teamB.id)}
-                            />
-                        </View>
-                        <Text style={[styles.label, { color: colors.textSecondary }]}>Elected to</Text>
-                        <View style={styles.rowWrap}>
-                            {['bat', 'bowl'].map((d) => (
-                                <Choice key={d} selected={tossDecision === d} label={d.toUpperCase()} onPress={() => setTossDecision(d)} />
-                            ))}
-                        </View>
-                        <View style={styles.modalBtns}>
-                            <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={() => setTossMatch(null)}>
-                                <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.primaryBtnSmall, { backgroundColor: colors.primary }]} onPress={saveToss} disabled={busy}>
-                                {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryBtnText}>Save Toss</Text>}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+            {/* Schedule Choice Modal */}
+            <ScheduleSelectorModal
+                visible={showScheduleModal}
+                onClose={() => setShowScheduleModal(false)}
+                tournament={tournament}
+                acceptedTeams={tournament.acceptedTeams || []}
+                onAutoSchedule={handleAutoSchedule}
+                onManualSchedule={handleManualSchedule}
+                busy={busy}
+            />
 
-            {/* Structured Cricket Score Modal */}
-            <Modal visible={Boolean(scoreMatch)} transparent animationType="slide" onRequestClose={() => setScoreMatch(null)}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBackdrop}>
-                    <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
-                        <View style={styles.modalHeaderRow}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={[styles.title, { color: colors.text }]}>Update Score</Text>
-                                <Text style={{ color: colors.textSecondary, fontSize: SIZES.sm, marginTop: 2 }}>
-                                    {(scoreMatch?.roundName || 'Match').toUpperCase()} • Match #{scoreMatch?.matchNumber}
-                                </Text>
-                            </View>
-                            <TouchableOpacity onPress={() => setScoreMatch(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                <Feather name="x" size={22} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
+            {/* Cricket Match Setup Wizard */}
+            <MatchSetupWizardModal
+                visible={Boolean(setupMatch)}
+                onClose={() => setSetupMatch(null)}
+                match={setupMatch}
+                tournament={tournament}
+                onStartMatch={handleStartMatchSetup}
+                busy={busy}
+            />
 
-                        {/* Team A Section */}
-                        <View style={styles.scoreEntryTeamBox}>
-                            <Text style={[styles.scoreEntryTeamName, { color: colors.text }]}>
-                                {getTeamDisplayName(scoreMatch?.teamA, scoreMatch?.placeholderA)}
-                            </Text>
-                            <View style={styles.scoreInputFieldsRow}>
-                                <View style={styles.scoreFieldCol}>
-                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Runs</Text>
-                                    <TextInput
-                                        style={[styles.scoreFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                                        value={runsA}
-                                        onChangeText={setRunsA}
-                                        keyboardType="numeric"
-                                        placeholder="0"
-                                        placeholderTextColor={colors.textLight}
-                                        maxLength={4}
-                                    />
-                                </View>
-                                <View style={styles.scoreFieldCol}>
-                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Wickets</Text>
-                                    <TextInput
-                                        style={[styles.scoreFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                                        value={wicketsA}
-                                        onChangeText={setWicketsA}
-                                        keyboardType="numeric"
-                                        placeholder="0"
-                                        placeholderTextColor={colors.textLight}
-                                        maxLength={2}
-                                    />
-                                </View>
-                                <View style={styles.scoreFieldCol}>
-                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Overs</Text>
-                                    <TextInput
-                                        style={[styles.scoreFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                                        value={oversA}
-                                        onChangeText={setOversA}
-                                        keyboardType="decimal-pad"
-                                        placeholder="0.0"
-                                        placeholderTextColor={colors.textLight}
-                                        maxLength={5}
-                                    />
-                                </View>
-                            </View>
-                        </View>
+            {/* Ball-by-ball Live Scorer Modal */}
+            <CricketScorerModal
+                visible={Boolean(liveScorerMatch)}
+                onClose={() => setLiveScorerMatch(null)}
+                match={liveScorerMatch}
+                tournament={tournament}
+                onSyncLiveCricket={handleSyncLiveCricket}
+                onFinishMatch={() => finishMatch(liveScorerMatch)}
+                busy={busy}
+            />
 
-                        {/* Team B Section */}
-                        <View style={styles.scoreEntryTeamBox}>
-                            <Text style={[styles.scoreEntryTeamName, { color: colors.text }]}>
-                                {getTeamDisplayName(scoreMatch?.teamB, scoreMatch?.placeholderB)}
-                            </Text>
-                            <View style={styles.scoreInputFieldsRow}>
-                                <View style={styles.scoreFieldCol}>
-                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Runs</Text>
-                                    <TextInput
-                                        style={[styles.scoreFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                                        value={runsB}
-                                        onChangeText={setRunsB}
-                                        keyboardType="numeric"
-                                        placeholder="0"
-                                        placeholderTextColor={colors.textLight}
-                                        maxLength={4}
-                                    />
-                                </View>
-                                <View style={styles.scoreFieldCol}>
-                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Wickets</Text>
-                                    <TextInput
-                                        style={[styles.scoreFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                                        value={wicketsB}
-                                        onChangeText={setWicketsB}
-                                        keyboardType="numeric"
-                                        placeholder="0"
-                                        placeholderTextColor={colors.textLight}
-                                        maxLength={2}
-                                    />
-                                </View>
-                                <View style={styles.scoreFieldCol}>
-                                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Overs</Text>
-                                    <TextInput
-                                        style={[styles.scoreFieldInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                                        value={oversB}
-                                        onChangeText={setOversB}
-                                        keyboardType="decimal-pad"
-                                        placeholder="0.0"
-                                        placeholderTextColor={colors.textLight}
-                                        maxLength={5}
-                                    />
-                                </View>
-                            </View>
-                        </View>
+            {/* Player Performance & Awards Modal */}
+            <PlayerPerformanceModal
+                visible={Boolean(performanceMatch)}
+                onClose={() => setPerformanceMatch(null)}
+                match={performanceMatch}
+            />
 
-                        {/* Match Summary Note */}
-                        <Text style={[styles.label, { color: colors.textSecondary, marginTop: 10 }]}>
-                            Match Summary (optional)
-                        </Text>
-                        <TextInput
-                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
-                            value={summary}
-                            onChangeText={setSummary}
-                            placeholder="e.g. Inning break, rain delay, or custom note"
-                            placeholderTextColor={colors.textLight}
-                            maxLength={200}
-                        />
-                        <Text style={{ fontSize: 11, color: colors.textLight, marginTop: 4 }}>
-                            The Match Summary is not used as the match score. Structured Runs, Wickets, and Overs determine the score and winner.
-                        </Text>
-
-                        <View style={styles.modalBtns}>
-                            <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={() => setScoreMatch(null)}>
-                                <Text style={{ color: colors.text, fontWeight: '700' }}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.primaryBtnSmall, { backgroundColor: colors.primary }]} onPress={saveScore} disabled={busy}>
-                                {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryBtnText}>Save Score</Text>}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
+            {/* Tournament Awards & Leaderboards Modal */}
+            <TournamentAwardsLeaderboardsModal
+                visible={showAwardsModal}
+                onClose={() => setShowAwardsModal(false)}
+                tournament={tournament}
+            />
 
             {/* Tie-breaker Modal */}
             <Modal visible={Boolean(winnerMatch)} transparent animationType="slide" onRequestClose={() => setWinnerMatch(null)}>
@@ -831,11 +822,8 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                 onPress={() => setWinnerId(winnerMatch.teamB.id)}
                             />
                         </View>
-                        <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>
-                            Tie-breaker Note (optional)
-                        </Text>
                         <TextInput
-                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg }]}
+                            style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBg, marginTop: 12 }]}
                             value={tiebreakNote}
                             onChangeText={setTiebreakNote}
                             placeholder="e.g. Won by 2 runs in Super Over"
@@ -859,32 +847,78 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    card: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+    card: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14 },
     title: { fontSize: SIZES.lg || 18, fontWeight: '800' },
+    scheduleBtnPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    scheduleBtnText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '800',
+    },
     roundTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
-    notice: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', borderRadius: 10, padding: 10, marginTop: 10 },
-    noticeText: { color: '#92400E', marginLeft: 8, flex: 1, fontSize: SIZES.sm },
-    champion: { backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1.5, borderRadius: 14, padding: 16, alignItems: 'center', marginBottom: 14 },
+    champion: { backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1.5, borderRadius: 16, padding: 16, alignItems: 'center', marginBottom: 14 },
     championLabel: { color: '#92400E', fontWeight: '800', letterSpacing: 1, fontSize: 13 },
     championName: { color: '#78350F', fontSize: 22, fontWeight: '900', marginTop: 4 },
-    matchCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+    schedulePromptTitle: { fontSize: 17, fontWeight: '800', marginBottom: 2 },
+    schedulePromptSub: { fontSize: 12, fontWeight: '500', marginBottom: 14 },
+    scheduleOptionCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        borderRadius: 14,
+        borderWidth: 1.5,
+    },
+    optIconBox: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    optTitle: {
+        fontSize: 15,
+        fontWeight: '900',
+    },
+    badgeTag: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    badgeTagText: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    optDesc: {
+        fontSize: 11,
+        lineHeight: 15,
+        marginTop: 2,
+    },
+    matchCard: { borderWidth: 1.5, borderRadius: 16, padding: 14, marginBottom: 12 },
     matchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     matchRoundTag: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
     matchNumberTag: { fontSize: 12, fontWeight: '800' },
     badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
     badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-    tossBanner: { backgroundColor: '#FEF3C7', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10, borderWidth: 1, borderColor: '#FDE68A' },
-    tossBannerText: { color: '#92400E', fontSize: 12 },
+    tossBanner: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10, borderWidth: 1 },
+    tossBannerText: { fontSize: 12 },
     teamBlock: { padding: 10, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.02)' },
     winningTeamBlock: { backgroundColor: 'rgba(16, 185, 129, 0.08)' },
     teamTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    teamHeadingName: { fontSize: 15, fontWeight: '800', flex: 1 },
+    teamHeadingName: { fontSize: 14, fontWeight: '800', flex: 1 },
     winnerText: { color: '#059669' },
     winnerBadgePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 8 },
-    winnerBadgePillText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+    winnerBadgePillText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
     scoreRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
-    runsWicketsText: { fontSize: 20, fontWeight: '900', letterSpacing: 0.5 },
-    oversText: { fontSize: 13, marginLeft: 8, fontWeight: '600' },
+    runsWicketsText: { fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+    oversText: { fontSize: 12, marginLeft: 8, fontWeight: '600' },
     vsDividerWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
     vsLine: { flex: 1, height: 1 },
     vsBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginHorizontal: 8 },
@@ -894,24 +928,20 @@ const styles = StyleSheet.create({
     completedMarginText: { color: '#065F46', fontSize: 12, marginTop: 2, fontWeight: '600' },
     liveLeadBox: { marginTop: 10, padding: 8, borderRadius: 8, backgroundColor: 'rgba(2, 132, 199, 0.08)', borderWidth: 1, borderColor: '#0284C7' },
     liveLeadText: { color: '#0284C7', fontWeight: '700', fontSize: 12 },
-    actionsRow: { flexDirection: 'row', marginTop: 12 },
-    actionBtn: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center', marginHorizontal: 3 },
-    choice: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8, maxWidth: 220 },
+    actionsRow: { flexDirection: 'row', gap: 6, marginTop: 12 },
+    actionBtnPrimary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10 },
+    actionBtnPrimaryText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+    actionBtnLive: { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10 },
+    actionBtnOutline: { flex: 0.9, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+    actionBtnRatings: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+    choice: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 },
     rowWrap: { flexDirection: 'row', flexWrap: 'wrap' },
-    primaryBtn: { marginTop: 14, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 18, alignItems: 'center', alignSelf: 'stretch' },
     primaryBtnSmall: { flex: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
     primaryBtnText: { color: '#FFFFFF', fontWeight: '800' },
     secondaryBtn: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center', marginRight: 10 },
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalCard: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '90%' },
-    modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
     label: { marginTop: 12, marginBottom: 6, fontWeight: '700', fontSize: SIZES.sm },
-    scoreEntryTeamBox: { marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.03)' },
-    scoreEntryTeamName: { fontSize: 15, fontWeight: '800', marginBottom: 8 },
-    scoreInputFieldsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    scoreFieldCol: { flex: 1, marginHorizontal: 4 },
-    fieldLabel: { fontSize: 11, fontWeight: '700', marginBottom: 4 },
-    scoreFieldInput: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 15, fontWeight: '700', textAlign: 'center' },
     input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: SIZES.md },
     modalBtns: { flexDirection: 'row', marginTop: 18 },
 });

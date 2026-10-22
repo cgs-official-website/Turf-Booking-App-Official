@@ -24,6 +24,7 @@ import PersonalInfoScreen    from '../screens/PersonalInfoScreen';
 import TournamentScreen      from '../screens/TournamentScreen';
 import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
+import TournamentMatchesScreen from '../screens/TournamentMatchesScreen';
 import RegisterTeamScreen    from '../screens/RegisterTeamScreen';
 import CreateMatchScreen     from '../screens/CreateMatchScreen';
 import SelectPlayersScreen   from '../screens/SelectPlayersScreen';
@@ -154,6 +155,7 @@ export default function RootNavigator() {
             <Stack.Screen name="OTP"        component={OTPScreen} />
             <Stack.Screen name="Register"   component={RegisterScreen} />
             <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="TournamentMatches" component={TournamentMatchesScreen} options={{ presentation: 'card' }} />
           </>
 
         ) : (
@@ -174,6 +176,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Tournament"     component={TournamentScreen}     options={{ presentation: 'card' }} />
             <Stack.Screen name="CreateTournament" component={CreateTournamentScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="TournamentMatches" component={TournamentMatchesScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="RegisterTeam"     component={RegisterTeamScreen}     options={{ presentation: 'card' }} />
 
             {/* ── Match / Team / Toss / Live Scorecard ── */}

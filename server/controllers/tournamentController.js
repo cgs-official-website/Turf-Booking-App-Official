@@ -3,6 +3,7 @@ const prisma = require('../config/prisma');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { tournamentShareUrl } = require('../utils/shareUrl');
 const notificationService = require('../services/notificationService');
+const cricketEngine = require('../utils/cricketEngine');
 
 const VALID_STATUSES = ['draft', 'pending_approval', 'published', 'rejected', 'ongoing', 'completed', 'cancelled'];
 const VALID_FORMATS = ['knockout', 'round_robin', 'group_knockout', 'double_elimination', 'league'];
@@ -517,6 +518,51 @@ function notifyInBackground(params) {
     .catch((e) => console.warn('⚠️ Background notification failed:', e.message));
 }
 
+/**
+ * Broadcast notification to active users when a tournament is created/published
+ */
+function broadcastNewTournamentNotification(tournament) {
+  if (!tournament || tournament.status !== 'published') return;
+  Promise.resolve().then(async () => {
+    try {
+      const venue = tournament.venueName || tournament.turf?.name || tournament.city || 'Turf Arena';
+      const [activeTokens, allUsers] = await Promise.all([
+        prisma.deviceToken.findMany({
+          where: { ownerType: 'user' },
+          select: { ownerId: true },
+          distinct: ['ownerId'],
+          take: 100,
+        }),
+        prisma.user.findMany({
+          select: { id: true },
+          take: 100,
+        }),
+      ]);
+      const userIds = [...new Set([...activeTokens.map((t) => t.ownerId), ...allUsers.map((u) => u.id)])].filter(Boolean);
+      for (const uid of userIds) {
+        if (uid !== tournament.userId) {
+          notifyInBackground({
+            recipientId: uid,
+            recipientRole: 'user',
+            title: `🏆 New Tournament: ${tournament.name}`,
+            body: `Registration is open for "${tournament.name}" at ${venue}. Tap to view details and register your team!`,
+            type: 'tournament',
+            data: {
+              tournamentId: tournament.id,
+              id: tournament.id,
+              screen: 'TournamentDetail',
+              type: 'tournament',
+              action: 'tournament_created',
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ broadcastNewTournamentNotification warning:', err.message);
+    }
+  });
+}
+
 const tournamentController = {
   formatTournament,
   formatTournamentSummary,
@@ -739,20 +785,62 @@ const tournamentController = {
         }
         where = { turfId };
       } else {
-        // One query: tournaments created by vendor OR hosted at any of vendor's turfs
-        where = { OR: [{ vendorId }, { turf: { vendorId } }] };
+        const vendorTurfs = await prisma.turf.findMany({
+          where: { vendorId },
+          select: { id: true },
+        });
+        const turfIds = vendorTurfs.map((t) => t.id);
+        where = turfIds.length > 0
+          ? { OR: [{ vendorId }, { turfId: { in: turfIds } }] }
+          : { vendorId };
       }
 
       const tournaments = await prisma.tournament.findMany({
         where,
-        omit: TOURNAMENT_LIST_OMIT,
-        include: {
+        select: {
+          id: true,
+          creatorType: true,
+          turfId: true,
+          vendorId: true,
+          userId: true,
+          name: true,
+          description: true,
+          sport: true,
+          venueName: true,
+          city: true,
+          venueLocation: true,
+          startDate: true,
+          endDate: true,
+          registrationStartDate: true,
+          registrationEndDate: true,
+          entryFee: true,
+          prizePool: true,
+          prizeDetails: true,
+          participantCapacity: true,
+          format: true,
+          bannerUrl: true,
+          status: true,
+          currentParticipantsCount: true,
+          contactPhone: true,
+          contactEmail: true,
+          createdBy: true,
+          numberOfTeams: true,
+          playersPerTeam: true,
+          oversPerTeam: true,
+          shareableIdentifier: true,
+          approvalStatus: true,
+          rejectionReason: true,
+          createdAt: true,
+          updatedAt: true,
           turf: {
             select: { id: true, name: true, city: true, images: true, logo: true, location: true, vendorId: true },
           },
           registrations: { select: REGISTRATION_LIST_SELECT },
           user: {
             select: { id: true, name: true, avatar: true, phone: true },
+          },
+          vendor: {
+            select: { id: true, name: true, phone: true, email: true },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -996,6 +1084,8 @@ const tournamentController = {
             oversPerTeam: parsedOvers,
             teams: initialTeams,
             description: description ? description.trim() : null,
+            prizeDetails: req.body?.prizeDetails || null,
+            prizePool: req.body?.prizePool !== undefined && req.body.prizePool !== '' ? Number(req.body.prizePool) : 0,
             rules: rules ? rules.trim() : null,
             bannerUrl: bannerUrl ? bannerUrl.trim() : null,
             status: initialStatus,
@@ -1196,6 +1286,10 @@ const tournamentController = {
         },
       });
 
+      if (tournament.status === 'published') {
+        broadcastNewTournamentNotification(tournament);
+      }
+
       const formatted = formatTournament(tournament, req.user);
 
       return sendSuccess(res, {
@@ -1392,6 +1486,10 @@ const tournamentController = {
       const newTournament = locked.value?.created;
       if (!newTournament) {
         return sendError(res, 'Failed to create tournament', 500, 'CREATE_TOURNAMENT_FAILED');
+      }
+
+      if (newTournament.status === 'published') {
+        broadcastNewTournamentNotification(newTournament);
       }
 
       return sendSuccess(res, { tournament: formatTournament(newTournament, req.user) }, 201);
@@ -1771,6 +1869,10 @@ const tournamentController = {
             turfId: published.turfId,
           },
         });
+      }
+
+      if (published.status === 'published') {
+        broadcastNewTournamentNotification(published);
       }
 
       const formatted = formatTournament(published, req.user);
@@ -2181,11 +2283,11 @@ const tournamentController = {
       try {
         const registration = outcome.registration;
         const isUserCreated = tournament.creatorType === 'USER' || Boolean(tournament.userId);
-        const creatorId = isUserCreated ? tournament.userId : tournament.vendorId;
+        const creatorId = isUserCreated ? tournament.userId : (tournament.vendorId || tournament.turf?.vendorId);
         const creatorRole = isUserCreated ? 'user' : 'vendor';
 
         // 1. Send mobile push notification ONLY to the tournament creator (vendor or user)
-        if (creatorId && creatorId !== userId) {
+        if (creatorId) {
           notifyInBackground({
             recipientId: creatorId,
             recipientRole: creatorRole,
@@ -2674,6 +2776,8 @@ const tournamentController = {
         }
       }
 
+      broadcastNewTournamentNotification(updated);
+
       const formatted = formatTournament(updated, req.user || req.vendor);
 
       return sendSuccess(res, {
@@ -2791,7 +2895,7 @@ const tournamentController = {
   /**
    * Helper to build single-elimination knockout bracket from accepted teams
    */
-  buildKnockoutBracket(teams, sport = 'Cricket') {
+  buildKnockoutBracket(teams, sport = 'Cricket', cupsCount = 1) {
     const N = teams.length;
     if (N < 2) return null;
 
@@ -2806,7 +2910,7 @@ const tournamentController = {
 
     // ── RANDOM DRAW ── teams are shuffled with a secure RNG; pairs are formed from
     // the shuffled order. Byes (when team count is not 2/4/8/16...) are spread
-    // evenly and also go to randomly drawn teams. No manual pairing is possible.
+    // evenly and also go to randomly drawn teams.
     const shuffled = secureShuffle(teams);
     const firstRoundMatches = P / 2;
     const byeCount = P - N;
@@ -2878,6 +2982,31 @@ const tournamentController = {
         });
       }
 
+      // If 4 Cups is configured (1st, 2nd, 3rd, 4th), add a 3rd Place Playoff in final round
+      if (isFinalRound && cupsCount === 4 && totalRounds >= 2) {
+        matchesInRound.push({
+          id: 'match_3rd_place',
+          roundNumber: r,
+          roundName: '3rd Place Playoff',
+          matchNumber: globalMatchCounter++,
+          matchCode: '3RD',
+          matchLabel: '3rd Place Playoff 🥉',
+          placeholderA: 'Loser SF 1',
+          placeholderB: 'Loser SF 2',
+          teamA: null,
+          teamB: null,
+          toss: null,
+          score: null,
+          status: 'waiting',
+          winner: null,
+          loser: null,
+          isBye: false,
+          isThirdPlaceMatch: true,
+          nextMatchId: null,
+          nextMatchSlot: null,
+        });
+      }
+
       rounds.push({
         roundNumber: r,
         name: roundName,
@@ -2906,6 +3035,7 @@ const tournamentController = {
       status: 'in_progress',
       generatedAt: new Date().toISOString(),
       drawType: 'random',
+      cupsCount: Number(cupsCount) || 1,
       locked: true,
       teamsCount: N,
       byes: byeCount,
@@ -2913,6 +3043,8 @@ const tournamentController = {
       rounds,
       winner: null,
       runnerUp: null,
+      thirdPlace: null,
+      fourthPlace: null,
     };
   },
 
@@ -3007,7 +3139,87 @@ const tournamentController = {
         })),
       ].map((tm, idx) => ({ ...tm, seed: idx + 1 }));
 
-      const bracket = tournamentController.buildKnockoutBracket(teams, tournament.sport);
+      const isManual = req.body?.scheduleType === 'manual';
+      const cupsCount = Number(req.body?.cupsCount || tournament.prizeDetails?.cupsCount || 1);
+      let bracket;
+
+      if (isManual) {
+        // Manual match scheduling
+        const existingBracket = (tournament.bracket && Array.isArray(tournament.bracket.rounds))
+          ? tournament.bracket
+          : {
+            status: 'in_progress',
+            generatedAt: new Date().toISOString(),
+            drawType: 'manual',
+            cupsCount,
+            teamsCount: teams.length,
+            totalRounds: 1,
+            rounds: [],
+            winner: null,
+            runnerUp: null,
+            thirdPlace: null,
+            fourthPlace: null,
+          };
+
+        if (req.body?.manualAction === 'create_match') {
+          const { roundName = 'League', teamAId, teamBId, matchDate, matchTime, matchCode } = req.body;
+          if (!teamAId || !teamBId) {
+            return sendError(res, 'Both Team A and Team B must be selected for the fixture', 400, 'TEAMS_REQUIRED');
+          }
+          if (teamAId === teamBId) {
+            return sendError(res, 'A team cannot play against itself', 400, 'SAME_TEAM_MATCH');
+          }
+          const teamAObj = teams.find((t) => t.id === teamAId);
+          const teamBObj = teams.find((t) => t.id === teamBId);
+          if (!teamAObj || !teamBObj) {
+            return sendError(res, 'Selected team is not an accepted registered team', 400, 'INVALID_TEAM');
+          }
+
+          let targetRound = existingBracket.rounds.find((r) => r.name?.toLowerCase() === roundName.trim().toLowerCase());
+          if (!targetRound) {
+            targetRound = {
+              roundNumber: existingBracket.rounds.length + 1,
+              name: roundName.trim(),
+              matches: [],
+            };
+            existingBracket.rounds.push(targetRound);
+          }
+
+          const matchNum = existingBracket.rounds.reduce((acc, r) => acc + (r.matches?.length || 0), 0) + 1;
+          const newMatch = {
+            id: `manual_m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            roundNumber: targetRound.roundNumber,
+            roundName: targetRound.name,
+            matchNumber: matchNum,
+            matchCode: matchCode || `M${matchNum}`,
+            matchLabel: `${roundName} • Match ${matchNum}`,
+            placeholderA: teamAObj.name,
+            placeholderB: teamBObj.name,
+            teamA: teamAObj,
+            teamB: teamBObj,
+            scheduledDate: matchDate || null,
+            scheduledTime: matchTime || null,
+            toss: null,
+            score: null,
+            status: 'pending',
+            winner: null,
+            loser: null,
+            isBye: false,
+          };
+          targetRound.matches.push(newMatch);
+          existingBracket.totalRounds = existingBracket.rounds.length;
+          existingBracket.drawType = 'manual';
+          bracket = existingBracket;
+        } else if (Array.isArray(req.body?.rounds)) {
+          existingBracket.rounds = req.body.rounds;
+          existingBracket.drawType = 'manual';
+          bracket = existingBracket;
+        } else {
+          return sendError(res, 'Provide valid manualAction (create_match) or rounds array', 400, 'INVALID_MANUAL_PAYLOAD');
+        }
+      } else {
+        bracket = tournamentController.buildKnockoutBracket(teams, tournament.sport, cupsCount);
+      }
 
       const todayStr = new Date().toISOString().slice(0, 10);
       const regEndStr = tournament.registrationEndDate ? String(tournament.registrationEndDate).slice(0, 10) : '';
@@ -3033,26 +3245,50 @@ const tournamentController = {
         },
       });
 
-      // Send FCM push notifications to all accepted teams
-      const acceptedUserIds = acceptedRegistrations.map((r) => r.userId).filter(Boolean);
-      for (const uId of acceptedUserIds) {
-        if (uId !== currentUserId) {
-          try {
-            notifyInBackground({
-              recipientId: uId,
-              recipientRole: 'user',
-              title: '⚡ Tournament Matches Announced!',
-              body: `Match fixtures for "${tournament.name}" have been generated. Check out the tournament bracket now!`,
-              type: 'tournament',
-              data: {
-                tournamentId: tournament.id,
-                id: tournament.id,
-                screen: 'TournamentDetail',
-                action: 'bracket_generated',
-              },
-            });
-          } catch (_) { }
-        }
+      // Send FCM push notifications to all accepted teams, registered users & creator
+      const targetUserIds = [...new Set([
+        ...acceptedRegistrations.map((r) => r.userId),
+        ...(tournament.registrations || []).map((r) => r.userId),
+        tournament.userId,
+      ].filter(Boolean))];
+
+      for (const uId of targetUserIds) {
+        try {
+          notifyInBackground({
+            recipientId: uId,
+            recipientRole: 'user',
+            title: 'Tournament Matches Announced!',
+            body: `Match fixtures for "${tournament.name}" have been generated. Check out the tournament bracket now!`,
+            type: 'tournament',
+            data: {
+              tournamentId: tournament.id,
+              id: tournament.id,
+              screen: 'TournamentDetail',
+              tab: 'bracket',
+              action: 'bracket_generated',
+            },
+          });
+        } catch (_) { }
+      }
+
+      const vendorRecipientId = tournament.vendorId || tournament.turf?.vendorId;
+      if (vendorRecipientId) {
+        try {
+          notifyInBackground({
+            recipientId: vendorRecipientId,
+            recipientRole: 'vendor',
+            title: 'Tournament Matches Announced!',
+            body: `Match fixtures for "${tournament.name}" have been generated. Check out the tournament bracket now!`,
+            type: 'tournament',
+            data: {
+              tournamentId: tournament.id,
+              id: tournament.id,
+              screen: 'TournamentDetail',
+              tab: 'bracket',
+              action: 'bracket_generated',
+            },
+          });
+        } catch (_) { }
       }
 
       const formatted = formatTournament(updated, req.user || req.vendor);
@@ -3133,16 +3369,94 @@ const tournamentController = {
         : (targetMatch.teamB?.id === winnerTeamId ? targetMatch.teamB : null);
 
       const winnerName = winningTeamObj?.name || winningTeamObj?.teamName || 'Toss Winner';
+      const dec = (decision || 'bat').toLowerCase();
 
       targetMatch.toss = {
         wonBy: winnerTeamId,
         winnerId: winnerTeamId,
         winnerName,
-        decision: decision || 'bat',
-        electedTo: (decision || 'bat').toLowerCase(),
+        decision: dec,
+        electedTo: dec,
       };
-      if (targetMatch.status === 'pending' || targetMatch.status === 'waiting' || !targetMatch.status) {
-        targetMatch.status = 'toss';
+
+      const { playingXI_A, playingXI_B, striker, nonStriker, bowler, maxOvers } = req.body;
+      const isTeamABatting = (winnerTeamId === targetMatch.teamA.id && dec !== 'bowl') ||
+                             (winnerTeamId === targetMatch.teamB.id && dec === 'bowl');
+      const battingTeam = isTeamABatting ? targetMatch.teamA : targetMatch.teamB;
+      const bowlingTeam = isTeamABatting ? targetMatch.teamB : targetMatch.teamA;
+      const effectiveOvers = Number(maxOvers) || Number(tournament.oversPerTeam) || 10;
+
+      if (striker && nonStriker && bowler) {
+        const inn1 = cricketEngine.createEmptyInnings(battingTeam, bowlingTeam, effectiveOvers);
+        inn1.currentStrikerId = String(striker.id);
+        inn1.currentNonStrikerId = String(nonStriker.id);
+        inn1.currentBowlerId = String(bowler.id);
+        inn1.batters[String(striker.id)] = {
+          id: String(striker.id),
+          name: striker.name || 'Striker',
+          runs: 0,
+          balls: 0,
+          fours: 0,
+          sixes: 0,
+          out: false,
+          dismissal: null,
+        };
+        inn1.batters[String(nonStriker.id)] = {
+          id: String(nonStriker.id),
+          name: nonStriker.name || 'Non-Striker',
+          runs: 0,
+          balls: 0,
+          fours: 0,
+          sixes: 0,
+          out: false,
+          dismissal: null,
+        };
+        inn1.bowlers[String(bowler.id)] = {
+          id: String(bowler.id),
+          name: bowler.name || 'Bowler',
+          balls: 0,
+          overs: '0.0',
+          maidens: 0,
+          runs: 0,
+          wickets: 0,
+          economy: '0.0',
+        };
+
+        targetMatch.matchSetup = {
+          configured: true,
+          maxOvers: effectiveOvers,
+          battingTeamId: battingTeam.id,
+          bowlingTeamId: bowlingTeam.id,
+          playingXI_A: Array.isArray(playingXI_A) ? playingXI_A : (targetMatch.teamA.players || []),
+          playingXI_B: Array.isArray(playingXI_B) ? playingXI_B : (targetMatch.teamB.players || []),
+        };
+
+        targetMatch.liveCricket = {
+          currentInnings: 1,
+          maxOvers: effectiveOvers,
+          target: null,
+          innings1: inn1,
+          innings2: null,
+        };
+
+        targetMatch.status = 'live';
+        targetMatch.score = {
+          runsA: 0,
+          wicketsA: 0,
+          oversA: '0.0',
+          runsB: 0,
+          wicketsB: 0,
+          oversB: '0.0',
+          teamA: '0/0 (0.0 ov)',
+          teamB: '0/0 (0.0 ov)',
+          summary: `Toss: ${winnerName} won toss & elected to ${dec}`,
+          leadText: 'Match started',
+          updatedAt: new Date().toISOString(),
+        };
+      } else {
+        if (targetMatch.status === 'pending' || targetMatch.status === 'waiting' || !targetMatch.status) {
+          targetMatch.status = 'toss';
+        }
       }
 
       const updated = await prisma.tournament.update({
@@ -3230,6 +3544,32 @@ const tournamentController = {
         return sendError(res, 'This match is completed and its result is locked.', 409, 'MATCH_LOCKED');
       }
 
+      // 1. Live Cricket State Sync (from CricHeroes-style live scorer)
+      if (req.body?.liveCricket && typeof req.body.liveCricket === 'object') {
+        targetMatch.liveCricket = req.body.liveCricket;
+      } else if (req.body?.ballEvent && targetMatch.liveCricket) {
+        const curInnKey = targetMatch.liveCricket.currentInnings === 2 ? 'innings2' : 'innings1';
+        if (targetMatch.liveCricket[curInnKey]) {
+          const res = cricketEngine.processBallEvent(
+            targetMatch.liveCricket[curInnKey],
+            req.body.ballEvent,
+            targetMatch.liveCricket.target
+          );
+          targetMatch.liveCricket[curInnKey] = res.innings;
+          if (res.inningsCompleted && curInnKey === 'innings1') {
+            targetMatch.liveCricket.currentInnings = 2;
+            targetMatch.liveCricket.target = res.innings.runs + 1;
+            const secondBattingTeam = res.innings.bowlingTeamId === targetMatch.teamA?.id ? targetMatch.teamA : targetMatch.teamB;
+            const secondBowlingTeam = res.innings.battingTeamId === targetMatch.teamA?.id ? targetMatch.teamA : targetMatch.teamB;
+            targetMatch.liveCricket.innings2 = cricketEngine.createEmptyInnings(
+              secondBattingTeam,
+              secondBowlingTeam,
+              targetMatch.liveCricket.maxOvers
+            );
+          }
+        }
+      }
+
       const bodyScore = req.body?.score && typeof req.body.score === 'object' ? req.body.score : {};
       const directInput = {
         runsA: req.body?.runsA !== undefined ? req.body.runsA : bodyScore.runsA,
@@ -3239,6 +3579,35 @@ const tournamentController = {
         wicketsB: req.body?.wicketsB !== undefined ? req.body.wicketsB : bodyScore.wicketsB,
         oversB: req.body?.oversB !== undefined ? req.body.oversB : bodyScore.oversB,
       };
+
+      // If liveCricket is populated, derive runs/wickets/overs directly
+      if (targetMatch.liveCricket) {
+        const inn1 = targetMatch.liveCricket.innings1;
+        const inn2 = targetMatch.liveCricket.innings2;
+        const isTeamAInn1 = inn1 && inn1.battingTeamId === targetMatch.teamA?.id;
+        if (inn1) {
+          if (isTeamAInn1) {
+            directInput.runsA = inn1.runs;
+            directInput.wicketsA = inn1.wickets;
+            directInput.oversA = inn1.overs;
+          } else {
+            directInput.runsB = inn1.runs;
+            directInput.wicketsB = inn1.wickets;
+            directInput.oversB = inn1.overs;
+          }
+        }
+        if (inn2) {
+          if (isTeamAInn1) {
+            directInput.runsB = inn2.runs;
+            directInput.wicketsB = inn2.wickets;
+            directInput.oversB = inn2.overs;
+          } else {
+            directInput.runsA = inn2.runs;
+            directInput.wicketsA = inn2.wickets;
+            directInput.oversA = inn2.overs;
+          }
+        }
+      }
 
       const extracted = extractCricketDetails(
         directInput,
@@ -3267,6 +3636,19 @@ const tournamentController = {
         leadText = 'Scores are level';
       }
 
+      // If chasing in 2nd innings, calculate required runs
+      if (targetMatch.liveCricket?.target) {
+        const target = targetMatch.liveCricket.target;
+        const currentBattingRuns = targetMatch.liveCricket.innings2?.runs || 0;
+        const legalBalls = targetMatch.liveCricket.innings2?.legalBalls || 0;
+        const maxBalls = (targetMatch.liveCricket.maxOvers || 10) * 6;
+        const remBalls = Math.max(0, maxBalls - legalBalls);
+        const remRuns = Math.max(0, target - currentBattingRuns);
+        if (remRuns > 0) {
+          leadText = `Need ${remRuns} runs from ${remBalls} balls (RRR: ${cricketEngine.rrrString(target, currentBattingRuns, remBalls)})`;
+        }
+      }
+
       const userSummary = String(req.body?.summary !== undefined ? req.body.summary : (bodyScore.summary !== undefined ? bodyScore.summary : (targetMatch.score?.summary || ''))).trim();
       const matchSummary = userSummary || leadText;
 
@@ -3284,10 +3666,24 @@ const tournamentController = {
         updatedAt: new Date().toISOString(),
       };
 
+      // Real-time calculation of player performances & awards
+      if (targetMatch.liveCricket) {
+        const perfResult = cricketEngine.calculateMatchPerformances(targetMatch);
+        targetMatch.playerPerformances = perfResult.performances;
+        targetMatch.awards = perfResult.awards;
+      }
+
       if (status) {
         targetMatch.status = status;
       } else if (!targetMatch.status || targetMatch.status === 'pending' || targetMatch.status === 'toss') {
         targetMatch.status = 'live';
+      }
+
+      // Compute tournament leaders across all matches so far
+      try {
+        bracket.tournamentLeaders = cricketEngine.calculateTournamentLeaders({ bracket });
+      } catch (leaderErr) {
+        console.warn('calculateTournamentLeaders error in updateMatchScore:', leaderErr.message);
       }
 
       const updated = await prisma.tournament.update({
@@ -3386,6 +3782,35 @@ const tournamentController = {
         oversB: req.body?.oversB !== undefined ? req.body.oversB : bodyScore.oversB,
       };
 
+      // Extract ball-by-ball score from liveCricket if directInput not fully supplied
+      if (targetMatch.liveCricket) {
+        const inn1 = targetMatch.liveCricket.innings1;
+        const inn2 = targetMatch.liveCricket.innings2;
+        const isTeamAInn1 = inn1 && inn1.battingTeamId === targetMatch.teamA?.id;
+        if (inn1) {
+          if (isTeamAInn1) {
+            if (directInput.runsA === undefined) directInput.runsA = inn1.runs;
+            if (directInput.wicketsA === undefined) directInput.wicketsA = inn1.wickets;
+            if (!directInput.oversA) directInput.oversA = inn1.overs;
+          } else {
+            if (directInput.runsB === undefined) directInput.runsB = inn1.runs;
+            if (directInput.wicketsB === undefined) directInput.wicketsB = inn1.wickets;
+            if (!directInput.oversB) directInput.oversB = inn1.overs;
+          }
+        }
+        if (inn2) {
+          if (isTeamAInn1) {
+            if (directInput.runsB === undefined) directInput.runsB = inn2.runs;
+            if (directInput.wicketsB === undefined) directInput.wicketsB = inn2.wickets;
+            if (!directInput.oversB) directInput.oversB = inn2.overs;
+          } else {
+            if (directInput.runsA === undefined) directInput.runsA = inn2.runs;
+            if (directInput.wicketsA === undefined) directInput.wicketsA = inn2.wickets;
+            if (!directInput.oversA) directInput.oversA = inn2.overs;
+          }
+        }
+      }
+
       const hasDirectScores = directInput.runsA !== undefined || directInput.runsB !== undefined;
       const currentDetails = extractCricketDetails(
         hasDirectScores ? directInput : targetMatch.score,
@@ -3483,10 +3908,36 @@ const tournamentController = {
         ...(decidedBy === 'tiebreak' && tiebreakNote ? { tiebreak: String(tiebreakNote).slice(0, 120) } : {}),
       };
 
+      // Calculate player performances & match awards
+      if (targetMatch.liveCricket) {
+        const perfResult = cricketEngine.calculateMatchPerformances(targetMatch);
+        targetMatch.playerPerformances = perfResult.performances;
+        targetMatch.awards = perfResult.awards;
+      }
+
       let isTournamentFinal = false;
 
-      // Advance winner to next round match if one exists
-      if (targetMatch.nextMatchId) {
+      // Check if this is the 3rd Place Playoff match
+      if (targetMatch.isThirdPlaceMatch || targetMatch.id === 'match_3rd_place') {
+        bracket.thirdPlace = winningTeamObj;
+        bracket.fourthPlace = losingTeamObj;
+      } else if (targetMatch.nextMatchId) {
+        // If this is a semi-final and 4 cups are configured, route loser to 3rd place playoff
+        const isSemiFinal = targetMatch.roundNumber === (bracket.totalRounds - 1) || /semi/i.test(targetMatch.roundName || '');
+        if (isSemiFinal && Number(bracket.cupsCount) === 4) {
+          for (const round of bracket.rounds) {
+            const thirdMatch = (round.matches || []).find((m) => m.id === 'match_3rd_place' || m.isThirdPlaceMatch);
+            if (thirdMatch) {
+              const slot = targetMatch.nextMatchSlot || 'teamA';
+              thirdMatch[slot] = losingTeamObj;
+              if (thirdMatch.teamA && thirdMatch.teamB) {
+                thirdMatch.status = 'pending';
+              }
+              break;
+            }
+          }
+        }
+
         for (const round of bracket.rounds) {
           const nextMatch = (round.matches || []).find((m) => m.id === targetMatch.nextMatchId);
           if (nextMatch) {
@@ -3502,7 +3953,17 @@ const tournamentController = {
         isTournamentFinal = true;
         bracket.winner = winningTeamObj;
         bracket.runnerUp = losingTeamObj;
-        bracket.status = 'completed';
+        const thirdMatch = (bracket.rounds || []).flatMap((r) => r.matches || []).find((m) => m.isThirdPlaceMatch || m.id === 'match_3rd_place');
+        if (!thirdMatch || thirdMatch.status === 'completed') {
+          bracket.status = 'completed';
+        }
+      }
+
+      // Compute overall tournament awards and final leaderboards
+      try {
+        bracket.tournamentLeaders = cricketEngine.calculateTournamentLeaders({ bracket });
+      } catch (leaderErr) {
+        console.warn('calculateTournamentLeaders error in confirmMatchWinner:', leaderErr.message);
       }
 
       const updated = await prisma.tournament.update({

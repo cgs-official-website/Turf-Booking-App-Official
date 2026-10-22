@@ -66,6 +66,8 @@ const CreateTournamentScreen = ({ navigation, route }) => {
   const [numberOfTeams, setNumberOfTeams] = useState('8');
   const [playersPerTeam, setPlayersPerTeam] = useState('11');
   const [oversPerTeam, setOversPerTeam] = useState('10');
+  const [cupsCount, setCupsCount] = useState(1); // 1, 2, or 4 Cups
+  const [prizePool, setPrizePool] = useState('');
 
   // Date Pickers state
   const [showRegStartDatePicker, setShowRegStartDatePicker] = useState(false);
@@ -181,6 +183,11 @@ const CreateTournamentScreen = ({ navigation, route }) => {
         numberOfTeams: parseInt(numberOfTeams, 10),
         playersPerTeam: parseInt(playersPerTeam, 10),
         oversPerTeam: isCricket ? parseInt(oversPerTeam, 10) : null,
+        prizePool: prizePool ? Number(prizePool) : 0,
+        prizeDetails: {
+          cupsCount: Number(cupsCount) || 1,
+          structure: cupsCount === 4 ? '1st, 2nd, 3rd & 4th Cups + Playoff' : (cupsCount === 2 ? 'Winner & Runner-up Cups' : 'Champion Cup'),
+        },
         status: publishImmediately ? 'published' : 'draft',
       };
 
@@ -655,6 +662,109 @@ const CreateTournamentScreen = ({ navigation, route }) => {
           )}
         </View>
 
+        {/* Section: Tournament Prizes & Cups */}
+        <View style={[styles.formCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>Tournament Prizes & Cups</Text>
+          <Text style={[styles.sectionSubHeading, { color: colors.textSecondary }]}>
+            Configure trophies and cups awarded to tournament finalists
+          </Text>
+
+          <View style={styles.cupsOptionsContainer}>
+            {/* 1 Cup */}
+            <TouchableOpacity
+              style={[
+                styles.cupCard,
+                {
+                  backgroundColor: cupsCount === 1 ? (isDark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7') : colors.inputBg,
+                  borderColor: cupsCount === 1 ? '#D97706' : colors.border,
+                },
+              ]}
+              onPress={() => setCupsCount(1)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cupEmoji}>🏆</Text>
+              <Text style={[styles.cupCardTitle, { color: colors.text }]}>1 Cup</Text>
+              <Text style={[styles.cupCardSubtitle, { color: colors.textSecondary }]}>Champion</Text>
+              <View style={[styles.cupBadge, { backgroundColor: cupsCount === 1 ? '#D97706' : 'transparent' }]}>
+                {cupsCount === 1 && <Feather name="check" size={10} color="#FFFFFF" />}
+              </View>
+            </TouchableOpacity>
+
+            {/* 2 Cups */}
+            <TouchableOpacity
+              style={[
+                styles.cupCard,
+                {
+                  backgroundColor: cupsCount === 2 ? (isDark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7') : colors.inputBg,
+                  borderColor: cupsCount === 2 ? '#D97706' : colors.border,
+                },
+              ]}
+              onPress={() => setCupsCount(2)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cupEmoji}>🏆🥈</Text>
+              <Text style={[styles.cupCardTitle, { color: colors.text }]}>2 Cups</Text>
+              <Text style={[styles.cupCardSubtitle, { color: colors.textSecondary }]}>Winner + Runner-up</Text>
+              <View style={[styles.cupBadge, { backgroundColor: cupsCount === 2 ? '#D97706' : 'transparent' }]}>
+                {cupsCount === 2 && <Feather name="check" size={10} color="#FFFFFF" />}
+              </View>
+            </TouchableOpacity>
+
+            {/* 4 Cups */}
+            <TouchableOpacity
+              style={[
+                styles.cupCard,
+                {
+                  backgroundColor: cupsCount === 4 ? (isDark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7') : colors.inputBg,
+                  borderColor: cupsCount === 4 ? '#D97706' : colors.border,
+                },
+              ]}
+              onPress={() => setCupsCount(4)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cupEmoji}>🏆🥈🥉🎖️</Text>
+              <Text style={[styles.cupCardTitle, { color: colors.text }]}>4 Cups</Text>
+              <Text style={[styles.cupCardSubtitle, { color: colors.textSecondary }]}>1st + 2nd + 3rd + 4th</Text>
+              <View style={[styles.cupBadge, { backgroundColor: cupsCount === 4 ? '#D97706' : 'transparent' }]}>
+                {cupsCount === 4 && <Feather name="check" size={10} color="#FFFFFF" />}
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {cupsCount === 4 && (
+            <View style={[styles.playoffInfoBox, { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.12)' : '#EFF6FF', borderColor: isDark ? '#1E3A8A' : '#BFDBFE' }]}>
+              <Feather name="info" size={14} color="#3B82F6" style={{ marginRight: 6, marginTop: 1 }} />
+              <Text style={[styles.playoffInfoText, { color: isDark ? '#93C5FD' : '#1E40AF' }]}>
+                A 3rd Place Playoff fixture will automatically be scheduled between Semi-Final losers to decide 3rd and 4th place cups!
+              </Text>
+            </View>
+          )}
+
+          {/* Cash Prize Pool Input */}
+          <Text style={[styles.fieldLabel, { color: colors.text, marginTop: 14 }]}>Total Cash Prize Pool (Optional)</Text>
+          <View
+            style={[
+              styles.inputWrap,
+              {
+                backgroundColor: colors.inputBg,
+                borderColor: focusedField === 'prizePool' ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text style={{ color: colors.textSecondary, fontWeight: '700', marginRight: 6, fontSize: 16 }}>₹</Text>
+            <TextInput
+              style={[styles.input, { color: colors.text }]}
+              placeholder="e.g. 25000"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="numeric"
+              value={prizePool}
+              onChangeText={(text) => setPrizePool(text.replace(/[^0-9]/g, ''))}
+              onFocus={() => setFocusedField('prizePool')}
+              onBlur={() => setFocusedField(null)}
+            />
+          </View>
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.actionContainer}>
           <TouchableOpacity
@@ -862,6 +972,60 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: SIZES.sm + 1,
     fontWeight: '700',
+  },
+  cupsOptionsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  cupCard: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 10,
+    alignItems: 'center',
+    position: 'relative',
+    minHeight: 104,
+    justifyContent: 'center',
+  },
+  cupEmoji: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  cupCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  cupCardSubtitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  cupBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playoffInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  playoffInfoText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
   },
 });
 

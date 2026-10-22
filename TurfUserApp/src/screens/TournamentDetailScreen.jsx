@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,13 @@ import {
   acceptTournamentRegistrationApi,
   rejectTournamentRegistrationApi,
 } from '../api/tournaments';
+import LiveScoreboardModal from '../components/LiveScoreboardModal';
+import PlayerPerformanceModal from '../components/PlayerPerformanceModal';
+import ScheduleSelectorModal from '../components/ScheduleSelectorModal';
+import MatchSetupWizardModal from '../components/MatchSetupWizardModal';
+import CricketScorerModal from '../components/CricketScorerModal';
+import TournamentAwardsLeaderboardsModal from '../components/TournamentAwardsLeaderboardsModal';
+import { calculateTournamentLeaders } from '../utils/cricketScorerEngine';
 
 const DEFAULT_SPORT_IMAGES = {
   Cricket: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=800',
@@ -73,6 +80,36 @@ export function getMatchCricketScore(match) {
   let runsB = score.runsB !== undefined && score.runsB !== null ? Number(score.runsB) : null;
   let wicketsB = score.wicketsB !== undefined && score.wicketsB !== null ? Number(score.wicketsB) : null;
   let oversB = score.oversB !== undefined && score.oversB !== null && score.oversB !== '' ? String(score.oversB) : null;
+
+  // Read directly from liveCricket if present
+  if (match?.liveCricket) {
+    const lc = match.liveCricket;
+    const inn1 = lc.innings1;
+    const inn2 = lc.innings2;
+    const isTeamAInn1 = inn1 && inn1.battingTeamId === match.teamA?.id;
+    if (inn1) {
+      if (isTeamAInn1) {
+        if (runsA === null) runsA = inn1.runs;
+        if (wicketsA === null) wicketsA = inn1.wickets;
+        if (!oversA || oversA === '0.0') oversA = inn1.overs;
+      } else {
+        if (runsB === null) runsB = inn1.runs;
+        if (wicketsB === null) wicketsB = inn1.wickets;
+        if (!oversB || oversB === '0.0') oversB = inn1.overs;
+      }
+    }
+    if (inn2) {
+      if (isTeamAInn1) {
+        if (runsB === null) runsB = inn2.runs;
+        if (wicketsB === null) wicketsB = inn2.wickets;
+        if (!oversB || oversB === '0.0') oversB = inn2.overs;
+      } else {
+        if (runsA === null) runsA = inn2.runs;
+        if (wicketsA === null) wicketsA = inn2.wickets;
+        if (!oversA || oversA === '0.0') oversA = inn2.overs;
+      }
+    }
+  }
 
   if (runsA === null && score.teamA) {
     const m = String(score.teamA).match(/^(\d+)(?:\s*\/\s*(\d+))?(?:\s*\(?([\d.]+)\s*(?:ov|overs)?\)?)?/i);
@@ -179,11 +216,55 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [winnerTeamId, setWinnerTeamId] = useState('');
   const [tiebreakNoteInput, setTiebreakNoteInput] = useState('Super Over');
 
+  // Professional Cricket Flow Modals State
+  const [selectedMatchForLiveBoard, setSelectedMatchForLiveBoard] = useState(null);
+  const [selectedMatchForPerformance, setSelectedMatchForPerformance] = useState(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [setupMatch, setSetupMatch] = useState(null);
+  const [liveScorerMatch, setLiveScorerMatch] = useState(null);
+  const [showLeaderboardsModal, setShowLeaderboardsModal] = useState(false);
+
+  const tournamentLeaders = useMemo(() => {
+    return calculateTournamentLeaders(tournament);
+  }, [tournament]);
+
+  const currentLiveBoardMatch = useMemo(() => {
+    if (!selectedMatchForLiveBoard) return null;
+    const matchId = selectedMatchForLiveBoard.id;
+    const rounds = tournament?.bracket?.rounds || [];
+    for (const r of rounds) {
+      const found = (r.matches || []).find((m) => m.id === matchId);
+      if (found) return found;
+    }
+    if (tournament?.matches && Array.isArray(tournament.matches)) {
+      const found = tournament.matches.find((m) => m.id === matchId);
+      if (found) return found;
+    }
+    return selectedMatchForLiveBoard;
+  }, [selectedMatchForLiveBoard, tournament]);
+
+  const currentPerformanceMatch = useMemo(() => {
+    if (!selectedMatchForPerformance) return null;
+    const matchId = selectedMatchForPerformance.id;
+    const rounds = tournament?.bracket?.rounds || [];
+    for (const r of rounds) {
+      const found = (r.matches || []).find((m) => m.id === matchId);
+      if (found) return found;
+    }
+    if (tournament?.matches && Array.isArray(tournament.matches)) {
+      const found = tournament.matches.find((m) => m.id === matchId);
+      if (found) return found;
+    }
+    return selectedMatchForPerformance;
+  }, [selectedMatchForPerformance, tournament]);
+
   // Team Registration Approval State (Tournament Creator Only)
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [selectedTeamForReject, setSelectedTeamForReject] = useState(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [processingRegId, setProcessingRegId] = useState(null);
+
+  const pollSeqRef = React.useRef(0);
 
   const loadDetails = useCallback(async () => {
     if (!targetId) {
@@ -191,6 +272,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
       setLoading(false);
       return;
     }
+    const currentSeq = ++pollSeqRef.current;
     // Only show the full-screen spinner when we have nothing to show yet.
     // Re-fetches (focus / pull-to-refresh / live polling) update silently.
     setLoading((prev) => (tournamentRef.current ? false : true));
@@ -208,13 +290,23 @@ export default function TournamentDetailScreen({ route, navigation }) {
           console.warn('Failed to resolve tournament:', shareErr.message);
         }
       }
-      setTournament(data || null);
+
+      // Ignore stale responses if a newer request has started
+      if (currentSeq !== pollSeqRef.current) return;
+
+      if (data) {
+        setTournament(data);
+      }
     } catch (err) {
       console.warn('Failed to load tournament detail:', err.message);
-      setTournament(null);
+      if (!tournamentRef.current) {
+        setTournament(null);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (currentSeq === pollSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [targetId]);
 
@@ -224,14 +316,17 @@ export default function TournamentDetailScreen({ route, navigation }) {
     tournamentRef.current = tournament;
   }, [tournament]);
 
-  // Single fetch on mount/focus (previously mount fired TWO identical requests),
-  // plus a light 20s poll while a bracket exists so live scores appear for users.
+  // Single fetch on mount/focus, plus responsive polling for live scores
   useFocusEffect(
     useCallback(() => {
       loadDetails();
+      const isEnded = tournamentRef.current?.status === 'completed' || tournamentRef.current?.bracket?.status === 'completed';
+      const pollDelay = isEnded ? 15000 : 3000;
       const timer = setInterval(() => {
-        if (tournamentRef.current?.bracket) loadDetails();
-      }, 20000);
+        if (tournamentRef.current) {
+          loadDetails();
+        }
+      }, pollDelay);
       return () => clearInterval(timer);
     }, [loadDetails])
   );
@@ -533,6 +628,77 @@ export default function TournamentDetailScreen({ route, navigation }) {
         },
       ]
     );
+  };
+
+  const handleAutoSchedule = async (cups) => {
+    setBracketActionLoading(true);
+    try {
+      const res = await generateBracketApi(tournament.id, { scheduleType: 'auto', force: true, cupsCount: cups });
+      const updated = res?.tournament || res?.data?.tournament;
+      if (updated) setTournament(updated);
+      setShowScheduleModal(false);
+      Alert.alert('Knockout Draw Ready ⚡', 'Rounds generated successfully.');
+    } catch (err) {
+      Alert.alert('Scheduling Error', err.message || 'Failed to generate schedule.');
+    } finally {
+      setBracketActionLoading(false);
+    }
+  };
+
+  const handleManualSchedule = async (fixtureData) => {
+    setBracketActionLoading(true);
+    try {
+      const res = await generateBracketApi(tournament.id, {
+        scheduleType: 'manual',
+        manualAction: 'create_match',
+        roundName: fixtureData.roundName,
+        teamAId: fixtureData.teamAId,
+        teamBId: fixtureData.teamBId,
+        cupsCount: tournament?.prizeDetails?.cupsCount || 1,
+      });
+      const updated = res?.tournament || res?.data?.tournament;
+      if (updated) setTournament(updated);
+      setShowScheduleModal(false);
+      Alert.alert('Fixture Scheduled 📅', 'Match added to the tournament schedule.');
+    } catch (err) {
+      Alert.alert('Scheduling Error', err.message || 'Failed to schedule fixture.');
+    } finally {
+      setBracketActionLoading(false);
+    }
+  };
+
+  const handleStartMatchSetup = async (setupPayload) => {
+    setBracketActionLoading(true);
+    try {
+      const res = await conductMatchTossApi(tournament.id, setupMatch.id, setupPayload);
+      const updated = res?.tournament || res?.data?.tournament;
+      if (updated) setTournament(updated);
+      const updatedMatch = res?.match || setupMatch;
+      setSetupMatch(null);
+      setLiveScorerMatch(updatedMatch);
+    } catch (err) {
+      Alert.alert('Setup Failed', err.message || 'Failed to start match');
+    } finally {
+      setBracketActionLoading(false);
+    }
+  };
+
+  const handleSyncLiveCricket = async (liveCricket) => {
+    if (!liveScorerMatch) return;
+    try {
+      const res = await updateMatchScoreApi(tournament.id, liveScorerMatch.id, {
+        liveCricket,
+        status: 'live',
+      });
+      const updatedMatch = res?.match || res?.data?.match;
+      if (updatedMatch) {
+        setLiveScorerMatch(updatedMatch);
+      }
+      const updated = res?.tournament || res?.data?.tournament;
+      if (updated) setTournament(updated);
+    } catch (err) {
+      console.warn('Sync live cricket error:', err.message);
+    }
   };
 
   const handleOpenTossModal = (match) => {
@@ -1573,6 +1739,60 @@ export default function TournamentDetailScreen({ route, navigation }) {
             })()}
           </View>
         )}
+
+        {/* ── Matches & Scoring (Tournament Management Suite) ── */}
+        {tournament.status === 'published' && (
+          <TouchableOpacity
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: C.card,
+                borderColor: '#0F766E',
+                borderWidth: 1.5,
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+              },
+              SHADOW.card,
+            ]}
+            onPress={() => navigation.navigate('TournamentMatches', { tournamentId: tournament.id })}
+            activeOpacity={0.85}
+          >
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: 'rgba(15, 118, 110, 0.15)',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+              }}
+            >
+              <Feather name="activity" size={22} color="#0F766E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: C.text }}>
+                  Matches & Scoring
+                </Text>
+                {isCreator && (
+                  <View style={{ backgroundColor: '#0F766E', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>ORGANIZER</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={{ color: C.subtext, fontSize: 12 }}>
+                {isCreator
+                  ? 'Generate fixtures, toss, enter live scores & declare winners ➔'
+                  : 'View fixtures, live ball-by-ball scorecards & awards ➔'}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={22} color="#0F766E" />
+          </TouchableOpacity>
+        )}
+
         {/* ── Tournament Bracket & Matches Section ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
           <View style={styles.sectionHeaderRow}>
@@ -1590,8 +1810,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
               </Text>
             </View>
 
-            {/* Access Role Badge */}
-            <View
+            {/* Access Role Badge / Manage Button */}
+            <TouchableOpacity
               style={[
                 styles.bracketRoleBadge,
                 {
@@ -1601,6 +1821,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   borderColor: isCreator ? '#0F766E' : '#94A3B8',
                 },
               ]}
+              onPress={() => navigation.navigate('TournamentMatches', { tournamentId: tournament.id })}
+              activeOpacity={0.8}
             >
               <Text
                 style={[
@@ -1608,9 +1830,9 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   { color: isCreator ? '#0F766E' : '#64748B' },
                 ]}
               >
-                {isCreator ? '👑 MANAGER ACCESS' : '👁️ VIEW ONLY'}
+                {isCreator ? '👑 MANAGE ➔' : '👁️ FULL VIEW ➔'}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* ── Champion Crown Banner (If Tournament Won) ── */}
@@ -1630,6 +1852,252 @@ export default function TournamentDetailScreen({ route, navigation }) {
             </View>
           )}
 
+          {/* ── Compact Awards & Leaders Section ── */}
+          <View style={[styles.awardsSectionCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <View style={styles.awardsSectionHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 18, marginRight: 6 }}>🏆</Text>
+                  <Text style={[styles.awardsSectionTitle, { color: C.text }]}>
+                    Awards & Leaderboards
+                  </Text>
+                </View>
+                <Text style={[styles.awardsSectionSub, { color: C.subtext }]}>
+                  {tournamentLeaders.isFinalized
+                    ? 'Official tournament honors & overall rankings'
+                    : 'Current tournament standings & top performers'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.viewLeaderboardsBtn, { backgroundColor: '#0F766E' }]}
+                onPress={() => setShowLeaderboardsModal(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.viewLeaderboardsBtnText}>All Boards ➔</Text>
+              </TouchableOpacity>
+            </View>
+
+            {tournamentLeaders.allPlayers.length > 0 ? (
+              <>
+                {/* Featured MVP / Player of Tournament */}
+                {Boolean(tournamentLeaders.awards?.playerOfTournament) && (
+                  <TouchableOpacity
+                    style={[styles.mvpHighlightCard, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.12)' : '#FEF3C7', borderColor: '#F59E0B' }]}
+                    onPress={() => {
+                      const pot = tournamentLeaders.awards.playerOfTournament;
+                      Alert.alert(
+                        `👑 Player of the Tournament: ${pot.name}`,
+                        `Team: ${pot.teamName}\n` +
+                        `• Performance Rating: ${pot.grade} (${pot.impactScore} pts)\n` +
+                        `• Total Runs: ${pot.runs} (SR: ${pot.strikeRate})\n` +
+                        `• Total Wickets: ${pot.wickets} (Econ: ${pot.economy})\n` +
+                        `• Fielding Dismissals: ${pot.fieldingDismissals}` +
+                        (tournament.prizeDetails?.playerOfTournamentPrize ? `\n• Official Prize: 🎁 ${tournament.prizeDetails.playerOfTournamentPrize}` : '')
+                      );
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.mvpBadgeCircle}>
+                      <Text style={{ fontSize: 22 }}>👑</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Text style={styles.mvpCategoryLabel}>
+                          {tournamentLeaders.isFinalized ? 'PLAYER OF THE TOURNAMENT' : 'CURRENT TOURNAMENT MVP'}
+                        </Text>
+                        <View style={[styles.ratingPill, { backgroundColor: '#10B981' }]}>
+                          <Text style={styles.ratingPillText}>{tournamentLeaders.awards.playerOfTournament.grade} • {tournamentLeaders.awards.playerOfTournament.impactScore} pts</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.mvpPlayerName, { color: C.text }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.playerOfTournament.name}
+                      </Text>
+                      <Text style={[styles.mvpTeamText, { color: C.subtext }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.playerOfTournament.teamName} • {tournamentLeaders.awards.playerOfTournament.runs} runs, {tournamentLeaders.awards.playerOfTournament.wickets} wkts
+                      </Text>
+                      {Boolean(tournament.prizeDetails?.playerOfTournamentPrize) && (
+                        <View style={styles.awardPrizePill}>
+                          <Text style={styles.awardPrizeText}>🎁 Prize: {tournament.prizeDetails.playerOfTournamentPrize}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {/* Horizontal Scroll for other Awards */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.awardsCardsRow}>
+                  {/* Best Batter */}
+                  {Boolean(tournamentLeaders.awards?.bestBatter) && (
+                    <TouchableOpacity
+                      style={[styles.compactAwardCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                      onPress={() => {
+                        const bb = tournamentLeaders.awards.bestBatter;
+                        Alert.alert(
+                          `🏏 Best Batter: ${bb.name}`,
+                          `Team: ${bb.teamName}\n` +
+                          `• Runs: ${bb.runs} (${bb.balls} balls)\n` +
+                          `• Strike Rate: ${bb.strikeRate}\n` +
+                          `• Boundaries: 4s: ${bb.fours} | 6s: ${bb.sixes}\n` +
+                          `• Rating: ${bb.grade}` +
+                          (tournament.prizeDetails?.bestBatterPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestBatterPrize}` : '')
+                        );
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.compactAwardHeader}>
+                        <Text style={{ fontSize: 16 }}>🏏</Text>
+                        <Text style={[styles.compactAwardTitle, { color: '#D97706' }]}>BEST BATTER</Text>
+                      </View>
+                      <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestBatter.name}
+                      </Text>
+                      <Text style={[styles.compactAwardTeam, { color: C.subtext }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestBatter.teamName}
+                      </Text>
+                      <Text style={[styles.compactAwardStat, { color: C.primary }]}>
+                        {tournamentLeaders.awards.bestBatter.runs} Runs <Text style={{ fontSize: 10, color: C.subtext }}>({tournamentLeaders.awards.bestBatter.strikeRate} SR)</Text>
+                      </Text>
+                      {Boolean(tournament.prizeDetails?.bestBatterPrize) && (
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestBatterPrize}</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Best Bowler */}
+                  {Boolean(tournamentLeaders.awards?.bestBowler) && (
+                    <TouchableOpacity
+                      style={[styles.compactAwardCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                      onPress={() => {
+                        const bw = tournamentLeaders.awards.bestBowler;
+                        Alert.alert(
+                          `🎯 Best Bowler: ${bw.name}`,
+                          `Team: ${bw.teamName}\n` +
+                          `• Wickets: ${bw.wickets} in ${bw.overs} ov\n` +
+                          `• Economy: ${bw.economy}\n` +
+                          `• Runs Conceded: ${bw.bowlingRuns}\n` +
+                          `• Maidens: ${bw.maidens}\n` +
+                          `• Rating: ${bw.grade}` +
+                          (tournament.prizeDetails?.bestBowlerPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestBowlerPrize}` : '')
+                        );
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.compactAwardHeader}>
+                        <Text style={{ fontSize: 16 }}>🎯</Text>
+                        <Text style={[styles.compactAwardTitle, { color: '#7C3AED' }]}>BEST BOWLER</Text>
+                      </View>
+                      <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestBowler.name}
+                      </Text>
+                      <Text style={[styles.compactAwardTeam, { color: C.subtext }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestBowler.teamName}
+                      </Text>
+                      <Text style={[styles.compactAwardStat, { color: '#7C3AED' }]}>
+                        {tournamentLeaders.awards.bestBowler.wickets} Wkts <Text style={{ fontSize: 10, color: C.subtext }}>({tournamentLeaders.awards.bestBowler.economy} Econ)</Text>
+                      </Text>
+                      {Boolean(tournament.prizeDetails?.bestBowlerPrize) && (
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestBowlerPrize}</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Best All-Rounder */}
+                  {Boolean(tournamentLeaders.awards?.bestAllRounder) && (
+                    <TouchableOpacity
+                      style={[styles.compactAwardCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                      onPress={() => {
+                        const ar = tournamentLeaders.awards.bestAllRounder;
+                        Alert.alert(
+                          `⚡ Best All-Rounder: ${ar.name}`,
+                          `Team: ${ar.teamName}\n` +
+                          `• Batting: ${ar.runs} runs (${ar.strikeRate} SR)\n` +
+                          `• Bowling: ${ar.wickets} wkts (${ar.economy} Econ)\n` +
+                          `• Rating: ${ar.grade} (${ar.impactScore} pts)` +
+                          (tournament.prizeDetails?.bestAllRounderPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestAllRounderPrize}` : '')
+                        );
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.compactAwardHeader}>
+                        <Text style={{ fontSize: 16 }}>⚡</Text>
+                        <Text style={[styles.compactAwardTitle, { color: '#059669' }]}>ALL-ROUNDER</Text>
+                      </View>
+                      <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestAllRounder.name}
+                      </Text>
+                      <Text style={[styles.compactAwardTeam, { color: C.subtext }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestAllRounder.teamName}
+                      </Text>
+                      <Text style={[styles.compactAwardStat, { color: '#059669' }]}>
+                        {tournamentLeaders.awards.bestAllRounder.runs}r • {tournamentLeaders.awards.bestAllRounder.wickets}w
+                      </Text>
+                      {Boolean(tournament.prizeDetails?.bestAllRounderPrize) && (
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestAllRounderPrize}</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Best Fielder */}
+                  {Boolean(tournamentLeaders.awards?.bestFielder) && (
+                    <TouchableOpacity
+                      style={[styles.compactAwardCard, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+                      onPress={() => {
+                        const f = tournamentLeaders.awards.bestFielder;
+                        Alert.alert(
+                          `🧤 Best Fielder: ${f.name}`,
+                          `Team: ${f.teamName}\n` +
+                          `• Catches: ${f.catches}\n` +
+                          `• Run-Outs: ${f.runOuts}\n` +
+                          `• Stumpings: ${f.stumpings}\n` +
+                          `• Total Dismissals: ${f.fieldingDismissals}` +
+                          (tournament.prizeDetails?.bestFielderPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestFielderPrize}` : '')
+                        );
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.compactAwardHeader}>
+                        <Text style={{ fontSize: 16 }}>🧤</Text>
+                        <Text style={[styles.compactAwardTitle, { color: '#0284C7' }]}>BEST FIELDER</Text>
+                      </View>
+                      <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestFielder.name}
+                      </Text>
+                      <Text style={[styles.compactAwardTeam, { color: C.subtext }]} numberOfLines={1}>
+                        {tournamentLeaders.awards.bestFielder.teamName}
+                      </Text>
+                      <Text style={[styles.compactAwardStat, { color: '#0284C7' }]}>
+                        {tournamentLeaders.awards.bestFielder.fieldingDismissals} Dismissals
+                      </Text>
+                      {Boolean(tournament.prizeDetails?.bestFielderPrize) && (
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestFielderPrize}</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
+              </>
+            ) : (
+              <View style={[styles.emptyAwardsNotice, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+                <Text style={{ fontSize: 24, marginBottom: 4 }}>🏅</Text>
+                <Text style={[styles.emptyAwardsTitle, { color: C.text }]}>Leaderboards & Standings Pending</Text>
+                <Text style={[styles.emptyAwardsSub, { color: C.subtext }]}>
+                  Awards and leaderboards (Runs, Wickets, SR, Economy, Fours, Sixes & Fielding) will update automatically as matches are played.
+                </Text>
+              </View>
+            )}
+
+            {/* Bottom Button to open full modal */}
+            <TouchableOpacity
+              style={[styles.openLeaderboardsBtn, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+              onPress={() => setShowLeaderboardsModal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.openLeaderboardsBtnText, { color: C.primary }]}>
+                View Complete Tournament Leaderboards 📊
+              </Text>
+              <Feather name="chevron-right" size={16} color={C.primary} />
+            </TouchableOpacity>
+          </View>
+
           {/* ── Bracket Not Yet Generated ── */}
           {!tournament.bracket || !Array.isArray(tournament.bracket.rounds) ? (
             <View style={[styles.bracketEmptyWrap, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
@@ -1639,45 +2107,85 @@ export default function TournamentDetailScreen({ route, navigation }) {
                     <Ionicons name="git-branch" size={28} color="#0F766E" />
                   </View>
                   <Text style={[styles.bracketEmptyTitle, { color: C.text }]}>
-                    Generate Knockout Bracket
+                    How do you want to schedule?
                   </Text>
                   <Text style={[styles.bracketEmptyDesc, { color: C.subtext }]}>
-                    As the Tournament Creator & Manager, you alone control the match fixtures. Matches will be generated using ONLY accepted teams ({`${acceptedTeamsCount} accepted`}), not empty capacity slots.
+                    {acceptedTeamsCount} registered & accepted teams ready for action
                   </Text>
-
-                  {/* Accepted Teams Stats Pill */}
-                  <View style={[styles.acceptedTeamsStatPill, { backgroundColor: C.card, borderColor: C.border }]}>
-                    <Ionicons name="people" size={15} color="#0F766E" style={{ marginRight: 6 }} />
-                    <Text style={[styles.acceptedTeamsStatText, { color: C.text }]}>
-                      Accepted Teams: <Text style={{ fontWeight: '800', color: '#0F766E' }}>{acceptedTeamsCount}</Text> / {totalTeams}
-                    </Text>
-                  </View>
 
                   {acceptedTeamsCount < 2 ? (
                     <View style={[styles.insufficientTeamsCard, { backgroundColor: dark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB', borderColor: '#F59E0B' }]}>
                       <Feather name="alert-circle" size={16} color="#D97706" style={{ marginRight: 8 }} />
                       <Text style={[styles.insufficientTeamsText, { color: dark ? '#FCD34D' : '#92400E' }]}>
-                        At least 2 accepted teams are required to generate tournament match fixtures. Currently accepted: {acceptedTeamsCount}.
+                        At least 2 accepted teams are required to schedule tournament match fixtures. Currently accepted: {acceptedTeamsCount}.
                       </Text>
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      style={[styles.generateBracketBtn, { backgroundColor: '#0F766E' }, SHADOW.floating]}
-                      onPress={handleGenerateBracket}
-                      disabled={bracketActionLoading}
-                      activeOpacity={0.88}
-                    >
-                      {bracketActionLoading ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
-                      ) : (
-                        <>
-                          <Ionicons name="flash" size={17} color="#FFFFFF" style={{ marginRight: 8 }} />
-                          <Text style={styles.generateBracketBtnText}>
-                            Generate Matches & Bracket ({acceptedTeamsCount} Teams)
+                    <View style={{ width: '100%', gap: 10, marginTop: 10 }}>
+                      {/* AUTO CARD */}
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: 14,
+                          borderRadius: 14,
+                          borderWidth: 1.5,
+                          borderColor: '#10B981',
+                          backgroundColor: dark ? 'rgba(16, 185, 129, 0.08)' : '#ECFDF5',
+                        }}
+                        onPress={() => handleAutoSchedule(tournament.prizeDetails?.cupsCount || 1)}
+                        activeOpacity={0.85}
+                        disabled={bracketActionLoading}
+                      >
+                        <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                          <Feather name="shuffle" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '900', color: C.text }}>AUTO SCHEDULE</Text>
+                            <View style={{ backgroundColor: '#10B981', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                              <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>FAST</Text>
+                            </View>
+                          </View>
+                          <Text style={{ fontSize: 11, color: C.subtext, marginTop: 2 }}>
+                            Randomly pair accepted teams and generate correct rounds automatically.
                           </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
+                        </View>
+                        <Feather name="chevron-right" size={18} color="#10B981" />
+                      </TouchableOpacity>
+
+                      {/* MANUAL CARD */}
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: 14,
+                          borderRadius: 14,
+                          borderWidth: 1.5,
+                          borderColor: '#3B82F6',
+                          backgroundColor: dark ? 'rgba(59, 130, 246, 0.08)' : '#EFF6FF',
+                        }}
+                        onPress={() => setShowScheduleModal(true)}
+                        activeOpacity={0.85}
+                        disabled={bracketActionLoading}
+                      >
+                        <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#3B82F6', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                          <Feather name="edit-3" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '900', color: C.text }}>MANUAL SCHEDULE</Text>
+                            <View style={{ backgroundColor: '#3B82F6', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                              <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>CUSTOM</Text>
+                            </View>
+                          </View>
+                          <Text style={{ fontSize: 11, color: C.subtext, marginTop: 2 }}>
+                            Select round (League / QF / SF / Final) and pick Team A vs Team B from registered teams.
+                          </Text>
+                        </View>
+                        <Feather name="chevron-right" size={18} color="#3B82F6" />
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </>
               ) : (
@@ -1961,6 +2469,109 @@ export default function TournamentDetailScreen({ route, navigation }) {
                             </View>
                           )}
 
+                          {/* ── LIVE SCOREBOARD STRIP (BALL-BY-BALL) ── */}
+                          {isLive && match.liveCricket && (() => {
+                            const lc = match.liveCricket;
+                            const curInn = (lc.currentInnings === 2 && lc.innings2) ? lc.innings2 : lc.innings1;
+                            if (!curInn) return null;
+                            const striker = curInn.batters?.[curInn.currentStrikerId];
+                            const nonStriker = curInn.batters?.[curInn.currentNonStrikerId];
+                            const bowler = curInn.bowlers?.[curInn.currentBowlerId];
+                            const crrVal = (curInn.legalBalls > 0 && curInn.runs > 0) ? ((curInn.runs / (curInn.legalBalls / 6))).toFixed(2) : '0.00';
+                            return (
+                              <View style={{ marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: dark ? '#1E293B' : '#F8FAFC', borderWidth: 1, borderColor: '#EF4444' }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 6 }} />
+                                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#EF4444' }}>LIVE SCORECARD</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: C.subtext, marginLeft: 6 }}>
+                                      • CRR: {crrVal}
+                                    </Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: '#EF4444' }}
+                                    onPress={() => setSelectedMatchForLiveBoard(match)}
+                                  >
+                                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>Full Scorecard ⚡</Text>
+                                  </TouchableOpacity>
+                                </View>
+
+                                {/* Current Inning Score */}
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '800', color: C.text }} numberOfLines={1}>
+                                    {curInn.battingTeamName} {lc.currentInnings === 2 ? '(2nd Inn)' : '(1st Inn)'}
+                                  </Text>
+                                  <Text style={{ fontSize: 16, fontWeight: '900', color: '#EF4444' }}>
+                                    {curInn.runs}/{curInn.wickets} <Text style={{ fontSize: 12, fontWeight: '600', color: C.subtext }}>({curInn.overs} ov)</Text>
+                                  </Text>
+                                </View>
+
+                                {/* Batters: Striker & Non-Striker */}
+                                <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: C.border }}>
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: C.text, flex: 1 }} numberOfLines={1}>
+                                      🏏 {striker?.name || 'Striker'} * : <Text style={{ fontWeight: '800', color: C.primary }}>{striker?.runs || 0}</Text> ({striker?.balls || 0}b)
+                                    </Text>
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: C.subtext, flex: 1, textAlign: 'right' }} numberOfLines={1}>
+                                      {nonStriker?.name || 'Non-Striker'}: {nonStriker?.runs || 0} ({nonStriker?.balls || 0}b)
+                                    </Text>
+                                  </View>
+
+                                  {/* Bowler & This Over */}
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                                    <Text style={{ fontSize: 11, color: C.subtext, flex: 1 }} numberOfLines={1}>
+                                      🎯 {bowler?.name || 'Bowler'} • {bowler?.overs || '0.0'} ov, {bowler?.wickets || 0}w, {bowler?.runs || 0}r
+                                    </Text>
+                                  </View>
+
+                                  {/* Current Over Badges */}
+                                  {curInn.currentOverBalls && curInn.currentOverBalls.length > 0 && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                                      <Text style={{ fontSize: 10, fontWeight: '700', color: C.subtext, marginRight: 6 }}>THIS OVER:</Text>
+                                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 4 }}>
+                                        {curInn.currentOverBalls.map((b, bIdx) => (
+                                          <View
+                                            key={`live_b_${bIdx}`}
+                                            style={{
+                                              paddingHorizontal: 6,
+                                              paddingVertical: 2,
+                                              borderRadius: 4,
+                                              backgroundColor: b.includes('W') ? '#EF4444' : ((b === '4' || b === '6') ? '#10B981' : ((b.includes('WD') || b.includes('NB')) ? '#F59E0B' : (dark ? '#334155' : '#E2E8F0'))),
+                                            }}
+                                          >
+                                            <Text style={{ fontSize: 10, fontWeight: '800', color: (b.includes('W') || b === '4' || b === '6') ? '#FFFFFF' : C.text }}>
+                                              {b}
+                                            </Text>
+                                          </View>
+                                        ))}
+                                      </ScrollView>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            );
+                          })()}
+
+                          {/* Full Scorecard & Player Ratings for Completed/Live matches */}
+                          {(isCompleted || isLive) && (
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                              <TouchableOpacity
+                                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: C.border }}
+                                onPress={() => setSelectedMatchForLiveBoard(match)}
+                              >
+                                <Feather name="bar-chart-2" size={13} color={C.text} style={{ marginRight: 4 }} />
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: C.text }}>Full Scorecard</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#D97706', backgroundColor: dark ? 'rgba(217, 119, 6, 0.12)' : '#FEF3C7' }}
+                                onPress={() => setSelectedMatchForPerformance(match)}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '800', color: dark ? '#FBBF24' : '#B45309' }}>🎖️ Player Ratings & Awards</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+
                           {/* ── CREATOR MANAGER CONTROLS ── */}
                           {isCreator && !isCompleted && hasBothTeams && (
                             <View style={[styles.managerControlsBar, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -1972,50 +2583,48 @@ export default function TournamentDetailScreen({ route, navigation }) {
                               </View>
 
                               <View style={styles.managerBtnsRow}>
-                                {/* Toss Control */}
-                                <TouchableOpacity
-                                  style={[styles.managerActionBtn, { borderColor: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.08)' }]}
-                                  onPress={() => handleOpenTossModal(match)}
-                                  activeOpacity={0.8}
-                                >
-                                  <Text style={{ fontSize: 13, marginRight: 4 }}>🪙</Text>
-                                  <Text style={[styles.managerActionBtnText, { color: '#B45309' }]}>
-                                    {match.toss ? 'Edit Toss' : 'Toss'}
-                                  </Text>
-                                </TouchableOpacity>
+                                {!isLive ? (
+                                  <TouchableOpacity
+                                    style={[styles.managerActionBtn, { backgroundColor: C.primary, borderColor: C.primary, flex: 2 }]}
+                                    onPress={() => setSetupMatch(match)}
+                                    activeOpacity={0.8}
+                                  >
+                                    <Feather name="play-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                                    <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
+                                      Setup & Start Match 🏏
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <>
+                                    <TouchableOpacity
+                                      style={[styles.managerActionBtn, { backgroundColor: '#EF4444', borderColor: '#EF4444', flex: 1.3 }]}
+                                      onPress={() => setLiveScorerMatch(match)}
+                                      activeOpacity={0.8}
+                                    >
+                                      <Feather name="edit-2" size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                                      <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
+                                        Live Scorer
+                                      </Text>
+                                    </TouchableOpacity>
 
-                                {/* Score Entry Control */}
-                                <TouchableOpacity
-                                  style={[styles.managerActionBtn, { borderColor: '#0284C7', backgroundColor: 'rgba(2, 132, 199, 0.08)' }]}
-                                  onPress={() => handleOpenScoreModal(match)}
-                                  activeOpacity={0.8}
-                                >
-                                  <Feather name="edit-3" size={13} color="#0284C7" style={{ marginRight: 4 }} />
-                                  <Text style={[styles.managerActionBtnText, { color: '#0284C7' }]}>
-                                    Update Score
-                                  </Text>
-                                </TouchableOpacity>
-
-                                {/* Finish Match Control */}
-                                <TouchableOpacity
-                                  style={[
-                                    styles.managerActionBtn,
-                                    {
-                                      backgroundColor: isMatchFinal ? '#D97706' : '#0F766E',
-                                      borderColor: isMatchFinal ? '#D97706' : '#0F766E',
-                                      flex: 1.3,
-                                    },
-                                  ]}
-                                  onPress={() => handleFinishMatch(match)}
-                                  activeOpacity={0.85}
-                                >
-                                  <Text style={{ fontSize: 13, marginRight: 4 }}>
-                                    {isMatchFinal ? '👑' : '🏁'}
-                                  </Text>
-                                  <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
-                                    {isMatchFinal ? 'Finish Final' : 'Finish Match'}
-                                  </Text>
-                                </TouchableOpacity>
+                                    <TouchableOpacity
+                                      style={[
+                                        styles.managerActionBtn,
+                                        {
+                                          backgroundColor: isMatchFinal ? '#D97706' : '#0F766E',
+                                          borderColor: isMatchFinal ? '#D97706' : '#0F766E',
+                                          flex: 1.2,
+                                        },
+                                      ]}
+                                      onPress={() => handleFinishMatch(match)}
+                                      activeOpacity={0.85}
+                                    >
+                                      <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
+                                        {isMatchFinal ? 'Finish Final 👑' : 'Finish Match 🏁'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </>
+                                )}
                               </View>
                             </View>
                           )}
@@ -2930,6 +3539,59 @@ export default function TournamentDetailScreen({ route, navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* ── Live Scoreboard Modal (All Users) ── */}
+      <LiveScoreboardModal
+        visible={Boolean(selectedMatchForLiveBoard)}
+        onClose={() => setSelectedMatchForLiveBoard(null)}
+        match={currentLiveBoardMatch}
+      />
+
+      {/* ── Player Performance & Awards Modal (All Users) ── */}
+      <PlayerPerformanceModal
+        visible={Boolean(selectedMatchForPerformance)}
+        onClose={() => setSelectedMatchForPerformance(null)}
+        match={currentPerformanceMatch}
+      />
+
+      {/* ── Schedule Selector Modal (Creator Only) ── */}
+      <ScheduleSelectorModal
+        visible={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        tournament={tournament}
+        acceptedTeams={tournament?.acceptedTeams || []}
+        onAutoSchedule={handleAutoSchedule}
+        onManualSchedule={handleManualSchedule}
+        busy={bracketActionLoading}
+      />
+
+      {/* ── Match Setup Wizard Modal (Creator Only) ── */}
+      <MatchSetupWizardModal
+        visible={Boolean(setupMatch)}
+        onClose={() => setSetupMatch(null)}
+        match={setupMatch}
+        tournament={tournament}
+        onStartMatch={handleStartMatchSetup}
+        busy={bracketActionLoading}
+      />
+
+      {/* ── Cricket Scorer Modal (Creator Only) ── */}
+      <CricketScorerModal
+        visible={Boolean(liveScorerMatch)}
+        onClose={() => setLiveScorerMatch(null)}
+        match={liveScorerMatch}
+        tournament={tournament}
+        onSyncLiveCricket={handleSyncLiveCricket}
+        onFinishMatch={() => handleFinishMatch(liveScorerMatch)}
+        busy={bracketActionLoading}
+      />
+
+      {/* ── Tournament Awards & Leaderboards Modal (All Users) ── */}
+      <TournamentAwardsLeaderboardsModal
+        visible={showLeaderboardsModal}
+        onClose={() => setShowLeaderboardsModal(false)}
+        tournament={tournament}
+      />
     </SafeAreaView>
   );
 }
@@ -4278,5 +4940,166 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  // Awards & Leaderboards compact section styles
+  awardsSectionCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+  },
+  awardsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  awardsSectionTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  awardsSectionSub: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  viewLeaderboardsBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  viewLeaderboardsBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  mvpHighlightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginBottom: 10,
+  },
+  mvpBadgeCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mvpCategoryLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#D97706',
+    letterSpacing: 0.5,
+  },
+  ratingPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  ratingPillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  mvpPlayerName: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  mvpTeamText: {
+    fontSize: 11,
+    marginTop: 1,
+    fontWeight: '500',
+  },
+  awardPrizePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FDE68A',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  awardPrizeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  awardsCardsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  compactAwardCard: {
+    width: 145,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  compactAwardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  compactAwardTitle: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  compactAwardPlayer: {
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  compactAwardTeam: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  compactAwardStat: {
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  compactAwardPrize: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#D97706',
+    marginTop: 3,
+  },
+  emptyAwardsNotice: {
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  emptyAwardsTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  emptyAwardsSub: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 15,
+  },
+  openLeaderboardsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  openLeaderboardsBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginRight: 4,
   },
 });

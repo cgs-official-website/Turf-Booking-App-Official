@@ -113,6 +113,8 @@ export default function CreateTournamentScreen({ route, navigation }) {
   const [numberOfTeams, setNumberOfTeams] = useState('8');
   const [playersPerTeam, setPlayersPerTeam] = useState('11');
   const [oversPerTeam, setOversPerTeam] = useState('10');
+  const [cupsCount, setCupsCount] = useState(1); // 1, 2, or 4 Cups
+  const [prizePool, setPrizePool] = useState('');
   const [description, setDescription] = useState('');
   const [rules, setRules] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
@@ -160,6 +162,8 @@ export default function CreateTournamentScreen({ route, navigation }) {
     if (t.numberOfTeams) setNumberOfTeams(String(t.numberOfTeams));
     if (t.playersPerTeam) setPlayersPerTeam(String(t.playersPerTeam));
     if (t.oversPerTeam) setOversPerTeam(String(t.oversPerTeam));
+    if (t.prizeDetails?.cupsCount) setCupsCount(Number(t.prizeDetails.cupsCount));
+    if (t.prizePool) setPrizePool(String(t.prizePool));
     setDescription(t.description || '');
     setRules(t.rules || '');
     setBannerUrl(t.bannerUrl || '');
@@ -637,6 +641,11 @@ export default function CreateTournamentScreen({ route, navigation }) {
         numberOfTeams: parseInt(numberOfTeams, 10),
         playersPerTeam: parseInt(playersPerTeam, 10),
         oversPerTeam: isCricket ? parseInt(oversPerTeam, 10) : null,
+        prizePool: prizePool ? Number(prizePool) : 0,
+        prizeDetails: {
+          cupsCount: Number(cupsCount) || 1,
+          structure: cupsCount === 4 ? '1st, 2nd, 3rd & 4th Cups + Playoff' : (cupsCount === 2 ? 'Winner & Runner-up Cups' : 'Champion Cup'),
+        },
         description: description.trim() || null,
         rules: rules.trim() || null,
         bannerUrl: bannerUrl.trim() || null,
@@ -1129,6 +1138,94 @@ export default function CreateTournamentScreen({ route, navigation }) {
             {errors.oversPerTeam ? <Text style={styles.errorText}>{errors.oversPerTeam}</Text> : null}
           </View>
         )}
+
+        {/* 5b. Tournament Prizes & Cups Configuration */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.inputLabel, { color: C.text }]}>Tournament Prizes & Cups</Text>
+          <Text style={{ fontSize: 12, color: C.subtext, marginBottom: 8, fontWeight: '500' }}>
+            Choose trophies awarded to the tournament finalists
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                borderWidth: 1.5,
+                borderColor: cupsCount === 1 ? '#D97706' : C.border,
+                backgroundColor: cupsCount === 1 ? (dark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7') : C.card,
+                borderRadius: 12,
+                padding: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 90,
+              }}
+              onPress={() => setCupsCount(1)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 20, marginBottom: 4 }}>🏆</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: C.text }}>1 Cup</Text>
+              <Text style={{ fontSize: 10, fontWeight: '600', color: C.subtext, marginTop: 2 }}>Champion</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                borderWidth: 1.5,
+                borderColor: cupsCount === 2 ? '#D97706' : C.border,
+                backgroundColor: cupsCount === 2 ? (dark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7') : C.card,
+                borderRadius: 12,
+                padding: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 90,
+              }}
+              onPress={() => setCupsCount(2)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 20, marginBottom: 4 }}>🏆🥈</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: C.text }}>2 Cups</Text>
+              <Text style={{ fontSize: 10, fontWeight: '600', color: C.subtext, marginTop: 2 }}>Winner + Runner</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                borderWidth: 1.5,
+                borderColor: cupsCount === 4 ? '#D97706' : C.border,
+                backgroundColor: cupsCount === 4 ? (dark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7') : C.card,
+                borderRadius: 12,
+                padding: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 90,
+              }}
+              onPress={() => setCupsCount(4)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 20, marginBottom: 4 }}>🏆🥈🥉🎖️</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: C.text }}>4 Cups</Text>
+              <Text style={{ fontSize: 10, fontWeight: '600', color: C.subtext, marginTop: 2 }}>1st, 2nd, 3rd, 4th</Text>
+            </TouchableOpacity>
+          </View>
+
+          {cupsCount === 4 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 8, backgroundColor: dark ? 'rgba(59, 130, 246, 0.12)' : '#EFF6FF', borderWidth: 1, borderColor: dark ? '#1E3A8A' : '#BFDBFE', marginTop: 8 }}>
+              <Ionicons name="information-circle-outline" size={16} color="#3B82F6" style={{ marginRight: 6 }} />
+              <Text style={{ flex: 1, fontSize: 11, fontWeight: '600', color: dark ? '#93C5FD' : '#1E40AF' }}>
+                A 3rd Place Playoff fixture will automatically be scheduled to decide 3rd and 4th place cups!
+              </Text>
+            </View>
+          )}
+
+          <Text style={[styles.inputLabel, { color: C.text, marginTop: 12 }]}>Prize Pool Amount (₹ Optional)</Text>
+          <TextInput
+            style={[styles.textInput, { backgroundColor: C.card, borderColor: C.border, color: C.text }]}
+            placeholder="e.g. 15000"
+            placeholderTextColor={C.subtext}
+            keyboardType="number-pad"
+            value={prizePool}
+            onChangeText={(t) => setPrizePool(t.replace(/[^0-9]/g, ''))}
+          />
+        </View>
 
         {/* 6. Optional: Description & Rules */}
         <View style={styles.inputGroup}>

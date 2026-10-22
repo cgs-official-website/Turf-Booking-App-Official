@@ -52,6 +52,11 @@ export default function NotificationsScreen({ navigation }) {
     BookingExpired: { icon: 'clock', iconBg: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' },
     BookingReminder: { icon: 'bell', iconBg: 'rgba(59, 130, 246, 0.12)', color: '#3B82F6' },
     MatchInvite: { icon: 'award', iconBg: 'rgba(168, 85, 247, 0.12)', color: '#A855F7' },
+    tournament: { icon: 'award', iconBg: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B' },
+    Tournament: { icon: 'award', iconBg: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B' },
+    tournament_created: { icon: 'award', iconBg: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B' },
+    tournament_registration: { icon: 'users', iconBg: 'rgba(59, 130, 246, 0.15)', color: '#3B82F6' },
+    bracket_generated: { icon: 'calendar', iconBg: 'rgba(16, 185, 129, 0.15)', color: '#10B981' },
     General: { icon: 'bell', iconBg: 'rgba(100, 116, 139, 0.12)', color: '#64748B' },
   };
 
@@ -86,7 +91,13 @@ export default function NotificationsScreen({ navigation }) {
     if (activeFilter === 'Bookings') {
       list = list.filter((n) => (n.type || '').toLowerCase().includes('booking'));
     } else if (activeFilter === 'Matches') {
-      list = list.filter((n) => (n.type || '').toLowerCase().includes('match'));
+      list = list.filter(
+        (n) =>
+          (n.type || '').toLowerCase().includes('match') ||
+          (n.type || '').toLowerCase().includes('tournament') ||
+          Boolean(n.data?.tournamentId) ||
+          Boolean(n.data?.action?.includes('bracket'))
+      );
     } else if (activeFilter === 'Unread') {
       list = list.filter((n) => !n.read);
     }
@@ -182,7 +193,8 @@ export default function NotificationsScreen({ navigation }) {
               {section.items.map((item, idx) => {
                 const notifId = item.id || item._id || item.notificationId || `notif_${idx}`;
                 const isLast = idx === section.items.length - 1;
-                const meta = TYPE_CONFIG[item.type] || TYPE_CONFIG.General;
+                const notifKey = item.data?.action || item.data?.type || item.type;
+                const meta = TYPE_CONFIG[notifKey] || TYPE_CONFIG[item.type] || TYPE_CONFIG.General;
 
                 return (
                   <TouchableOpacity
@@ -194,8 +206,16 @@ export default function NotificationsScreen({ navigation }) {
                     ]}
                     onPress={() => {
                       markRead(notifId);
-                      if (item.data?.bookingId) {
-                        navigation.navigate('BookingDetail', { bookingId: item.data.bookingId });
+                      const data = item.data || {};
+                      const tournamentId = data.tournamentId || data.id || (item.type === 'tournament' ? item.referenceId : null);
+                      if (tournamentId || data.screen === 'TournamentDetail' || data.type?.includes('tournament') || item.type === 'tournament' || data.action?.startsWith('tournament') || data.action === 'bracket_generated') {
+                        navigation.navigate('TournamentDetail', {
+                          tournamentId: tournamentId,
+                          id: tournamentId,
+                          tab: data.tab || (data.action === 'bracket_generated' ? 'bracket' : 'details'),
+                        });
+                      } else if (data.bookingId) {
+                        navigation.navigate('BookingDetail', { bookingId: data.bookingId });
                       }
                     }}
                     activeOpacity={0.75}

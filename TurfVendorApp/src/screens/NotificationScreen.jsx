@@ -216,8 +216,9 @@ const NotificationScreen = ({ navigation }) => {
 
     if (item.type === 'tournament' || item.data?.screen === 'TournamentDetail' || item.raw?.data?.screen === 'TournamentDetail') {
       const tournamentId = item.data?.tournamentId || item.data?.id || item.raw?.data?.tournamentId || item.raw?.data?.id;
+      const initialTab = item.data?.tab || item.raw?.data?.tab || (item.data?.action === 'tournament_registration' ? 'registrations' : undefined);
       if (tournamentId) {
-        navigation.navigate('TournamentDetail', { tournamentId });
+        navigation.navigate('TournamentDetail', { tournamentId, initialTab, tab: initialTab });
       } else {
         navigation.navigate('TournamentList');
       }

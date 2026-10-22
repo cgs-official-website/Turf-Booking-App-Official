@@ -132,10 +132,17 @@ export const fcmHelper = {
       navigate('BookingDetail', { bookingId, id: bookingId });
     } else if (type === 'match' && matchId) {
       navigate('Match', { matchId });
-    } else if (type === 'tournament' || payload.screen === 'TournamentDetail') {
+    } else if (
+      type === 'tournament' ||
+      payload.screen === 'TournamentDetail' ||
+      payload.tournamentId ||
+      payload.action?.startsWith?.('tournament') ||
+      payload.action === 'bracket_generated'
+    ) {
       const tournamentId = payload.tournamentId || payload.id;
+      const initialTab = payload.tab || (payload.action === 'bracket_generated' ? 'bracket' : 'details');
       if (tournamentId) {
-        navigate('TournamentDetail', { tournamentId, id: tournamentId });
+        navigate('TournamentDetail', { tournamentId, id: tournamentId, initialTab, tab: initialTab });
       } else {
         navigate('Tournament');
       }
@@ -234,6 +241,29 @@ export const fcmHelper = {
       })
       .catch((err) => console.warn('⚠️ getInitialNotification error:', err.message));
 
+    // 3b. Check native local notification launch / click if available
+    const checkLocalNotificationLaunch = () => {
+      try {
+        if (NativeModules.LocalNotificationModule?.getInitialNotification) {
+          NativeModules.LocalNotificationModule.getInitialNotification()
+            .then((localData) => {
+              if (localData && (localData.screen || localData.type || localData.tournamentId || localData.bookingId)) {
+                console.log('🚀 Native local notification tapped in TurfUserApp:', localData);
+                this.handleNotificationNavigation(navigationRef, localData);
+              }
+            })
+            .catch(() => {});
+        }
+      } catch {}
+    };
+
+    checkLocalNotificationLaunch();
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        checkLocalNotificationLaunch();
+      }
+    });
+
     // 4. Token refresh listener
     const unsubscribeOnTokenRefresh = this.setupTokenRefreshListener();
 
@@ -277,6 +307,7 @@ export const fcmHelper = {
     }, 10000);
 
     return () => {
+      appStateSub?.remove?.();
       clearInterval(pollInterval);
       unsubscribeOnMessage();
       unsubscribeOnNotificationOpenedApp();

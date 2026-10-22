@@ -74,7 +74,7 @@ class ApiClient {
 
   async fetchWithFallback(path, options = {}) {
     const urlsToTry = (IS_DEV
-      ? [LOCAL_URL, this.activeBaseUrl, ...CANDIDATE_URLS]
+      ? [this.activeBaseUrl, LOCAL_URL, ...CANDIDATE_URLS]
       : [this.activeBaseUrl, ...CANDIDATE_URLS]
     ).filter((v, i, a) => v && a.indexOf(v) === i);
 
@@ -87,8 +87,9 @@ class ApiClient {
       const baseUrl = urlsToTry[i];
       const controller = new AbortController();
       const isLocal = /^https?:\/\/(127\.|localhost|10\.|192\.168\.|172\.)/.test(baseUrl);
-      // Local/LAN hosts must fail fast (3s) in dev; Railway gets 30s (cold start safe)
-      const timeoutMs = isLocal ? 3000 : 30000;
+      const isConfirmedActive = Boolean(this.activeBaseUrl && baseUrl === this.activeBaseUrl);
+      // Confirmed active host gets 25s for heavy queries; untried local hosts fail fast (5s); Railway gets 30s
+      const timeoutMs = isConfirmedActive ? 25000 : isLocal ? 5000 : 30000;
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
