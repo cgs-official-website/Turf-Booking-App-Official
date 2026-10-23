@@ -1,0 +1,28 @@
+export const CRICKET_LIGHT = {
+  primary: '#0F766E',
+  primaryDark: '#0D655E',
+  primaryLight: '#D1FAE5',
+  secondary: '#0F172A',
+  bg: '#F8FAFC',
+  background: '#F8FAFC',
+  bgSoft: '#F1F5F9',
+  soft: '#F1F5F9',
+  card: '#FFFFFF',
+  text: '#0F172A',
+  subtext: '#64748B',
+  textSecondary: '#64748B',
+  textLight: '#94A3B8',
+  caption: '#94A3B8',
+  border: '#E2E8F0',
+  error: '#EF4444',
+  warning: '#F59E0B',
+  success: '#0F766E',
+  white: '#FFFFFF',
+  black: '#000000',
+  inputBg: '#F3F4F6',
+  greenSoft: '#E9F8EF',
+  red: '#EF4444',
+  redBg: '#FEE2E2',
+};
+
+export default CRICKET_LIGHT;
