@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import useTheme from '../hooks/useTheme';
+import { CRICKET_LIGHT } from '../theme/cricketLight';
 import { calculateMatchPerformances } from '../utils/cricketScorerEngine';
 
 export default function PlayerPerformanceModal({
@@ -16,7 +16,8 @@ export default function PlayerPerformanceModal({
   onClose,
   match,
 }) {
-  const { C, dark } = useTheme();
+  const C = CRICKET_LIGHT;
+  const dark = false;
 
   if (!match) return null;
 

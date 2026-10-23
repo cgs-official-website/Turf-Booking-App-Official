@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import useTheme from '../hooks/useTheme';
+import { CRICKET_LIGHT } from '../theme/cricketLight';
 import { calculateTournamentLeaders } from '../utils/cricketScorerEngine';
 
 export default function TournamentAwardsLeaderboardsModal({
@@ -18,7 +18,8 @@ export default function TournamentAwardsLeaderboardsModal({
   tournament,
   onSelectPlayer,
 }) {
-  const { C: colors, dark: isDark } = useTheme();
+  const colors = CRICKET_LIGHT;
+  const isDark = false;
   const [activeTab, setActiveTab] = useState('runs'); // 'runs' | 'wickets' | 'sr' | 'econ' | 'sixes' | 'fours' | 'fielding'
 
   const leadersData = useMemo(() => {
@@ -27,6 +28,7 @@ export default function TournamentAwardsLeaderboardsModal({
 
   const { podium, awards, leaderboards, isFinalized } = leadersData;
   const prizeDetails = tournament?.prizeDetails || {};
+  const hasAwards = Object.values(awards || {}).some(Boolean);
 
   const tabs = [
     { key: 'runs', label: '🏏 Runs' },
@@ -183,8 +185,15 @@ export default function TournamentAwardsLeaderboardsModal({
             {/* Featured Awards Grid */}
             <View style={styles.sectionBlock}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                🎖️ Featured Tournament Awards
+                🎖️ Featured Tournament Awards{!isFinalized && hasAwards ? '  ·  Provisional' : ''}
               </Text>
+              {!hasAwards && (
+                <View style={{ padding: 18, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: colors.subtext, textAlign: 'center' }}>
+                    Awards will appear as soon as the first match is scored. Final awards are confirmed when the tournament completes.
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.awardsGrid}>
                 {/* 1. Player of the Tournament */}

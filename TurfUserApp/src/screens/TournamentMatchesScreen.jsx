@@ -817,10 +817,14 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                               style={[styles.actionBtnOutline, { borderColor: '#10B981' }]}
                               onPress={() => finishMatch(m)}
                             >
-                              <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>Finish Match</Text>
+                              <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>✔ Finish</Text>
                             </TouchableOpacity>
                           </>
                         )}
+
+                      </View>
+
+                      <View style={[styles.actionsRow, { marginTop: 6 }]}>
 
                         {/* Full Scorecard for Live & Completed */}
                         {(isLive || done || cs.hasScore) && (
@@ -829,7 +833,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                             onPress={() => setScoreboardMatch(m)}
                           >
                             <Feather name="bar-chart-2" size={13} color={colors.text} style={{ marginRight: 4 }} />
-                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>Full Scorecard</Text>
+                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>Scorecard</Text>
                           </TouchableOpacity>
                         )}
 
@@ -839,7 +843,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                             style={[styles.actionBtnRatings, { borderColor: colors.border }]}
                             onPress={() => setPerformanceMatch(m)}
                           >
-                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>🎖️ Player Ratings</Text>
+                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>🎖️ Ratings</Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -1029,7 +1033,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     marginTop: 2,
   },
-  matchCard: { borderWidth: 1.5, borderRadius: 16, padding: 14, marginBottom: 12 },
+  matchCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
   matchHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   matchRoundTag: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
   matchNumberTag: { fontSize: 12, fontWeight: '800' },
@@ -1037,7 +1041,7 @@ const styles = StyleSheet.create({
   badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
   tossBanner: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10, borderWidth: 1 },
   tossBannerText: { fontSize: 12 },
-  teamBlock: { padding: 10, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.02)' },
+  teamBlock: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.02)' },
   winningTeamBlock: { backgroundColor: 'rgba(16, 185, 129, 0.08)' },
   teamTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   teamHeadingName: { fontSize: 14, fontWeight: '800', flex: 1 },
@@ -1047,20 +1051,20 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
   runsWicketsText: { fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
   oversText: { fontSize: 12, marginLeft: 8, fontWeight: '600' },
-  vsDividerWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 6 },
+  vsDividerWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
   vsLine: { flex: 1, height: 1 },
-  vsBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginHorizontal: 8 },
+  vsBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginHorizontal: 6 },
   vsText: { fontSize: 10, fontWeight: '800' },
   completedResultBox: { marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 1, borderColor: '#10B981' },
   completedWinnerText: { color: '#047857', fontWeight: '900', fontSize: 13 },
   completedMarginText: { color: '#065F46', fontSize: 12, marginTop: 2, fontWeight: '600' },
   liveLeadBox: { marginTop: 10, padding: 8, borderRadius: 8, backgroundColor: 'rgba(2, 132, 199, 0.08)', borderWidth: 1, borderColor: '#0284C7' },
   liveLeadText: { color: '#0284C7', fontWeight: '700', fontSize: 12 },
-  actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
+  actionsRow: { flexDirection: 'row', gap: 6, marginTop: 10 },
   actionBtnPrimary: { flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10 },
   actionBtnPrimaryText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   actionBtnLive: { flex: 1.2, minWidth: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10 },
-  actionBtnOutline: { flex: 0.9, minWidth: 90, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  actionBtnOutline: { flex: 1, flexDirection: 'row', minWidth: 90, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   actionBtnRatings: { flex: 1, minWidth: 110, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   choice: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 },
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap' },

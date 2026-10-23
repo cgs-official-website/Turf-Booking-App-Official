@@ -8,7 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
-import { useTheme } from '../context/ThemeContext';
+import { CRICKET_LIGHT } from '../theme/cricketLight';
 import { crrString, rrrString } from '../utils/cricketScorerEngine';
 
 export default function LiveScoreboardModal({
@@ -16,16 +16,8 @@ export default function LiveScoreboardModal({
   onClose,
   match,
 }) {
-  const { colors, isDark } = useTheme();
-  const C = {
-    bg: colors.background,
-    card: colors.card,
-    text: colors.text,
-    subtext: colors.textSecondary || '#64748B',
-    border: colors.border || '#E2E8F0',
-    primary: colors.primary || '#10B981',
-  };
-  const dark = isDark;
+  const C = CRICKET_LIGHT;
+  const dark = false;
 
   // Tab: 1 for Innings 1, 2 for Innings 2, or 'awards'
   const [activeTab, setActiveTab] = useState(1);
@@ -170,26 +162,19 @@ export default function LiveScoreboardModal({
                 <View style={styles.creaseSection}>
                   <Text style={[styles.creaseSectionLabel, { color: C.subtext }]}>AT CREASE</Text>
                   <View style={styles.creaseBattersRow}>
-                    <View style={styles.creaseBatterItem}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={styles.strikerDot} />
-                        <Text style={[styles.creasePlayerName, { color: C.text }]} numberOfLines={1}>
-                          {striker?.name || 'Striker'} *
+                    {[{ p: striker, fb: 'Striker', st: true }, { p: nonStriker, fb: 'Non-Striker', st: false }].map((x, k) => (
+                      <View key={`cr_${k}`} style={styles.creaseRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <View style={[styles.strikerDot, !x.st && { backgroundColor: 'transparent' }]} />
+                          <Text style={[styles.creasePlayerName, { color: C.text }]} numberOfLines={1}>
+                            {x.p?.name || x.fb}{x.st ? ' *' : ''}
+                          </Text>
+                        </View>
+                        <Text style={[styles.creasePlayerStat, { color: C.text }]}>
+                          <Text style={{ fontWeight: '900' }}>{x.p?.runs || 0}</Text> ({x.p?.balls || 0}) · 4s {x.p?.fours || 0} · 6s {x.p?.sixes || 0}
                         </Text>
                       </View>
-                      <Text style={[styles.creasePlayerStat, { color: C.text }]}>
-                        {striker?.runs || 0} ({striker?.balls || 0}b) • 4s: {striker?.fours || 0} • 6s: {striker?.sixes || 0}
-                      </Text>
-                    </View>
-
-                    <View style={styles.creaseBatterItem}>
-                      <Text style={[styles.creasePlayerName, { color: C.text, marginLeft: 10 }]} numberOfLines={1}>
-                        {nonStriker?.name || 'Non-Striker'}
-                      </Text>
-                      <Text style={[styles.creasePlayerStat, { color: C.text, marginLeft: 10 }]}>
-                        {nonStriker?.runs || 0} ({nonStriker?.balls || 0}b) • 4s: {nonStriker?.fours || 0} • 6s: {nonStriker?.sixes || 0}
-                      </Text>
-                    </View>
+                    ))}
                   </View>
                 </View>
 
@@ -238,23 +223,23 @@ export default function LiveScoreboardModal({
             )}
 
             {/* Innings Tabs */}
-            <View style={[styles.tabsRow, { borderBottomColor: C.border }]}>
+            <View style={[styles.tabsRow, { backgroundColor: C.soft }]}>
               <TouchableOpacity
-                style={[styles.tabBtn, activeTab === 1 && { borderBottomColor: C.primary, borderBottomWidth: 2.5 }]}
+                style={[styles.tabBtn, activeTab === 1 && styles.tabBtnOn]}
                 onPress={() => setActiveTab(1)}
               >
                 <Text style={[styles.tabBtnText, { color: activeTab === 1 ? C.primary : C.subtext }]}>
-                  1st Innings ({inn1?.battingTeamName || 'Team 1'})
+                  1st Inn · {inn1?.battingTeamName || 'Team 1'}
                 </Text>
               </TouchableOpacity>
 
               {inn2 && (
                 <TouchableOpacity
-                  style={[styles.tabBtn, activeTab === 2 && { borderBottomColor: C.primary, borderBottomWidth: 2.5 }]}
+                  style={[styles.tabBtn, activeTab === 2 && styles.tabBtnOn]}
                   onPress={() => setActiveTab(2)}
                 >
                   <Text style={[styles.tabBtnText, { color: activeTab === 2 ? C.primary : C.subtext }]}>
-                    2nd Innings ({inn2?.battingTeamName || 'Team 2'})
+                    2nd Inn · {inn2?.battingTeamName || 'Team 2'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -286,7 +271,7 @@ export default function LiveScoreboardModal({
                       <View style={styles.tdBatter}>
                         <Text style={[styles.btrName, { color: C.text }]} numberOfLines={1}>{b.name}</Text>
                         <Text style={[styles.btrDismissal, { color: C.subtext }]}>
-                          {b.out ? `b ${b.dismissal || 'bowled'}` : 'not out'}
+                          {b.out ? String(b.dismissal || 'out').replace(/_/g, ' ') : 'not out'}
                         </Text>
                       </View>
                       <Text style={[styles.tdVal, { color: C.text, fontWeight: '800' }]}>{b.runs}</Text>
@@ -363,7 +348,7 @@ export default function LiveScoreboardModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(15,23,42,0.45)',
     justifyContent: 'flex-end',
   },
   container: {
@@ -419,8 +404,9 @@ const styles = StyleSheet.create({
   },
   scoreHeroCard: {
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderLeftWidth: 4,
     marginBottom: 12,
   },
   heroMainRow: {
@@ -491,7 +477,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   creaseBattersRow: {
-    gap: 8,
+    gap: 2,
   },
   creaseBatterItem: {
     flexDirection: 'column',
@@ -542,13 +528,29 @@ const styles = StyleSheet.create({
   },
   tabsRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
+    borderRadius: 10,
+    padding: 3,
     marginTop: 4,
   },
   tabBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginRight: 8,
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  tabBtnOn: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  creaseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
   },
   tabBtnText: {
     fontSize: 12,
