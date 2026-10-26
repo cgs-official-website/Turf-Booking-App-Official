@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
 import {
@@ -209,7 +210,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
                 acceptedTeamsCount: (prev?.acceptedTeamsCount || acceptedCount) + 1,
                 remainingSlots: Math.max(0, slotsLeft - 1),
               }));
-              Alert.alert('Team Accepted! 🎉', `"${reg.teamName}" is now officially registered for this tournament.`);
+              Alert.alert('Team Accepted!', `"${reg.teamName}" is now officially registered for this tournament.`);
             } catch (err) {
               const msg = err.response?.data?.message || err.message || 'Failed to accept team application.';
               Alert.alert('Accept Failed', msg);
@@ -275,7 +276,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               if (updated) {
                 setTournament(updated);
                 Alert.alert(
-                  'Tournament Published! 🎉',
+                  'Tournament Published!',
                   'Your tournament is now live and published! You can now share the link with teams and players.',
                   [
                     {
@@ -317,7 +318,7 @@ const TournamentDetailScreen = ({ route, navigation }) => {
               } else {
                 loadDetails();
               }
-              Alert.alert('Tournament Approved! 🎉', 'The tournament has been approved and published! The organizer has been notified via FCM.');
+              Alert.alert('Tournament Approved!', 'The tournament has been approved and published! The organizer has been notified via FCM.');
             } catch (err) {
               console.error('Failed to approve tournament:', err);
               Alert.alert('Approval Failed', err.message || 'Unable to approve tournament.');

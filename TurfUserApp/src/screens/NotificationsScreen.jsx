@@ -12,7 +12,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useTheme from '../hooks/useTheme';
 
-const FILTERS = ['All', 'Bookings', 'Matches', 'Unread'];
+const FILTERS = ['All', 'Tournaments', 'Bookings', 'Matches', 'Unread'];
 
 const dayLabel = (date) => {
   if (!date) return 'Earlier';
@@ -75,7 +75,7 @@ export default function NotificationsScreen({ navigation }) {
       await notificationsApi.markRead(id);
     } catch {}
     setNotifications((prev) =>
-      prev.map((n) => (n._id === id ? { ...n, read: true } : n))
+      prev.map((n) => (n.id === id || n._id === id ? { ...n, read: true, isRead: true } : n))
     );
   };
 
@@ -83,12 +83,21 @@ export default function NotificationsScreen({ navigation }) {
     try {
       await notificationsApi.markAllRead();
     } catch {}
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })));
   };
 
   const filtered = useMemo(() => {
     let list = [...notifications];
-    if (activeFilter === 'Bookings') {
+    if (activeFilter === 'Tournaments') {
+      list = list.filter(
+        (n) =>
+          (n.type || '').toLowerCase().includes('tournament') ||
+          Boolean(n.data?.tournamentId) ||
+          n.data?.screen === 'TournamentDetail' ||
+          Boolean(n.data?.action?.includes('tournament')) ||
+          Boolean(n.data?.action?.includes('bracket'))
+      );
+    } else if (activeFilter === 'Bookings') {
       list = list.filter((n) => (n.type || '').toLowerCase().includes('booking'));
     } else if (activeFilter === 'Matches') {
       list = list.filter(
@@ -99,7 +108,7 @@ export default function NotificationsScreen({ navigation }) {
           Boolean(n.data?.action?.includes('bracket'))
       );
     } else if (activeFilter === 'Unread') {
-      list = list.filter((n) => !n.read);
+      list = list.filter((n) => !n.read && !n.isRead);
     }
     return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [notifications, activeFilter]);
@@ -114,7 +123,7 @@ export default function NotificationsScreen({ navigation }) {
     return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
   }, [filtered]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read && !n.isRead).length;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg }]}>
@@ -202,7 +211,7 @@ export default function NotificationsScreen({ navigation }) {
                     style={[
                       styles.notifRow,
                       !isLast && [styles.notifRowBorder, { borderBottomColor: C.border }],
-                      !item.read && { backgroundColor: 'rgba(12, 176, 83, 0.04)' },
+                      (!item.read && !item.isRead) && { backgroundColor: 'rgba(12, 176, 83, 0.04)' },
                     ]}
                     onPress={() => {
                       markRead(notifId);

@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { CRICKET_LIGHT } from '../theme/cricketLight';
 import { calculateMatchPerformances } from '../utils/cricketScorerEngine';
 
@@ -44,7 +45,7 @@ export default function PlayerPerformanceModal({
           {/* Header */}
           <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: C.text }]}>Player Performances & Awards 🎖️</Text>
+              <Text style={[styles.title, { color: C.text }]}>Player Performances & Awards</Text>
               <Text style={[styles.subtitle, { color: C.subtext }]}>
                 {match.roundName || 'Match'} • Real ball-by-ball performance grades
               </Text>
@@ -56,12 +57,12 @@ export default function PlayerPerformanceModal({
 
           <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
             {/* Awards Highlight Section */}
-            <Text style={[styles.sectionHeading, { color: C.text }]}>Match Awards 🏆</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}><Ionicons name="trophy" size={16} color="#D97706" style={{ marginRight: 6 }} /><Text style={[styles.sectionHeading, { color: C.text, marginBottom: 0 }]}>Match Awards</Text></View>
             <View style={styles.awardsGrid}>
               {/* Player of the Match */}
               {awards?.playerOfTheMatch && (
                 <View style={[styles.awardCard, { backgroundColor: dark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7', borderColor: '#D97706' }]}>
-                  <Text style={styles.awardEmoji}>🎖️</Text>
+                  <Ionicons name="ribbon" size={24} color="#D97706" />
                   <Text style={[styles.awardType, { color: dark ? '#FBBF24' : '#B45309' }]}>PLAYER OF THE MATCH</Text>
                   <Text style={[styles.awardWinner, { color: C.text }]} numberOfLines={1}>
                     {awards.playerOfTheMatch.name}
@@ -75,7 +76,7 @@ export default function PlayerPerformanceModal({
               {/* Best Batter */}
               {awards?.bestBatter && (
                 <View style={[styles.awardCard, { backgroundColor: dark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5', borderColor: '#10B981' }]}>
-                  <Text style={styles.awardEmoji}>🏏</Text>
+                  <Ionicons name="baseball-outline" size={24} color="#059669" />
                   <Text style={[styles.awardType, { color: '#10B981' }]}>BEST BATTER</Text>
                   <Text style={[styles.awardWinner, { color: C.text }]} numberOfLines={1}>
                     {awards.bestBatter.name}
@@ -89,7 +90,7 @@ export default function PlayerPerformanceModal({
               {/* Best Bowler */}
               {awards?.bestBowler && (
                 <View style={[styles.awardCard, { backgroundColor: dark ? 'rgba(59, 130, 246, 0.12)' : '#EFF6FF', borderColor: '#3B82F6' }]}>
-                  <Text style={styles.awardEmoji}>🎯</Text>
+                  <Ionicons name="locate" size={24} color="#2563EB" />
                   <Text style={[styles.awardType, { color: '#3B82F6' }]}>BEST BOWLER</Text>
                   <Text style={[styles.awardWinner, { color: C.text }]} numberOfLines={1}>
                     {awards.bestBowler.name}

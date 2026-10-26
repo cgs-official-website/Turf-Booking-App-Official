@@ -519,48 +519,13 @@ function notifyInBackground(params) {
 }
 
 /**
- * Broadcast notification to active users when a tournament is created/published
+ * Broadcast notification to all eligible users when a tournament is created/published
  */
 function broadcastNewTournamentNotification(tournament) {
   if (!tournament || tournament.status !== 'published') return;
-  Promise.resolve().then(async () => {
-    try {
-      const venue = tournament.venueName || tournament.turf?.name || tournament.city || 'Turf Arena';
-      const [activeTokens, allUsers] = await Promise.all([
-        prisma.deviceToken.findMany({
-          where: { ownerType: 'user' },
-          select: { ownerId: true },
-          distinct: ['ownerId'],
-          take: 100,
-        }),
-        prisma.user.findMany({
-          select: { id: true },
-          take: 100,
-        }),
-      ]);
-      const userIds = [...new Set([...activeTokens.map((t) => t.ownerId), ...allUsers.map((u) => u.id)])].filter(Boolean);
-      for (const uid of userIds) {
-        if (uid !== tournament.userId) {
-          notifyInBackground({
-            recipientId: uid,
-            recipientRole: 'user',
-            title: `🏆 New Tournament: ${tournament.name}`,
-            body: `Registration is open for "${tournament.name}" at ${venue}. Tap to view details and register your team!`,
-            type: 'tournament',
-            data: {
-              tournamentId: tournament.id,
-              id: tournament.id,
-              screen: 'TournamentDetail',
-              type: 'tournament',
-              action: 'tournament_created',
-            },
-          });
-        }
-      }
-    } catch (err) {
-      console.warn('⚠️ broadcastNewTournamentNotification warning:', err.message);
-    }
-  });
+  const venue = tournament.venueName || tournament.turf?.name || tournament.city || 'Turf Arena';
+  notificationService.broadcastTournament({ tournament, venue })
+    .catch((err) => console.warn('⚠️ broadcastTournament error:', err.message));
 }
 
 const tournamentController = {
@@ -1113,10 +1078,17 @@ const tournamentController = {
 
       // Notify the vendor who owns the selected turf via FCM push notification
       if (shouldPublish && turf.vendorId && locked.value?.created) {
-        const creatorName = req.user?.name || req.user?.phone || 'A user';
-        const notifTitle = '🏆 Tournament Request Received';
-        const notifBody = `${creatorName} requested to conduct "${name.trim()}" at ${turf.name}. Tap to review and approve.`;
-        try {
+        const reqMarker = `vendor_request_${tournament.id}`;
+        prisma.document.create({
+          data: {
+            collection: 'tournament_request_notif',
+            id: reqMarker,
+            data: { notifiedAt: new Date(), vendorId: turf.vendorId },
+          },
+        }).then(() => {
+          const creatorName = req.user?.name || req.user?.phone || 'A user';
+          const notifTitle = '🏆 Tournament Request Received';
+          const notifBody = `${creatorName} requested to conduct "${name.trim()}" at ${turf.name}. Tap to review and approve.`;
           console.log(`[Tournament Request Trace] User ID: ${userId} → Turf ID: ${turf.id} → Vendor ID: ${turf.vendorId} → Tournament ID: ${tournament.id} → Notification Recipient ID: ${turf.vendorId}`);
           notifyInBackground({
             recipientId: turf.vendorId,
@@ -1134,9 +1106,9 @@ const tournamentController = {
             },
           });
           console.log(`✅ Sent tournament approval FCM notification to vendor ${turf.vendorId}`);
-        } catch (notifErr) {
-          console.warn('⚠️ Vendor notification trigger error:', notifErr.message);
-        }
+        }).catch(() => {
+          console.log(`ℹ️ [Vendor Notif Guard] Duplicate tournament request alert avoided for ${tournament.id}`);
+        });
       }
 
       const formatted = formatTournament(tournament, req.user);
@@ -1828,8 +1800,31 @@ const tournamentController = {
         return sendError(res, 'Access denied: You cannot publish this tournament', 403, 'FORBIDDEN');
       }
 
-      const shareableIdentifier = existing.shareableIdentifier || generateShareableIdentifier();
+      // 1. Idempotency check: if tournament is already published, return safely without duplicate broadcast
+      if (existing.status === 'published') {
+        const formatted = formatTournament(existing, req.user);
+        return sendSuccess(res, {
+          tournament: formatted,
+          shareableUrl: formatted.shareableUrl,
+          shareableIdentifier: formatted.shareableIdentifier,
+          message: 'Tournament is already published!',
+        });
+      }
+
       const isUserCreated = existing.creatorType === 'USER' || Boolean(existing.userId);
+
+      // 2. Idempotency check: if user tournament is already awaiting approval, return safely
+      if (isUserCreated && (existing.status === 'pending_approval' || existing.approvalStatus === 'pending')) {
+        const formatted = formatTournament(existing, req.user);
+        return sendSuccess(res, {
+          tournament: formatted,
+          shareableUrl: formatted.shareableUrl,
+          shareableIdentifier: formatted.shareableIdentifier,
+          message: 'Tournament is already submitted for turf owner approval!',
+        });
+      }
+
+      const shareableIdentifier = existing.shareableIdentifier || generateShareableIdentifier();
       const newStatus = isUserCreated ? 'pending_approval' : 'published';
       const newApprovalStatus = isUserCreated ? 'pending' : 'approved';
 
@@ -1850,24 +1845,37 @@ const tournamentController = {
         },
       });
 
+      // 3. Notify turf owner vendor with idempotency check
       if (isUserCreated && published.turf?.vendorId) {
-        const creatorName = published.user?.name || existing.user?.name || req.user?.name || 'A user';
-        const turfName = published.turf?.name || 'your turf';
-        console.log(`[Tournament Request Trace] User ID: ${published.userId} → Turf ID: ${published.turfId} → Vendor ID: ${published.turf.vendorId} → Tournament ID: ${published.id} → Notification Recipient ID: ${published.turf.vendorId}`);
-        notifyInBackground({
-          recipientId: published.turf.vendorId,
-          recipientRole: 'vendor',
-          title: '🏆 Tournament Request Received',
-          body: `${creatorName} requested to conduct "${published.name}" at ${turfName}. Tap to review and approve.`,
-          type: 'tournament',
+        const reqMarker = `vendor_request_${published.id}`;
+        prisma.document.create({
           data: {
-            tournamentId: published.id,
-            id: published.id,
-            screen: 'TournamentDetail',
-            type: 'tournament',
-            action: 'tournament_request',
-            turfId: published.turfId,
+            collection: 'tournament_request_notif',
+            id: reqMarker,
+            data: { notifiedAt: new Date(), vendorId: published.turf.vendorId },
           },
+        }).then(() => {
+          const creatorName = published.user?.name || existing.user?.name || req.user?.name || 'A user';
+          const turfName = published.turf?.name || 'your turf';
+          console.log(`[Tournament Request Trace] User ID: ${published.userId} → Turf ID: ${published.turfId} → Vendor ID: ${published.turf.vendorId} → Tournament ID: ${published.id} → Notification Recipient ID: ${published.turf.vendorId}`);
+          notifyInBackground({
+            recipientId: published.turf.vendorId,
+            recipientRole: 'vendor',
+            title: '🏆 Tournament Request Received',
+            body: `${creatorName} requested to conduct "${published.name}" at ${turfName}. Tap to review and approve.`,
+            type: 'tournament',
+            data: {
+              tournamentId: published.id,
+              id: published.id,
+              screen: 'TournamentDetail',
+              type: 'tournament',
+              action: 'tournament_request',
+              turfId: published.turfId,
+            },
+          });
+          console.log(`✅ Sent tournament approval FCM notification to vendor ${published.turf.vendorId}`);
+        }).catch(() => {
+          console.log(`ℹ️ [Vendor Notif Guard] Duplicate tournament request alert avoided for ${published.id}`);
         });
       }
 
@@ -2727,6 +2735,16 @@ const tournamentController = {
 
       if (!isTurfOwner && !isAdmin) {
         return sendError(res, 'Access denied: Only the turf owner can approve this tournament', 403, 'FORBIDDEN');
+      }
+
+      // Prevent duplicate approval if already approved
+      if (tournament.status === 'published' && tournament.approvalStatus === 'approved') {
+        const formatted = formatTournament(tournament, req.user || req.vendor);
+        return sendSuccess(res, {
+          tournament: formatted,
+          shareableUrl: formatted.shareableUrl,
+          message: 'Tournament is already approved and published.',
+        });
       }
 
       const shareableIdentifier = tournament.shareableIdentifier || generateShareableIdentifier();

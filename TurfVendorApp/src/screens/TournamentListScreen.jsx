@@ -8,7 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   ScrollView,
+  TextInput,
 } from 'react-native';
+import Pagination from '../components/Pagination';
 import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
@@ -54,6 +56,9 @@ const TournamentListScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all' | 'pending' | 'turf_hosted' | 'user_created' | 'draft'
   const [selectedTurfFilter, setSelectedTurfFilter] = useState('all'); // 'all' | specific turfId
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 6;
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -120,12 +125,29 @@ const TournamentListScreen = ({ navigation }) => {
     }
     const isUser = t.creatorType === 'USER' || t.source === 'USER CREATED';
     const isPending = t.status === 'pending_approval' || t.approvalStatus === 'pending';
-    if (filter === 'pending') return isPending;
-    if (filter === 'turf_hosted') return !isUser;
-    if (filter === 'user_created') return isUser;
-    if (filter === 'draft') return t.status === 'draft';
+    const isOngoing = t.lifecycleStatus === 'ongoing';
+    if (filter === 'ongoing' && !isOngoing) return false;
+    if (filter === 'pending' && !isPending) return false;
+    if (filter === 'turf_hosted' && isUser) return false;
+    if (filter === 'user_created' && !isUser) return false;
+    if (filter === 'draft' && t.status !== 'draft') return false;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      const hay = [t.name, t.title, t.sport, t.turf?.name, t.turfName, t.location, t.city, t.creatorName, t.user?.name]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
+
+  const ongoingCount = tournaments.filter((t) => t.lifecycleStatus === 'ongoing').length;
+  const totalPages = Math.max(1, Math.ceil(filteredTournaments.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedTournaments = filteredTournaments.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, searchQuery, selectedTurfFilter]);
 
   const renderTournamentItem = ({ item }) => {
     const sportLower = (item.sport || '').toLowerCase();
@@ -418,10 +440,29 @@ const TournamentListScreen = ({ navigation }) => {
         </View>
       ) : null}
 
+      {/* Search */}
+      <View style={[styles.searchBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Feather name="search" size={16} color={colors.textSecondary} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search tournaments, sport, turf..."
+          placeholderTextColor={colors.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="x-circle" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Tabs Filter Bar */}
-      <View style={styles.filterBar}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar} style={{ flexGrow: 0 }}>
         {[
           { key: 'all', label: 'All' },
+          { key: 'ongoing', label: ongoingCount > 0 ? `Ongoing (${ongoingCount})` : 'Ongoing', icon: 'activity' },
           { key: 'pending', label: pendingRequestsCount > 0 ? `Requests (${pendingRequestsCount})` : 'Requests' },
           { key: 'turf_hosted', label: 'Turf Hosted' },
           { key: 'user_created', label: 'User Created' },
@@ -439,18 +480,16 @@ const TournamentListScreen = ({ navigation }) => {
               onPress={() => setFilter(tab.key)}
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.filterTabText,
-                  { color: isActive ? '#FFFFFF' : colors.textSecondary },
-                ]}
-              >
+              {tab.icon && (
+                <Feather name={tab.icon} size={13} color={isActive ? '#FFFFFF' : colors.textSecondary} style={{ marginRight: 5 }} />
+              )}
+              <Text style={[styles.filterTabText, { color: isActive ? '#FFFFFF' : colors.textSecondary }]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -461,7 +500,7 @@ const TournamentListScreen = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          data={filteredTournaments}
+          data={pagedTournaments}
           keyExtractor={(item) => item.id}
           renderItem={renderTournamentItem}
           contentContainerStyle={styles.listContent}
@@ -474,6 +513,14 @@ const TournamentListScreen = ({ navigation }) => {
               tintColor={colors.primary}
             />
           }
+          ListFooterComponent={
+            <Pagination
+              page={currentPage}
+              totalPages={totalPages}
+              onChange={setPage}
+              theme={{ primary: colors.primary, card: colors.card, border: colors.border, text: colors.text, subtext: colors.textSecondary }}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
@@ -482,12 +529,12 @@ const TournamentListScreen = ({ navigation }) => {
               <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {filter === 'all'
                   ? 'No Tournaments Created'
-                  : `No ${filter === 'published' ? 'Published' : 'Draft'} Tournaments`}
+                  : 'No Tournaments Found'}
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
                 {filter === 'all'
                   ? 'Create your first tournament to start organizing matches and sharing with teams.'
-                  : `You currently have no ${filter} tournaments for this turf.`}
+                  : 'Try a different filter or search term.'}
               </Text>
               <TouchableOpacity
                 style={[styles.emptyActionBtn, { backgroundColor: colors.primary }]}
@@ -585,14 +632,25 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  filterBar: {
+  searchBox: {
     flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    gap: 8,
+  },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
+  filterBar: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
   },
   filterTab: {
-    flex: 1,
+    flexDirection: 'row',
+    paddingHorizontal: 14,
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',

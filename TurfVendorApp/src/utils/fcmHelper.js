@@ -245,8 +245,20 @@ export const fcmHelper = {
       console.log('🔔 Foreground FCM vendor notification received:', remoteMessage);
 
       const data = remoteMessage?.data || {};
-      const notifId = data.notificationId || remoteMessage?.messageId;
-      if (notifId) shownNotificationIds.add(notifId);
+      const dedupeKey =
+        data.notificationId ||
+        remoteMessage?.messageId ||
+        (data.tournamentId ? `${data.action || 'tournament'}_${data.tournamentId}` : null) ||
+        (data.bookingId ? `booking_${data.bookingId}` : null);
+
+      if (dedupeKey && shownNotificationIds.has(dedupeKey)) {
+        console.log('Skipping duplicate vendor foreground notification:', dedupeKey);
+        return;
+      }
+
+      if (dedupeKey) shownNotificationIds.add(dedupeKey);
+      if (data.notificationId) shownNotificationIds.add(data.notificationId);
+      if (remoteMessage?.messageId) shownNotificationIds.add(remoteMessage.messageId);
 
       const isReg = data?.action === 'tournament_registration';
       const defaultTitle = isReg ? 'New Team Registration' : (data?.type === 'tournament' ? 'Tournament Request' : 'New Booking');
@@ -313,6 +325,7 @@ export const fcmHelper = {
     // 5. Active In-App Poller (ensures popup notifications work in dev & foreground reliably)
     const pollInterval = setInterval(async () => {
       try {
+        if (AppState.currentState !== 'active') return;
         const res = await notificationsApi.getAll();
         const list = res?.data?.notifications || res?.notifications || [];
         const now = Date.now();
@@ -327,8 +340,19 @@ export const fcmHelper = {
 
           if (!notif.isRead && !notif.read && isTargetType) {
             const notifTime = new Date(notif.createdAt).getTime();
-            if (now - notifTime < 90000 && !shownNotificationIds.has(notif.id)) {
-              shownNotificationIds.add(notif.id);
+            const dedupeKey =
+              notif.id ||
+              notif._id ||
+              (notif.data?.tournamentId ? `${notif.data?.action || 'tournament'}_${notif.data.tournamentId}` : null) ||
+              (notif.data?.bookingId ? `booking_${notif.data.bookingId}` : null);
+
+            if (
+              now - notifTime < 90000 &&
+              !shownNotificationIds.has(notif.id) &&
+              !(dedupeKey && shownNotificationIds.has(dedupeKey))
+            ) {
+              if (notif.id) shownNotificationIds.add(notif.id);
+              if (dedupeKey) shownNotificationIds.add(dedupeKey);
               showVendorPopup({
                 title: notif.title,
                 body: notif.body,

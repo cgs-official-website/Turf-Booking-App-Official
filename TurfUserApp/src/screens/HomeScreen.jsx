@@ -364,7 +364,7 @@ export default function HomeScreen({ navigation }) {
     useCallback(() => {
       load(false);
       notificationsApi.getAll()
-        .then((r) => setUnread(r.unreadCount ?? (r.notifications || []).filter((n) => !n.read).length))
+        .then((r) => setUnread(typeof r.unreadCount === 'number' ? r.unreadCount : (r.notifications || []).filter((n) => !n.read && !n.isRead).length))
         .catch(() => { });
 
       if (locationOff) {

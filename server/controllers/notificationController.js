@@ -56,17 +56,25 @@ const notificationController = {
    * Fetch in-app notifications for authenticated user/vendor
    */
   async getNotifications(req, res) {
-    const { uid } = req.user;
+    const { uid, role } = req.user;
+    const recipientType = role === 'vendor' ? 'vendor' : (role === 'admin' || role === 'superadmin' ? 'admin' : 'user');
 
     try {
       const items = await prisma.notification.findMany({
-        where: { recipientId: uid },
+        where: {
+          recipientId: uid,
+          recipientType,
+        },
         orderBy: { createdAt: 'desc' },
         take: 50,
       });
 
       const unreadCount = await prisma.notification.count({
-        where: { recipientId: uid, isRead: false },
+        where: {
+          recipientId: uid,
+          recipientType,
+          isRead: false,
+        },
       });
 
       const notifications = items.map((n) => ({
@@ -90,11 +98,12 @@ const notificationController = {
    */
   async markRead(req, res) {
     const { id } = req.params;
-    const { uid } = req.user;
+    const { uid, role } = req.user;
+    const recipientType = role === 'vendor' ? 'vendor' : (role === 'admin' || role === 'superadmin' ? 'admin' : 'user');
 
     try {
       const notif = await prisma.notification.findUnique({ where: { id } });
-      if (!notif || notif.recipientId !== uid) {
+      if (!notif || notif.recipientId !== uid || notif.recipientType !== recipientType) {
         return sendError(res, 'Notification not found', 404, 'NOT_FOUND');
       }
 
@@ -123,12 +132,14 @@ const notificationController = {
    * Mark all notifications as read for current user
    */
   async markAllRead(req, res) {
-    const { uid } = req.user;
+    const { uid, role } = req.user;
+    const recipientType = role === 'vendor' ? 'vendor' : (role === 'admin' || role === 'superadmin' ? 'admin' : 'user');
 
     try {
       await prisma.notification.updateMany({
         where: {
           recipientId: uid,
+          recipientType,
           isRead: false,
         },
         data: {

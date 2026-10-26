@@ -505,7 +505,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
     if (Clipboard && Clipboard.setString) {
       Clipboard.setString(shareUrl);
-      Alert.alert('Link Copied 📋', 'Tournament shareable link copied to clipboard.');
+      Alert.alert('Link Copied', 'Tournament shareable link copied to clipboard.');
     } else {
       Alert.alert('Tournament Link', shareUrl);
     }
@@ -534,7 +534,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   );
                 } else {
                   Alert.alert(
-                    'Tournament Published! 🎉',
+                    'Tournament Published!',
                     'Your tournament is now live and published! You can now share the link with teams and players.',
                     [
                       { text: 'Share Now', onPress: handleShare },
@@ -615,7 +615,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
               if (updated) {
                 setTournament(updated);
                 Alert.alert(
-                  'Bracket Ready! ⚡',
+                  'Bracket Ready!',
                   `Successfully generated match bracket for ${acceptedTeamsCount} accepted teams. You can now conduct tosses, enter scores, and advance winners.`
                 );
               }
@@ -637,7 +637,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
       const updated = res?.tournament || res?.data?.tournament;
       if (updated) setTournament(updated);
       setShowScheduleModal(false);
-      Alert.alert('Knockout Draw Ready ⚡', 'Rounds generated successfully.');
+      Alert.alert('Knockout Draw Ready', 'Rounds generated successfully.');
     } catch (err) {
       Alert.alert('Scheduling Error', err.message || 'Failed to generate schedule.');
     } finally {
@@ -659,7 +659,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
       const updated = res?.tournament || res?.data?.tournament;
       if (updated) setTournament(updated);
       setShowScheduleModal(false);
-      Alert.alert('Fixture Scheduled 📅', 'Match added to the tournament schedule.');
+      Alert.alert('Fixture Scheduled', 'Match added to the tournament schedule.');
     } catch (err) {
       Alert.alert('Scheduling Error', err.message || 'Failed to schedule fixture.');
     } finally {
@@ -729,7 +729,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         setTournament(updated);
       }
       setTossModalVisible(false);
-      Alert.alert('Toss Recorded! 🪙', res?.message || 'Coin toss recorded successfully.');
+      Alert.alert('Toss Recorded!', res?.message || 'Coin toss recorded successfully.');
     } catch (err) {
       Alert.alert('Toss Error', err.message || 'Failed to record toss.');
     } finally {
@@ -778,7 +778,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         setTournament(updated);
       }
       setScoreModalVisible(false);
-      Alert.alert('Score Updated! 📝', 'Match score has been updated.');
+      Alert.alert('Score Updated!', 'Match score has been updated.');
     } catch (err) {
       Alert.alert('Score Error', err.message || 'Failed to update score.');
     } finally {
@@ -796,7 +796,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
       if (updated) setTournament(updated);
       setLiveScorerMatch(null);
       Alert.alert(
-        isFinal ? '👑 Champion Crowned!' : '🏆 Winner Advanced!',
+        isFinal ? 'Champion Crowned!' : 'Winner Advanced!',
         res?.message || 'Match completed successfully.'
       );
     } catch (err) {
@@ -844,11 +844,11 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
 
     Alert.alert(
-      isFinal ? 'Finish Final & Crown Champion 👑' : 'Finish Match & Advance Winner 🏁',
+      isFinal ? 'Finish Final & Crown Champion' : 'Finish Match & Advance Winner',
       `${previewSummary}\n\n` +
-        (isFinal
-          ? 'The team with the higher score will be crowned Tournament Champion. Continue?'
-          : 'The team with the higher score wins and automatically advances to the next round fixture. Continue?'),
+      (isFinal
+        ? 'The team with the higher score will be crowned Tournament Champion. Continue?'
+        : 'The team with the higher score wins and automatically advances to the next round fixture. Continue?'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -878,7 +878,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
             setProcessingRegId(team.id);
             try {
               const res = await acceptTournamentRegistrationApi(tournament.id, team.id);
-              Alert.alert('Team Accepted! 🎉', res?.message || `"${team.name}" has been accepted.`);
+              Alert.alert('Team Accepted!', res?.message || `"${team.name}" has been accepted.`);
               await loadDetails();
             } catch (err) {
               const msg = err.response?.data?.message || err.message || 'Failed to accept team.';
@@ -931,7 +931,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
       const updated = res?.tournament || res?.data?.tournament;
       if (updated) setTournament(updated);
       setWinnerModalVisible(false);
-      Alert.alert('Winner Confirmed! 🏆', res?.message || 'Tie-breaker winner recorded.');
+      Alert.alert('Winner Confirmed!', res?.message || 'Tie-breaker winner recorded.');
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to confirm winner.');
     } finally {
@@ -1269,7 +1269,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   </View>
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={[styles.approvalStatusTitle, { color: '#047857' }]}>
-                      Approved & Live! 🎉
+                      Approved & Live!
                     </Text>
                     <Text style={[styles.approvalStatusSub, { color: dark ? '#6EE7B7' : '#065F46' }]}>
                       Approved by {hostTurfName} • Publicly joinable
@@ -1606,10 +1606,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
 
             <View style={styles.myAppRosterSummary}>
               <Text style={[styles.myAppRosterItem, { color: C.subtext }]}>
-                👤 Captain: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{myRegistration.captainName}</Text>
+                Captain: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{myRegistration.captainName}</Text>
               </Text>
               <Text style={[styles.myAppRosterItem, { color: C.subtext }]}>
-                👥 Squad: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{Array.isArray(myRegistration.players) ? myRegistration.players.length : tournament.playersPerTeam} Players</Text>
+                Squad: <Text style={{ color: C.text, fontFamily: FONT.bold }}>{Array.isArray(myRegistration.players) ? myRegistration.players.length : tournament.playersPerTeam} Players</Text>
               </Text>
             </View>
           </View>
@@ -1794,8 +1794,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
               </View>
               <Text style={{ color: C.subtext, fontSize: 12 }}>
                 {isCreator
-                  ? 'Generate fixtures, toss, enter live scores & declare winners ➔'
-                  : 'View fixtures, live ball-by-ball scorecards & awards ➔'}
+                  ? 'Generate fixtures, toss, enter live scores & declare winners'
+                  : 'View fixtures, live ball-by-ball scorecards & awards'}
               </Text>
             </View>
             <Feather name="chevron-right" size={22} color="#0F766E" />
@@ -1839,7 +1839,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   { color: isCreator ? '#0F766E' : '#64748B' },
                 ]}
               >
-                {isCreator ? '👑 MANAGE ➔' : '👁️ FULL VIEW ➔'}
+                {isCreator ? 'MANAGE' : 'FULL VIEW'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1848,9 +1848,9 @@ export default function TournamentDetailScreen({ route, navigation }) {
           {Boolean(tournament.bracket?.winner) && (
             <View style={[styles.championBannerWrap, { borderColor: '#F59E0B' }]}>
               <View style={styles.championBannerIconRow}>
-                <Text style={{ fontSize: 26 }}>👑</Text>
+                <Ionicons name="trophy" size={26} color="#D97706" style={{ marginRight: 4 }} />
                 <Text style={styles.championBannerTitle}>TOURNAMENT CHAMPION</Text>
-                <Text style={{ fontSize: 26 }}>🏆</Text>
+                <Ionicons name="trophy" size={26} color="#D97706" style={{ marginRight: 4 }} />
               </View>
               <Text style={styles.championBannerTeamName}>
                 {tournament.bracket.winner.name || tournament.bracket.winner.teamName}
@@ -1866,7 +1866,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
             <View style={styles.awardsSectionHeader}>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 18, marginRight: 6 }}>🏆</Text>
+                  <Ionicons name="trophy" size={18} color="#D97706" style={{ marginRight: 4 }} />
                   <Text style={[styles.awardsSectionTitle, { color: C.text }]}>
                     Awards & Leaderboards
                   </Text>
@@ -1882,7 +1882,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                 onPress={() => setShowLeaderboardsModal(true)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.viewLeaderboardsBtnText}>All Boards ➔</Text>
+                <Text style={styles.viewLeaderboardsBtnText}>All Boards</Text>
               </TouchableOpacity>
             </View>
 
@@ -1895,19 +1895,19 @@ export default function TournamentDetailScreen({ route, navigation }) {
                     onPress={() => {
                       const pot = tournamentLeaders.awards.playerOfTournament;
                       Alert.alert(
-                        `👑 Player of the Tournament: ${pot.name}`,
+                        `Player of the Tournament: ${pot.name}`,
                         `Team: ${pot.teamName}\n` +
                         `• Performance Rating: ${pot.grade} (${pot.impactScore} pts)\n` +
                         `• Total Runs: ${pot.runs} (SR: ${pot.strikeRate})\n` +
                         `• Total Wickets: ${pot.wickets} (Econ: ${pot.economy})\n` +
                         `• Fielding Dismissals: ${pot.fieldingDismissals}` +
-                        (tournament.prizeDetails?.playerOfTournamentPrize ? `\n• Official Prize: 🎁 ${tournament.prizeDetails.playerOfTournamentPrize}` : '')
+                        (tournament.prizeDetails?.playerOfTournamentPrize ? `\n• Official Prize: ${tournament.prizeDetails.playerOfTournamentPrize}` : '')
                       );
                     }}
                     activeOpacity={0.85}
                   >
                     <View style={styles.mvpBadgeCircle}>
-                      <Text style={{ fontSize: 22 }}>👑</Text>
+                      <Ionicons name="trophy" size={22} color="#D97706" style={{ marginRight: 4 }} />
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1926,7 +1926,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       </Text>
                       {Boolean(tournament.prizeDetails?.playerOfTournamentPrize) && (
                         <View style={styles.awardPrizePill}>
-                          <Text style={styles.awardPrizeText}>🎁 Prize: {tournament.prizeDetails.playerOfTournamentPrize}</Text>
+                          <Text style={styles.awardPrizeText}>Prize: {tournament.prizeDetails.playerOfTournamentPrize}</Text>
                         </View>
                       )}
                     </View>
@@ -1942,19 +1942,19 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       onPress={() => {
                         const bb = tournamentLeaders.awards.bestBatter;
                         Alert.alert(
-                          `🏏 Best Batter: ${bb.name}`,
+                          `Best Batter: ${bb.name}`,
                           `Team: ${bb.teamName}\n` +
                           `• Runs: ${bb.runs} (${bb.balls} balls)\n` +
                           `• Strike Rate: ${bb.strikeRate}\n` +
                           `• Boundaries: 4s: ${bb.fours} | 6s: ${bb.sixes}\n` +
                           `• Rating: ${bb.grade}` +
-                          (tournament.prizeDetails?.bestBatterPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestBatterPrize}` : '')
+                          (tournament.prizeDetails?.bestBatterPrize ? `\n• Prize: ${tournament.prizeDetails.bestBatterPrize}` : '')
                         );
                       }}
                       activeOpacity={0.8}
                     >
                       <View style={styles.compactAwardHeader}>
-                        <Text style={{ fontSize: 16 }}>🏏</Text>
+                        <Ionicons name="baseball-outline" size={16} color="#059669" style={{ marginRight: 4 }} />
                         <Text style={[styles.compactAwardTitle, { color: '#D97706' }]}>BEST BATTER</Text>
                       </View>
                       <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
@@ -1967,7 +1967,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         {tournamentLeaders.awards.bestBatter.runs} Runs <Text style={{ fontSize: 10, color: C.subtext }}>({tournamentLeaders.awards.bestBatter.strikeRate} SR)</Text>
                       </Text>
                       {Boolean(tournament.prizeDetails?.bestBatterPrize) && (
-                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestBatterPrize}</Text>
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>{tournament.prizeDetails.bestBatterPrize}</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -1979,20 +1979,20 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       onPress={() => {
                         const bw = tournamentLeaders.awards.bestBowler;
                         Alert.alert(
-                          `🎯 Best Bowler: ${bw.name}`,
+                          `Best Bowler: ${bw.name}`,
                           `Team: ${bw.teamName}\n` +
                           `• Wickets: ${bw.wickets} in ${bw.overs} ov\n` +
                           `• Economy: ${bw.economy}\n` +
                           `• Runs Conceded: ${bw.bowlingRuns}\n` +
                           `• Maidens: ${bw.maidens}\n` +
                           `• Rating: ${bw.grade}` +
-                          (tournament.prizeDetails?.bestBowlerPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestBowlerPrize}` : '')
+                          (tournament.prizeDetails?.bestBowlerPrize ? `\n• Prize: ${tournament.prizeDetails.bestBowlerPrize}` : '')
                         );
                       }}
                       activeOpacity={0.8}
                     >
                       <View style={styles.compactAwardHeader}>
-                        <Text style={{ fontSize: 16 }}>🎯</Text>
+                        <Ionicons name="locate" size={16} color="#2563EB" style={{ marginRight: 4 }} />
                         <Text style={[styles.compactAwardTitle, { color: '#7C3AED' }]}>BEST BOWLER</Text>
                       </View>
                       <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
@@ -2005,7 +2005,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         {tournamentLeaders.awards.bestBowler.wickets} Wkts <Text style={{ fontSize: 10, color: C.subtext }}>({tournamentLeaders.awards.bestBowler.economy} Econ)</Text>
                       </Text>
                       {Boolean(tournament.prizeDetails?.bestBowlerPrize) && (
-                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestBowlerPrize}</Text>
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>{tournament.prizeDetails.bestBowlerPrize}</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -2017,18 +2017,18 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       onPress={() => {
                         const ar = tournamentLeaders.awards.bestAllRounder;
                         Alert.alert(
-                          `⚡ Best All-Rounder: ${ar.name}`,
+                          `Best All-Rounder: ${ar.name}`,
                           `Team: ${ar.teamName}\n` +
                           `• Batting: ${ar.runs} runs (${ar.strikeRate} SR)\n` +
                           `• Bowling: ${ar.wickets} wkts (${ar.economy} Econ)\n` +
                           `• Rating: ${ar.grade} (${ar.impactScore} pts)` +
-                          (tournament.prizeDetails?.bestAllRounderPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestAllRounderPrize}` : '')
+                          (tournament.prizeDetails?.bestAllRounderPrize ? `\n• Prize: ${tournament.prizeDetails.bestAllRounderPrize}` : '')
                         );
                       }}
                       activeOpacity={0.8}
                     >
                       <View style={styles.compactAwardHeader}>
-                        <Text style={{ fontSize: 16 }}>⚡</Text>
+                        <Ionicons name="flash" size={16} color="#7C3AED" style={{ marginRight: 4 }} />
                         <Text style={[styles.compactAwardTitle, { color: '#059669' }]}>ALL-ROUNDER</Text>
                       </View>
                       <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
@@ -2041,7 +2041,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         {tournamentLeaders.awards.bestAllRounder.runs}r • {tournamentLeaders.awards.bestAllRounder.wickets}w
                       </Text>
                       {Boolean(tournament.prizeDetails?.bestAllRounderPrize) && (
-                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestAllRounderPrize}</Text>
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>{tournament.prizeDetails.bestAllRounderPrize}</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -2053,19 +2053,19 @@ export default function TournamentDetailScreen({ route, navigation }) {
                       onPress={() => {
                         const f = tournamentLeaders.awards.bestFielder;
                         Alert.alert(
-                          `🧤 Best Fielder: ${f.name}`,
+                          `Best Fielder: ${f.name}`,
                           `Team: ${f.teamName}\n` +
                           `• Catches: ${f.catches}\n` +
                           `• Run-Outs: ${f.runOuts}\n` +
                           `• Stumpings: ${f.stumpings}\n` +
                           `• Total Dismissals: ${f.fieldingDismissals}` +
-                          (tournament.prizeDetails?.bestFielderPrize ? `\n• Prize: 🎁 ${tournament.prizeDetails.bestFielderPrize}` : '')
+                          (tournament.prizeDetails?.bestFielderPrize ? `\n• Prize: ${tournament.prizeDetails.bestFielderPrize}` : '')
                         );
                       }}
                       activeOpacity={0.8}
                     >
                       <View style={styles.compactAwardHeader}>
-                        <Text style={{ fontSize: 16 }}>🧤</Text>
+                        <Ionicons name="hand-left-outline" size={16} color="#0D9488" style={{ marginRight: 4 }} />
                         <Text style={[styles.compactAwardTitle, { color: '#0284C7' }]}>BEST FIELDER</Text>
                       </View>
                       <Text style={[styles.compactAwardPlayer, { color: C.text }]} numberOfLines={1}>
@@ -2078,7 +2078,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         {tournamentLeaders.awards.bestFielder.fieldingDismissals} Dismissals
                       </Text>
                       {Boolean(tournament.prizeDetails?.bestFielderPrize) && (
-                        <Text style={styles.compactAwardPrize} numberOfLines={1}>🎁 {tournament.prizeDetails.bestFielderPrize}</Text>
+                        <Text style={styles.compactAwardPrize} numberOfLines={1}>{tournament.prizeDetails.bestFielderPrize}</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -2086,7 +2086,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
               </>
             ) : (
               <View style={[styles.emptyAwardsNotice, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-                <Text style={{ fontSize: 24, marginBottom: 4 }}>🏅</Text>
+                <Ionicons name="medal" size={24} color="#D97706" style={{ marginRight: 4 }} />
                 <Text style={[styles.emptyAwardsTitle, { color: C.text }]}>Leaderboards & Standings Pending</Text>
                 <Text style={[styles.emptyAwardsSub, { color: C.subtext }]}>
                   Awards and leaderboards (Runs, Wickets, SR, Economy, Fours, Sixes & Fielding) will update automatically as matches are played.
@@ -2101,7 +2101,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
               activeOpacity={0.8}
             >
               <Text style={[styles.openLeaderboardsBtnText, { color: C.primary }]}>
-                View Complete Tournament Leaderboards 📊
+                View Complete Tournament Leaderboards
               </Text>
               <Feather name="chevron-right" size={16} color={C.primary} />
             </TouchableOpacity>
@@ -2343,7 +2343,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                           {/* Toss Result Banner */}
                           {Boolean(match.toss) && (
                             <View style={[styles.tossBannerRow, { backgroundColor: dark ? '#1E293B' : '#FEF3C7', borderColor: '#F59E0B' }]}>
-                              <Text style={{ fontSize: 13, marginRight: 6 }}>🪙</Text>
+                              <Ionicons name="cash-outline" size={13} color="#B45309" style={{ marginRight: 4 }} />
                               <Text style={[styles.tossBannerText, { color: dark ? '#FCD34D' : '#92400E' }]}>
                                 <Text style={{ fontWeight: '800' }}>{match.toss.winnerName}</Text> won the toss and elected to{' '}
                                 <Text style={{ fontWeight: '800', textTransform: 'uppercase' }}>{match.toss.decision}</Text>.
@@ -2501,7 +2501,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                     style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: '#EF4444' }}
                                     onPress={() => setSelectedMatchForLiveBoard(match)}
                                   >
-                                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>Full Scorecard ⚡</Text>
+                                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>Full Scorecard</Text>
                                   </TouchableOpacity>
                                 </View>
 
@@ -2519,7 +2519,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                 <View style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: C.border }}>
                                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                                     <Text style={{ fontSize: 12, fontWeight: '700', color: C.text, flex: 1 }} numberOfLines={1}>
-                                      🏏 {striker?.name || 'Striker'} * : <Text style={{ fontWeight: '800', color: C.primary }}>{striker?.runs || 0}</Text> ({striker?.balls || 0}b)
+                                      {striker?.name || 'Striker'} * : <Text style={{ fontWeight: '800', color: C.primary }}>{striker?.runs || 0}</Text> ({striker?.balls || 0}b)
                                     </Text>
                                     <Text style={{ fontSize: 12, fontWeight: '600', color: C.subtext, flex: 1, textAlign: 'right' }} numberOfLines={1}>
                                       {nonStriker?.name || 'Non-Striker'}: {nonStriker?.runs || 0} ({nonStriker?.balls || 0}b)
@@ -2529,7 +2529,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                   {/* Bowler & This Over */}
                                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                                     <Text style={{ fontSize: 11, color: C.subtext, flex: 1 }} numberOfLines={1}>
-                                      🎯 {bowler?.name || 'Bowler'} • {bowler?.overs || '0.0'} ov, {bowler?.wickets || 0}w, {bowler?.runs || 0}r
+                                      {bowler?.name || 'Bowler'} • {bowler?.overs || '0.0'} ov, {bowler?.wickets || 0}w, {bowler?.runs || 0}r
                                     </Text>
                                   </View>
 
@@ -2576,7 +2576,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                 style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#D97706', backgroundColor: dark ? 'rgba(217, 119, 6, 0.12)' : '#FEF3C7' }}
                                 onPress={() => setSelectedMatchForPerformance(match)}
                               >
-                                <Text style={{ fontSize: 11, fontWeight: '800', color: dark ? '#FBBF24' : '#B45309' }}>🎖️ Player Ratings & Awards</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '800', color: dark ? '#FBBF24' : '#B45309' }}>Player Ratings & Awards</Text>
                               </TouchableOpacity>
                             </View>
                           )}
@@ -2600,7 +2600,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                   >
                                     <Feather name="play-circle" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                                     <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
-                                      Setup & Start Match 🏏
+                                      Setup & Start Match
                                     </Text>
                                   </TouchableOpacity>
                                 ) : (
@@ -2629,7 +2629,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                                       activeOpacity={0.85}
                                     >
                                       <Text style={[styles.managerActionBtnText, { color: '#FFFFFF', fontWeight: '800' }]}>
-                                        {isMatchFinal ? 'Finish Final 👑' : 'Finish Match 🏁'}
+                                        {isMatchFinal ? 'Finish Final' : 'Finish Match'}
                                       </Text>
                                     </TouchableOpacity>
                                   </>
@@ -3012,7 +3012,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
           <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ fontSize: 20, marginRight: 8 }}>🪙</Text>
+                <Ionicons name="cash-outline" size={20} color="#B45309" style={{ marginRight: 4 }} />
                 <View>
                   <Text style={[styles.modalTitle, { color: C.text }]}>Conduct Match Toss</Text>
                   <Text style={[styles.modalSub, { color: C.subtext }]}>
@@ -3112,7 +3112,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         { color: tossDecision === 'bat' ? '#FFFFFF' : C.text },
                       ]}
                     >
-                      🏏 Bat First
+                      Bat First
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -3130,7 +3130,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         { color: tossDecision === 'bowl' ? '#FFFFFF' : C.text },
                       ]}
                     >
-                      🎯 Bowl First
+                      Bowl First
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -3151,7 +3151,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         { color: tossDecision === 'kickoff' ? '#FFFFFF' : C.text },
                       ]}
                     >
-                      ⚽ Kickoff First
+                      Kickoff First
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -3169,7 +3169,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                         { color: tossDecision === 'side' ? '#FFFFFF' : C.text },
                       ]}
                     >
-                      🛡️ Choose Side
+                      Choose Side
                     </Text>
                   </TouchableOpacity>
                 </>
@@ -3357,7 +3357,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={{ fontSize: 22, marginRight: 8 }}>
-                  {!selectedMatchForWinner?.nextMatchId ? '👑' : '🏆'}
+                  <Ionicons name="trophy" size={26} color="#D97706" />
                 </Text>
                 <View>
                   <Text style={[styles.modalTitle, { color: C.text }]}>
@@ -3475,7 +3475,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text style={styles.modalSaveText}>
-                    {!selectedMatchForWinner?.nextMatchId ? 'Crown Champion 👑' : 'Confirm & Advance 🏆'}
+                    {!selectedMatchForWinner?.nextMatchId ? 'Crown Champion' : 'Confirm & Advance'}
                   </Text>
                 )}
               </TouchableOpacity>

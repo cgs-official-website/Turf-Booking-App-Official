@@ -236,21 +236,20 @@ export const fetchSubscriptionHistory = createAsyncThunk('vendor/fetchSubscripti
   try { return await getSubscriptionHistoryApi(); } catch (e) { return rejectWithValue(e.message); }
 });
  
+import { notificationsApi } from '../api/notifications';
+
 // ─── Notification Thunks ─────────────────────────────────────────────────────
-// TEMP STUB: point these at your real notifications API once you confirm the
-// file path (e.g. '../api/notifications'). Left as inline no-ops for now so
-// the app doesn't crash on an unresolved import — swap the try blocks below.
 
 export const fetchNotifications = createAsyncThunk('vendor/fetchNotifications', async (_, { rejectWithValue }) => {
   try {
-    // return await getNotificationsApi();
-    return { notifications: [] };
+    const res = await notificationsApi.getAll();
+    return res || { notifications: [] };
   } catch (e) { return rejectWithValue(e.message); }
 });
 
 export const markAllNotificationsRead = createAsyncThunk('vendor/markAllNotificationsRead', async (_, { rejectWithValue }) => {
   try {
-    // await markAllNotificationsReadApi();
+    await notificationsApi.markAllRead();
     return true;
   } catch (e) { return rejectWithValue(e.message); }
 });
@@ -637,10 +636,12 @@ const vendorSlice = createSlice({
       // so the dot disappears without waiting for a refetch.
       .addCase(fetchNotifications.fulfilled, (state, { payload }) => {
         state.notifications = payload.notifications || [];
-        state.unreadNotificationCount = state.notifications.filter((n) => !n.isRead).length;
+        state.unreadNotificationCount = typeof payload.unreadCount === 'number'
+          ? payload.unreadCount
+          : state.notifications.filter((n) => !n.isRead && !n.read).length;
       })
       .addCase(markAllNotificationsRead.fulfilled, (state) => {
-        state.notifications = state.notifications.map((n) => ({ ...n, isRead: true }));
+        state.notifications = state.notifications.map((n) => ({ ...n, isRead: true, read: true }));
         state.unreadNotificationCount = 0;
       })
  

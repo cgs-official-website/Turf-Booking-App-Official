@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import DatePickerModal from '../components/DatePickerModal';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
@@ -67,7 +68,9 @@ const CreateTournamentScreen = ({ navigation, route }) => {
   const [playersPerTeam, setPlayersPerTeam] = useState('11');
   const [oversPerTeam, setOversPerTeam] = useState('10');
   const [cupsCount, setCupsCount] = useState(1); // 1, 2, or 4 Cups
-  const [prizePool, setPrizePool] = useState('');
+  const [cupPrizes, setCupPrizes] = useState(['', '', '', '']);
+  // Total pool is always the sum of the prize given to each cup
+  const prizePool = String(cupPrizes.slice(0, Number(cupsCount) || 1).reduce((sum, v) => sum + (Number(v) || 0), 0) || '');
 
   // Date Pickers state
   const [showRegStartDatePicker, setShowRegStartDatePicker] = useState(false);
@@ -186,6 +189,7 @@ const CreateTournamentScreen = ({ navigation, route }) => {
         prizePool: prizePool ? Number(prizePool) : 0,
         prizeDetails: {
           cupsCount: Number(cupsCount) || 1,
+          cupPrizes: cupPrizes.slice(0, Number(cupsCount) || 1).map((v) => Number(v) || 0),
           structure: cupsCount === 4 ? '1st, 2nd, 3rd & 4th Cups + Playoff' : (cupsCount === 2 ? 'Winner & Runner-up Cups' : 'Champion Cup'),
         },
         status: publishImmediately ? 'published' : 'draft',
@@ -329,8 +333,8 @@ const CreateTournamentScreen = ({ navigation, route }) => {
                       backgroundColor: isSelected
                         ? colors.primary
                         : isDark
-                        ? 'rgba(255,255,255,0.06)'
-                        : '#F1F5F9',
+                          ? 'rgba(255,255,255,0.06)'
+                          : '#F1F5F9',
                       borderColor: isSelected ? colors.primary : colors.border,
                     },
                   ]}
@@ -682,7 +686,7 @@ const CreateTournamentScreen = ({ navigation, route }) => {
               onPress={() => setCupsCount(1)}
               activeOpacity={0.8}
             >
-              <Text style={styles.cupEmoji}>🏆</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 }}><Ionicons name="trophy" size={20} color="#D97706" /></View>
               <Text style={[styles.cupCardTitle, { color: colors.text }]}>1 Cup</Text>
               <Text style={[styles.cupCardSubtitle, { color: colors.textSecondary }]}>Champion</Text>
               <View style={[styles.cupBadge, { backgroundColor: cupsCount === 1 ? '#D97706' : 'transparent' }]}>
@@ -702,7 +706,7 @@ const CreateTournamentScreen = ({ navigation, route }) => {
               onPress={() => setCupsCount(2)}
               activeOpacity={0.8}
             >
-              <Text style={styles.cupEmoji}>🏆🥈</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 }}><Ionicons name="trophy" size={20} color="#D97706" /><Ionicons name="medal" size={18} color="#94A3B8" /></View>
               <Text style={[styles.cupCardTitle, { color: colors.text }]}>2 Cups</Text>
               <Text style={[styles.cupCardSubtitle, { color: colors.textSecondary }]}>Winner + Runner-up</Text>
               <View style={[styles.cupBadge, { backgroundColor: cupsCount === 2 ? '#D97706' : 'transparent' }]}>
@@ -722,7 +726,7 @@ const CreateTournamentScreen = ({ navigation, route }) => {
               onPress={() => setCupsCount(4)}
               activeOpacity={0.8}
             >
-              <Text style={styles.cupEmoji}>🏆🥈🥉🎖️</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 }}><Ionicons name="trophy" size={20} color="#D97706" /><Ionicons name="medal" size={18} color="#94A3B8" /><Ionicons name="medal" size={18} color="#C2410C" /><Ionicons name="medal" size={18} color="#2563EB" /></View>
               <Text style={[styles.cupCardTitle, { color: colors.text }]}>4 Cups</Text>
               <Text style={[styles.cupCardSubtitle, { color: colors.textSecondary }]}>1st + 2nd + 3rd + 4th</Text>
               <View style={[styles.cupBadge, { backgroundColor: cupsCount === 4 ? '#D97706' : 'transparent' }]}>
@@ -740,29 +744,27 @@ const CreateTournamentScreen = ({ navigation, route }) => {
             </View>
           )}
 
-          {/* Cash Prize Pool Input */}
-          <Text style={[styles.fieldLabel, { color: colors.text, marginTop: 14 }]}>Total Cash Prize Pool (Optional)</Text>
-          <View
-            style={[
-              styles.inputWrap,
-              {
-                backgroundColor: colors.inputBg,
-                borderColor: focusedField === 'prizePool' ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text style={{ color: colors.textSecondary, fontWeight: '700', marginRight: 6, fontSize: 16 }}>₹</Text>
-            <TextInput
-              style={[styles.input, { color: colors.text }]}
-              placeholder="e.g. 25000"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="numeric"
-              value={prizePool}
-              onChangeText={(text) => setPrizePool(text.replace(/[^0-9]/g, ''))}
-              onFocus={() => setFocusedField('prizePool')}
-              onBlur={() => setFocusedField(null)}
-            />
-          </View>
+          {/* Cash Prize per cup */}
+          <Text style={[styles.fieldLabel, { color: colors.text, marginTop: 14 }]}>Prize Amount per Cup (₹ Optional)</Text>
+          {['Champion (1st Prize)', 'Runner-up (2nd Prize)', '3rd Place Prize', '4th Place Prize'].slice(0, Number(cupsCount) || 1).map((label, idx) => (
+            <View key={`cupprize_${idx}`} style={{ marginBottom: 10 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 4 }}>{label}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.inputBg, borderColor: colors.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 }}>
+                <Text style={{ color: colors.textSecondary, fontWeight: '700', marginRight: 6, fontSize: 16 }}>₹</Text>
+                <TextInput
+                  style={{ flex: 1, color: colors.text, paddingVertical: 10, fontSize: 15 }}
+                  placeholder="e.g. 10000"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                  value={cupPrizes[idx]}
+                  onChangeText={(text) => setCupPrizes((prev) => prev.map((v, i) => (i === idx ? text.replace(/[^0-9]/g, '') : v)))}
+                />
+              </View>
+            </View>
+          ))}
+          {Number(prizePool) > 0 && (
+            <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, marginTop: 2 }}>Total Prize Pool: ₹{Number(prizePool).toLocaleString('en-IN')}</Text>
+          )}
         </View>
 
         {/* Action Buttons */}

@@ -9,11 +9,13 @@ import {
   Alert,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import {
   processBallEvent,
   undoLastBall,
   createEmptyInnings,
+  normalizeInnings,
   crrString,
   rrrString,
 } from '../utils/cricketScorerEngine';
@@ -203,6 +205,8 @@ export default function CricketScorerModal({
 
     if (match.liveCricket && (match.liveCricket.innings1 || match.liveCricket.innings2)) {
       const restored = JSON.parse(JSON.stringify(match.liveCricket));
+      normalizeInnings(restored.innings1);
+      normalizeInnings(restored.innings2);
       ensureInningsRoster(restored.innings1, team1Squad, team2Squad);
       if (restored.innings2) {
         ensureInningsRoster(restored.innings2, team2Squad, team1Squad);
@@ -229,7 +233,7 @@ export default function CricketScorerModal({
       if (onSyncLiveCricket) {
         onSyncLiveCricket(updatedLive);
       }
-    }, 400);
+    }, 150);
   };
 
   if (!match || !liveState) return null;
@@ -335,7 +339,7 @@ export default function CricketScorerModal({
     }
 
     Alert.alert(
-      'Finish Match Confirmation 🏆',
+      'Finish Match Confirmation',
       `Score Summary:\n• ${team1Name}: ${score1}\n• ${team2Name}: ${score2}\n\nResult:\n${resultText}\n\nMark match COMPLETED and calculate winner automatically?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -375,7 +379,14 @@ export default function CricketScorerModal({
       bowlerName: bowler.name,
     };
 
-    const res = processBallEvent(innings, fullEvent, target);
+    let res;
+    try {
+      res = processBallEvent(innings, fullEvent, target);
+    } catch (err) {
+      console.warn('processBallEvent error:', err?.message);
+      Alert.alert('Scoring Error', 'Could not record this ball. Please try again.');
+      return;
+    }
     const updatedLive = { ...liveState };
     updatedLive[curInnKey] = res.innings;
 
@@ -385,7 +396,7 @@ export default function CricketScorerModal({
     if (res.inningsCompleted) {
       if (currentInningsNum === 1) {
         Alert.alert(
-          '1st Innings Completed! 🏁',
+          '1st Innings Completed!',
           `${innings.battingTeamName} finished at ${res.innings.runs}/${res.innings.wickets} in ${res.innings.overs} overs.\n\nTarget for ${innings.bowlingTeamName}: ${res.innings.runs + 1} runs.`,
           [
             {
@@ -634,7 +645,7 @@ export default function CricketScorerModal({
             {isInningsOver && (
               <View style={{ marginBottom: 12, padding: 14, borderRadius: 12, backgroundColor: isDark ? '#1E293B' : '#FEF3C7', borderWidth: 1, borderColor: '#D97706', alignItems: 'center' }}>
                 <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309', marginBottom: 6 }}>
-                  {isTargetReached ? 'Target Reached! 🏁' : (isAllOut ? 'All Out! 🏁' : 'Over Limit Reached! 🏁')}
+                  {isTargetReached ? 'Target Reached!' : (isAllOut ? 'All Out!' : 'Over Limit Reached!')}
                 </Text>
                 <Text style={{ fontSize: 12, color: colors.subtext || colors.textSecondary, textAlign: 'center', marginBottom: 10 }}>
                   {currentInningsNum === 1
@@ -646,14 +657,14 @@ export default function CricketScorerModal({
                     style={[styles.finishBtn, { backgroundColor: colors.primary, paddingHorizontal: 20 }]}
                     onPress={handleStartSecondInnings}
                   >
-                    <Text style={styles.finishBtnText}>Start 2nd Innings 🏏</Text>
+                    <Ionicons name="play-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} /><Text style={styles.finishBtnText}>Start 2nd Innings</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={[styles.finishBtn, { backgroundColor: '#059669', paddingHorizontal: 20 }]}
                     onPress={handleConfirmFinishMatch}
                   >
-                    <Text style={styles.finishBtnText}>Finish Match & Declare Winner 🏆</Text>
+                    <Ionicons name="trophy" size={16} color="#FFFFFF" style={{ marginRight: 6 }} /><Text style={styles.finishBtnText}>Finish Match & Declare Winner</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -806,7 +817,7 @@ export default function CricketScorerModal({
           <Modal visible={showFielderPickerModal} transparent animationType="fade">
             <View style={styles.subModalOverlay}>
               <View style={[styles.subModalCard, { backgroundColor: colors.card }]}>
-                <Text style={[styles.subModalTitle, { color: '#0284C7' }]}>Select Fielder 🧤</Text>
+                <Text style={[styles.subModalTitle, { color: '#0284C7' }]}>Select Fielder</Text>
                 <Text style={{ color: colors.subtext || colors.textSecondary, fontSize: 12, marginBottom: 12 }}>
                   Who contributed to the {pendingDismissal.replace('_', ' ')}?
                 </Text>

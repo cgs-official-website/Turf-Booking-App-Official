@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Share,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
@@ -16,6 +17,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import TournamentCard from '../components/TournamentCard';
+import Pagination from '../components/Pagination';
 import { getAvailableTournamentsApi, getMyTournamentsApi, getCachedAvailableTournaments } from '../api/tournaments';
 import { SPACING, RADIUS, SHADOW } from '../utils/theme';
 
@@ -23,7 +25,10 @@ export default function TournamentScreen({ navigation }) {
   const { C, dark } = useTheme();
   const { token, user } = useSelector((s) => s.auth);
 
-  const [activeTab, setActiveTab] = useState('available'); // 'available' | 'my'
+  const [activeTab, setActiveTab] = useState('available'); // 'available' | 'open' | 'my'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 6;
   const cachedAvailable = getCachedAvailableTournaments();
   const [availableTournaments, setAvailableTournaments] = useState(cachedAvailable?.tournaments || []);
   const [myTournaments, setMyTournaments] = useState([]);
@@ -65,9 +70,29 @@ export default function TournamentScreen({ navigation }) {
     }
   }, [activeTab, loadMy]);
 
+  const openTournaments = availableTournaments.filter((t) => t.lifecycleStatus === 'registration_open');
+
+  const matchesSearch = (t) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const hay = [t.name, t.sport, t.turf?.name, t.turfName, t.location, t.city, t.area, t.creatorName]
+      .filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  };
+
+  const baseList = activeTab === 'my' ? myTournaments : (activeTab === 'open' ? openTournaments : availableTournaments);
+  const filteredList = baseList.filter(matchesSearch);
+  const totalPages = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedList = filteredList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, searchQuery]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    if (activeTab === 'available') {
+    if (activeTab !== 'my') {
       await loadAvailable();
     } else {
       await loadMy();
@@ -202,105 +227,92 @@ export default function TournamentScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* ── Dual Tab Selector ── */}
-      <View style={[styles.tabsWrap, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === 'available' && [
-              styles.tabButtonActive,
-              { backgroundColor: C.card, borderColor: '#0F766E' },
-              SHADOW.subtle,
-            ],
-          ]}
-          onPress={() => setActiveTab('available')}
-          activeOpacity={0.8}
-        >
-          <Feather
-            name="compass"
-            size={14}
-            color={activeTab === 'available' ? '#0F766E' : C.subtext}
-            style={{ marginRight: 6 }}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'available' ? '#0F766E' : C.subtext },
-              activeTab === 'available' && styles.tabTextActive,
-            ]}
-          >
-            Available ({availableTournaments.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            activeTab === 'my' && [
-              styles.tabButtonActive,
-              { backgroundColor: C.card, borderColor: '#0F766E' },
-              SHADOW.subtle,
-            ],
-          ]}
-          onPress={() => setActiveTab('my')}
-          activeOpacity={0.8}
-        >
-          <Feather
-            name="user"
-            size={14}
-            color={activeTab === 'my' ? '#0F766E' : C.subtext}
-            style={{ marginRight: 6 }}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'my' ? '#0F766E' : C.subtext },
-              activeTab === 'my' && styles.tabTextActive,
-            ]}
-          >
-            My Tournaments ({myTournaments.length})
-          </Text>
-        </TouchableOpacity>
+      {/* ── Search ── */}
+      <View style={[styles.searchBox, { backgroundColor: C.card, borderColor: C.border }]}>
+        <Feather name="search" size={16} color={C.subtext} />
+        <TextInput
+          style={[styles.searchInput, { color: C.text }]}
+          placeholder="Search tournaments, sport, turf..."
+          placeholderTextColor={C.subtext}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="x-circle" size={16} color={C.subtext} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* ── Tab Content Lists ── */}
-      {activeTab === 'available' ? (
-        <FlatList
-          data={availableTournaments}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} />
-          }
-          ListEmptyComponent={renderAvailableEmpty}
-          renderItem={({ item }) => (
-            <TournamentCard
-              tournament={item}
-              onPress={() => navigation.navigate('TournamentDetail', { tournamentId: item.id })}
-              onShare={handleShare}
-            />
-          )}
-        />
-      ) : (
-        <FlatList
-          data={myTournaments}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
-          }
-          ListEmptyComponent={renderMyEmpty}
-          renderItem={({ item }) => (
-            <TournamentCard
-              tournament={item}
-              onPress={() => navigation.navigate('TournamentDetail', { tournamentId: item.id })}
-              onShare={handleShare}
-            />
-          )}
-        />
-      )}
+      {/* ── Tab Selector ── */}
+      <View style={[styles.tabsWrap, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+        {[
+          { key: 'available', icon: 'compass', label: `Available (${availableTournaments.length})` },
+          { key: 'open', icon: 'unlock', label: `Open (${openTournaments.length})` },
+          { key: 'my', icon: 'user', label: `Mine (${myTournaments.length})` },
+        ].map((tab) => {
+          const on = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tabButton,
+                on && [styles.tabButtonActive, { backgroundColor: C.card, borderColor: '#0F766E' }, SHADOW.subtle],
+              ]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.8}
+            >
+              <Feather name={tab.icon} size={13} color={on ? '#0F766E' : C.subtext} style={{ marginRight: 5 }} />
+              <Text
+                numberOfLines={1}
+                style={[styles.tabText, { color: on ? '#0F766E' : C.subtext }, on && styles.tabTextActive]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* ── Tab Content List ── */}
+      <FlatList
+        data={pagedList}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0F766E']} />
+        }
+        ListEmptyComponent={
+          searchQuery.trim()
+            ? (
+              <View style={[styles.emptyContainer, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+                <View style={[styles.emptyIconCircle, { backgroundColor: '#CCFBF1' }]}>
+                  <Feather name="search" size={30} color="#0F766E" />
+                </View>
+                <Text style={[styles.emptyTitle, { color: C.text }]}>No Matching Tournaments</Text>
+                <Text style={[styles.emptySubtitle, { color: C.subtext }]}>Try a different name, sport or turf.</Text>
+              </View>
+            )
+            : (activeTab === 'my' ? renderMyEmpty() : renderAvailableEmpty())
+        }
+        ListFooterComponent={
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            onChange={setPage}
+            theme={{ primary: '#0F766E', card: C.card, border: C.border, text: C.text, subtext: C.subtext }}
+          />
+        }
+        renderItem={({ item }) => (
+          <TournamentCard
+            tournament={item}
+            onPress={() => navigation.navigate('TournamentDetail', { tournamentId: item.id })}
+            onShare={handleShare}
+          />
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -309,6 +321,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    gap: 8,
+  },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -371,7 +394,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   tabTextActive: {

@@ -1,11 +1,12 @@
 // @theme-ready ✅
-import React, { useEffect, useMemo, useState, useLayoutEffect } from 'react';
+import React, { useEffect, useMemo, useState, useLayoutEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, Pressable,
   ScrollView,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchBookings, fetchMySubscription } from '../redux/vendorSlice';
+import { useFocusEffect } from '@react-navigation/native';
+import { fetchBookings, fetchMySubscription, fetchNotifications, markAllNotificationsRead } from '../redux/vendorSlice';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { useTheme } from '../context/ThemeContext';
 import Feather from 'react-native-vector-icons/Feather';
@@ -165,6 +166,7 @@ const NotificationScreen = ({ navigation }) => {
       const res = await notificationsApi.getAll();
       const list = res?.data?.notifications || res?.notifications || [];
       setServerNotifications(list);
+      dispatch(fetchNotifications());
     } catch (err) {
       console.warn('Failed to load server notifications:', err.message);
     } finally {
@@ -177,6 +179,12 @@ const NotificationScreen = ({ navigation }) => {
     dispatch(fetchMySubscription());
     loadServerNotifications();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadServerNotifications();
+    }, [])
+  );
 
   const notifications = useMemo(() => {
     const combined = [
@@ -193,6 +201,8 @@ const NotificationScreen = ({ navigation }) => {
     if (activeFilter === 'Unread') return sorted.filter((n) => !n.read);
     return sorted;
   }, [serverNotifications, bookings, mySubscription, activeFilter, colors]);
+
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const sections = useMemo(() => {
     const map = new Map();
@@ -211,6 +221,7 @@ const NotificationScreen = ({ navigation }) => {
         setServerNotifications((prev) =>
           prev.map((n) => (n.id === item.id ? { ...n, isRead: true, read: true } : n))
         );
+        dispatch(fetchNotifications());
       } catch (_) {}
     }
 
@@ -245,8 +256,31 @@ const NotificationScreen = ({ navigation }) => {
         >
           <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: colors.text }]}>Notifications</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={[styles.navTitle, { color: colors.text }]}>Notifications</Text>
+          {unreadCount > 0 && (
+            <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '600', marginTop: 1 }}>
+              {unreadCount} unread
+            </Text>
+          )}
+        </View>
+        {unreadCount > 0 ? (
+          <TouchableOpacity
+            style={styles.markAllBtn}
+            onPress={async () => {
+              try {
+                await notificationsApi.markAllRead();
+                setServerNotifications((prev) => prev.map((n) => ({ ...n, isRead: true, read: true })));
+                dispatch(markAllNotificationsRead());
+              } catch (_) {}
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.markAllText, { color: colors.primary }]}>Mark all read</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       {/* Filter Tabs */}
@@ -359,6 +393,15 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     fontSize: SIZES.base,
+    fontWeight: '700',
+  },
+  markAllBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  markAllText: {
+    fontSize: 12,
     fontWeight: '700',
   },
 

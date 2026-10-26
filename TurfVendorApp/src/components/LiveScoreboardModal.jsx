@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { CRICKET_LIGHT } from '../theme/cricketLight';
 import { crrString, rrrString } from '../utils/cricketScorerEngine';
 
@@ -149,7 +150,7 @@ export default function LiveScoreboardModal({
               {isCompleted && match.score && (
                 <View style={[styles.completedBanner, { backgroundColor: dark ? 'rgba(16, 185, 129, 0.15)' : '#ECFDF5' }]}>
                   <Text style={styles.completedText}>
-                    🏆 {match.score.summary || `${match.winner?.name || 'Winner'} won`}
+                    {match.score.summary || `${match.winner?.name || 'Winner'} won`}
                   </Text>
                 </View>
               )}
@@ -182,9 +183,10 @@ export default function LiveScoreboardModal({
                 <View style={[styles.creaseSection, { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border }]}>
                   <Text style={[styles.creaseSectionLabel, { color: C.subtext }]}>BOWLING</Text>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <Text style={[styles.creasePlayerName, { color: C.text }]}>
-                      🎯 {bowler?.name || 'Bowler'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons name="locate" size={14} color="#2563EB" style={{ marginRight: 6 }} />
+                      <Text style={[styles.creasePlayerName, { color: C.text }]}>{bowler?.name || 'Bowler'}</Text>
+                    </View>
                     <Text style={[styles.creasePlayerStat, { color: C.text }]}>
                       {bowler?.overs || '0.0'} ov • {bowler?.runs || 0} r • {bowler?.wickets || 0} w (Econ: {bowler?.economy || '0.0'})
                     </Text>

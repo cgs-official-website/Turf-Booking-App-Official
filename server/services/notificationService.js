@@ -285,6 +285,163 @@ const notificationService = {
       )
     );
   },
+
+  /**
+   * Broadcast newly published tournament notification to all eligible registered users
+   * - Saves in-app bell notification for all active users
+   * - Dispatches high-priority FCM HTTP v1 push notification to valid device tokens
+   * - Enforces idempotency via documents table so retried calls do not send duplicate notifications
+   */
+  async broadcastTournament({ tournament, venue }) {
+    if (!tournament || !tournament.id || tournament.status !== 'published') {
+      return { success: false, reason: 'Tournament is not published' };
+    }
+
+    const tournamentId = String(tournament.id);
+
+    // 1. Idempotency check: prevent duplicate broadcast on retried create/publish API calls
+    try {
+      const alreadyBroadcast = await prisma.document.findUnique({
+        where: {
+          collection_id: {
+            collection: 'tournament_broadcast',
+            id: tournamentId,
+          },
+        },
+      });
+
+      if (alreadyBroadcast) {
+        console.log(`ℹ️ [Broadcast Skipped] Tournament ${tournamentId} has already been broadcasted.`);
+        return { success: true, duplicate: true };
+      }
+
+      await prisma.document.create({
+        data: {
+          collection: 'tournament_broadcast',
+          id: tournamentId,
+          data: {
+            broadcastAt: new Date(),
+            tournamentName: tournament.name,
+            creatorType: tournament.creatorType,
+          },
+        },
+      });
+    } catch (idemErr) {
+      // If concurrent insert occurred, treat as duplicate and skip
+      console.log(`ℹ️ [Broadcast Guard] Duplicate broadcast avoided for tournament ${tournamentId}`);
+      return { success: true, duplicate: true };
+    }
+
+    const cleanText = (str) => {
+      if (!str || typeof str !== 'string') return '';
+      return str
+        .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{200D}\u{FE0F}]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const venueLabel = cleanText(venue || tournament.venueName || tournament.turf?.name || tournament.city || 'Turf Arena');
+    const tournamentName = cleanText(tournament.name) || 'New Tournament';
+    const finalTitle = `Tournament Published: ${tournamentName}`;
+    const finalBody = `Registration is open for "${tournamentName}" at ${venueLabel}. Tap to view details and register!`;
+
+    const notifData = {
+      tournamentId,
+      id: tournamentId,
+      screen: 'TournamentDetail',
+      type: 'tournament',
+      action: 'tournament_created',
+      tournamentName: tournament.name,
+      venueName: venueLabel,
+    };
+
+    try {
+      // 2. Fetch all registered active users
+      const allUsers = await prisma.user.findMany({
+        where: { status: 'active' },
+        select: { id: true },
+      });
+
+      const excludeUserId = tournament.userId ? String(tournament.userId) : null;
+      const targetUserIds = allUsers
+        .map((u) => String(u.id))
+        .filter((uid) => uid && uid !== excludeUserId);
+
+      if (!targetUserIds.length) {
+        return { success: true, count: 0 };
+      }
+
+      // 3. Batch save in-app notification records for all recipients (UserApp bell icon)
+      const notifRows = targetUserIds.map((uid) => ({
+        id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        recipientId: uid,
+        recipientType: 'user',
+        title: finalTitle,
+        body: finalBody,
+        type: 'general',
+        data: notifData,
+        isRead: false,
+      }));
+
+      try {
+        await prisma.notification.createMany({
+          data: notifRows,
+          skipDuplicates: true,
+        });
+        console.log(`📝 [In-App Bell] Persisted ${notifRows.length} notifications for published tournament ${tournamentId}`);
+      } catch (dbErr) {
+        console.warn('⚠️ Bulk in-app notification creation warning:', dbErr.message);
+      }
+
+      // 4. Check push notification preferences
+      const prefDocs = await prisma.document.findMany({
+        where: { collection: 'pref_user' },
+        select: { id: true, data: true },
+      });
+      const disabledUserIds = new Set(
+        prefDocs
+          .filter((d) => d.data && d.data.pushNotifications === false)
+          .map((d) => String(d.id))
+      );
+
+      const eligibleUserIds = targetUserIds.filter((uid) => !disabledUserIds.has(uid));
+      if (!eligibleUserIds.length) {
+        return { success: true, inAppCount: notifRows.length, pushCount: 0 };
+      }
+
+      // 5. Gather registered device tokens for eligible users
+      const deviceTokens = await prisma.deviceToken.findMany({
+        where: {
+          ownerType: 'user',
+          ownerId: { in: eligibleUserIds },
+        },
+        select: { token: true },
+      });
+
+      const uniqueTokens = [...new Set(deviceTokens.map((t) => t.token).filter(Boolean))];
+      console.log(`📡 [FCM Multicast] Broadcasting tournament "${tournamentName}" to ${uniqueTokens.length} device tokens...`);
+
+      // 6. Send FCM HTTP v1 multicast in batches of 500 tokens
+      for (let i = 0; i < uniqueTokens.length; i += 500) {
+        const batch = uniqueTokens.slice(i, i + 500);
+        await this.sendFcmPush({
+          tokens: batch,
+          title: finalTitle,
+          body: finalBody,
+          data: notifData,
+        });
+      }
+
+      return {
+        success: true,
+        inAppCount: notifRows.length,
+        pushedTokenCount: uniqueTokens.length,
+      };
+    } catch (err) {
+      console.warn('⚠️ broadcastTournament error:', err.message);
+      return { success: false, error: err.message };
+    }
+  },
 };
 
 module.exports = notificationService;

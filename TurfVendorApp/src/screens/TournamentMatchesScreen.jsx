@@ -12,6 +12,7 @@ import {
     TextInput,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
 import {
@@ -218,7 +219,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
     const handleAutoSchedule = async (cups) => {
         const ok = await run(
             () => generateBracketApi(tournament.id, { scheduleType: 'auto', force: true, cupsCount: cups }),
-            'Knockout Draw Ready ⚡',
+            'Knockout Draw Ready',
             'Rounds generated successfully.'
         );
         if (ok) setShowScheduleModal(false);
@@ -235,7 +236,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 teamBId: fixtureData.teamBId,
                 cupsCount,
             }),
-            'Fixture Scheduled 📅',
+            'Fixture Scheduled',
             'Match added to the tournament schedule.'
         );
         if (ok) setShowScheduleModal(false);
@@ -284,7 +285,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
             applyResult(res);
             setLiveScorerMatch(null);
             Alert.alert(
-                isFinal ? '👑 Champion Crowned!' : (m.isThirdPlaceMatch ? '🥉 3rd Place Decided!' : '🏆 Winner Advanced!'),
+                isFinal ? 'Champion Crowned!' : (m.isThirdPlaceMatch ? '3rd Place Decided!' : 'Winner Advanced!'),
                 res?.message || 'Match completed successfully.'
             );
         } catch (err) {
@@ -328,7 +329,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         }
 
         Alert.alert(
-            isFinal ? 'Finish Final & Crown Champion 👑' : (m.isThirdPlaceMatch ? 'Finish 3rd Place Playoff 🥉' : 'Finish Match & Advance Winner 🏁'),
+            isFinal ? 'Finish Final & Crown Champion' : (m.isThirdPlaceMatch ? 'Finish 3rd Place Playoff' : 'Finish Match & Advance Winner'),
             `${previewSummary}\n\n` +
             (isFinal
                 ? 'The team with the higher score will be crowned Tournament Champion. Continue?'
@@ -463,7 +464,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                     onPress={() => setShowAwardsModal(true)}
                     activeOpacity={0.85}
                 >
-                    <Text style={{ fontSize: 16, marginRight: 8 }}>🏆</Text>
+                    <Ionicons name="trophy" size={16} color="#D97706" style={{ marginRight: 8 }} />
                     <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 13, fontWeight: '800', color: isDark ? '#FBBF24' : '#B45309' }}>
                             Awards & Player Leaderboards
@@ -478,18 +479,21 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 {/* Champion Banner */}
                 {Boolean(bracket?.winner) && (
                     <View style={styles.champion}>
-                        <Text style={styles.championLabel}>👑 TOURNAMENT CHAMPION</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="trophy" size={14} color="#D97706" style={{ marginRight: 5 }} /><Text style={styles.championLabel}>TOURNAMENT CHAMPION</Text></View>
                         <Text style={styles.championName}>{getTeamDisplayName(bracket.winner)}</Text>
                         {Boolean(bracket.runnerUp) && (
-                            <Text style={{ color: '#92400E', marginTop: 4, fontWeight: '700' }}>
-                                🥈 Runner-up: {getTeamDisplayName(bracket.runnerUp)}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                <Ionicons name="medal" size={14} color="#94A3B8" style={{ marginRight: 5 }} />
+                                <Text style={{ color: '#92400E', fontWeight: '700' }}>Runner-up: {getTeamDisplayName(bracket.runnerUp)}</Text>
+                            </View>
                         )}
                         {Boolean(bracket.thirdPlace) && (
-                            <Text style={{ color: '#92400E', marginTop: 2, fontWeight: '600' }}>
-                                🥉 3rd Place: {getTeamDisplayName(bracket.thirdPlace)}
-                                {Boolean(bracket.fourthPlace) && ` • 4th: ${getTeamDisplayName(bracket.fourthPlace)}`}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                                <Ionicons name="medal" size={14} color="#C2410C" style={{ marginRight: 5 }} />
+                                <Text style={{ color: '#92400E', fontWeight: '600' }}>3rd Place: {getTeamDisplayName(bracket.thirdPlace)}
+                                    {Boolean(bracket.fourthPlace) && ` • 4th: ${getTeamDisplayName(bracket.fourthPlace)}`}
+                                </Text>
+                            </View>
                         )}
                         <TouchableOpacity
                             style={{
@@ -506,7 +510,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                             activeOpacity={0.85}
                         >
                             <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 12, marginRight: 6 }}>
-                                🏆 View Final Awards & Leaderboards
+                                View Final Awards & Leaderboards
                             </Text>
                             <Feather name="arrow-right" size={14} color="#FFFFFF" />
                         </TouchableOpacity>
@@ -609,7 +613,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                             {/* Top Row */}
                                             <View style={styles.matchHeader}>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                    {m.isThirdPlaceMatch && <Text style={{ fontSize: 13, marginRight: 4 }}>🥉</Text>}
+                                                    {m.isThirdPlaceMatch && <Ionicons name="medal" size={16} color="#C2410C" style={{ marginRight: 8 }} />}
                                                     <Text style={[styles.matchRoundTag, { color: isLive ? '#EF4444' : colors.primary }]}>
                                                         {(m.roundName || round.name).toUpperCase()}
                                                     </Text>
@@ -627,7 +631,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                             {Boolean(m.toss) && (
                                                 <View style={[styles.tossBanner, { backgroundColor: isDark ? 'rgba(217, 119, 6, 0.12)' : '#FEF3C7', borderColor: '#F59E0B' }]}>
                                                     <Text style={[styles.tossBannerText, { color: isDark ? '#FBBF24' : '#92400E' }]}>
-                                                        🪙 <Text style={{ fontWeight: '800' }}>{m.toss.winnerName}</Text> won toss & elected to <Text style={{ fontWeight: '800' }}>{String(m.toss.decision || 'bat').toUpperCase()}</Text>
+                                                        <Text style={{ fontWeight: '800' }}>{m.toss.winnerName}</Text> won toss & elected to <Text style={{ fontWeight: '800' }}>{String(m.toss.decision || 'bat').toUpperCase()}</Text>
                                                     </Text>
                                                 </View>
                                             )}
@@ -640,7 +644,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                     </Text>
                                                     {teamAWon && (
                                                         <View style={[styles.winnerBadgePill, { backgroundColor: '#10B981' }]}>
-                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION 👑' : (m.isThirdPlaceMatch ? '3RD PLACE 🥉' : 'WINNER')}</Text>
+                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION' : (m.isThirdPlaceMatch ? '3RD PLACE' : 'WINNER')}</Text>
                                                         </View>
                                                     )}
                                                 </View>
@@ -677,7 +681,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                     </Text>
                                                     {teamBWon && (
                                                         <View style={[styles.winnerBadgePill, { backgroundColor: '#10B981' }]}>
-                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION 👑' : (m.isThirdPlaceMatch ? '3RD PLACE 🥉' : 'WINNER')}</Text>
+                                                            <Text style={styles.winnerBadgePillText}>{finalMatch ? 'CHAMPION' : (m.isThirdPlaceMatch ? '3RD PLACE' : 'WINNER')}</Text>
                                                         </View>
                                                     )}
                                                 </View>
@@ -745,7 +749,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                             style={[styles.actionBtnOutline, { borderColor: '#10B981' }]}
                                                             onPress={() => finishMatch(m)}
                                                         >
-                                                            <Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>✔ Finish</Text>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="checkmark-circle" size={14} color="#10B981" style={{ marginRight: 5 }} /><Ionicons name="checkmark-circle" size={14} color="#10B981" style={{ marginRight: 4 }} /><Text style={{ color: '#10B981', fontWeight: '800', fontSize: 12 }}>Finish</Text></View>
                                                         </TouchableOpacity>
                                                     </>
                                                 )}
@@ -768,10 +772,10 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                                                 {/* Player Ratings Button */}
                                                 {(done || isLive) && (
                                                     <TouchableOpacity
-                                                        style={[styles.actionBtnRatings, { borderColor: colors.border }]}
+                                                        style={[styles.actionBtnRatings, { borderColor: colors.border, flexDirection: 'row' }]}
                                                         onPress={() => setPerformanceMatch(m)}
                                                     >
-                                                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>🎖️ Ratings</Text>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="ribbon" size={14} color="#D97706" style={{ marginRight: 5 }} /><Ionicons name="ribbon" size={13} color="#D97706" style={{ marginRight: 4 }} /><Text style={{ color: colors.text, fontWeight: '700', fontSize: 11 }}>Ratings</Text></View>
                                                     </TouchableOpacity>
                                                 )}
                                             </View>
@@ -968,7 +972,7 @@ const styles = StyleSheet.create({
     actionBtnPrimaryText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
     actionBtnLive: { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10 },
     actionBtnOutline: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
-    actionBtnRatings: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+    actionBtnRatings: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
     choice: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 },
     rowWrap: { flexDirection: 'row', flexWrap: 'wrap' },
     primaryBtnSmall: { flex: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },

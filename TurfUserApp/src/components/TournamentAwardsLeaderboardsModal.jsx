@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { CRICKET_LIGHT } from '../theme/cricketLight';
 import { calculateTournamentLeaders } from '../utils/cricketScorerEngine';
 
@@ -31,13 +32,13 @@ export default function TournamentAwardsLeaderboardsModal({
   const hasAwards = Object.values(awards || {}).some(Boolean);
 
   const tabs = [
-    { key: 'runs', label: '🏏 Runs' },
-    { key: 'wickets', label: '🎯 Wickets' },
-    { key: 'sr', label: '⚡ Strike Rate' },
-    { key: 'econ', label: '📉 Economy' },
-    { key: 'sixes', label: '💥 Sixes' },
-    { key: 'fours', label: '🎯 Fours' },
-    { key: 'fielding', label: '🧤 Fielding' },
+    { key: 'runs', label: 'Runs', icon: 'baseball-outline' },
+    { key: 'wickets', label: 'Wickets', icon: 'locate' },
+    { key: 'sr', label: 'Strike Rate', icon: 'flash' },
+    { key: 'econ', label: 'Economy', icon: 'trending-down' },
+    { key: 'sixes', label: 'Sixes', icon: 'rocket-outline' },
+    { key: 'fours', label: 'Fours', icon: 'football-outline' },
+    { key: 'fielding', label: 'Fielding', icon: 'hand-left-outline' },
   ];
 
   const currentList = useMemo(() => {
@@ -115,8 +116,9 @@ export default function TournamentAwardsLeaderboardsModal({
           <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <View style={{ flex: 1 }}>
               <View style={styles.badgeRow}>
+                <Ionicons name={isFinalized ? 'trophy' : 'flash'} size={13} color={isFinalized ? '#10B981' : '#F59E0B'} style={{ marginRight: 5 }} />
                 <Text style={[styles.statusTag, { color: isFinalized ? '#10B981' : '#F59E0B' }]}>
-                  {isFinalized ? '👑 TOURNAMENT COMPLETED' : '⚡ CURRENT STANDINGS'}
+                  {isFinalized ? 'TOURNAMENT COMPLETED' : 'CURRENT STANDINGS'}
                 </Text>
               </View>
               <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
@@ -136,9 +138,7 @@ export default function TournamentAwardsLeaderboardsModal({
             {/* Top Podium (When Overall Performers Exist) */}
             {podium.length > 0 && (
               <View style={styles.sectionBlock}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  {isFinalized ? '🏆 Overall Champions Podium' : '⭐ Top Impact Performers'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><Ionicons name="star" size={18} color="#D97706" style={{ marginRight: 8 }} /><Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>{isFinalized ? 'Overall Champions Podium' : 'Top Impact Performers'}</Text></View>
 
                 <View style={styles.podiumContainer}>
                   {podium.map((p, index) => {
@@ -158,9 +158,10 @@ export default function TournamentAwardsLeaderboardsModal({
                         ]}
                         onPress={() => handlePlayerPress(p)}
                       >
-                        <View style={[styles.podiumBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+                        <View style={[styles.podiumBadge, { backgroundColor: badge.bg, borderColor: badge.border, flexDirection: 'row', alignItems: 'center' }]}>
+                          <Ionicons name="medal" size={13} color={badge.border} style={{ marginRight: 4 }} />
                           <Text style={[styles.podiumBadgeText, { color: badge.text }]}>
-                            {rank === 1 ? '🥇 #1' : (rank === 2 ? '🥈 #2' : '🥉 #3')}
+                            #{rank}
                           </Text>
                         </View>
                         <Text style={[styles.podiumPlayerName, { color: colors.text }]} numberOfLines={1}>
@@ -184,9 +185,7 @@ export default function TournamentAwardsLeaderboardsModal({
 
             {/* Featured Awards Grid */}
             <View style={styles.sectionBlock}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                🎖️ Featured Tournament Awards{!isFinalized && hasAwards ? '  ·  Provisional' : ''}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><Ionicons name="ribbon" size={18} color="#D97706" style={{ marginRight: 8 }} /><Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Featured Tournament Awards{!isFinalized && hasAwards ? '  ·  Provisional' : ''}</Text></View>
               {!hasAwards && (
                 <View style={{ padding: 18, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center' }}>
                   <Text style={{ fontSize: 12, color: colors.subtext, textAlign: 'center' }}>
@@ -203,7 +202,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     onPress={() => handlePlayerPress(awards.playerOfTournament)}
                   >
                     <View style={styles.awardHeaderRow}>
-                      <Text style={styles.awardIcon}>👑</Text>
+                      <Ionicons name="trophy" size={26} color="#D97706" />
                       <View style={[styles.gradeTag, { backgroundColor: getGradeColor(awards.playerOfTournament.grade) }]}>
                         <Text style={styles.gradeTagText}>{awards.playerOfTournament.grade}</Text>
                       </View>
@@ -222,7 +221,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     </Text>
                     {Boolean(prizeDetails.playerOfTournamentPrize) && (
                       <View style={styles.prizeBox}>
-                        <Text style={styles.prizeText}>🎁 {prizeDetails.playerOfTournamentPrize}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="gift-outline" size={12} color="#B45309" style={{ marginRight: 4 }} /><Text style={styles.prizeText}>{prizeDetails.playerOfTournamentPrize}</Text></View>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -235,7 +234,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     onPress={() => handlePlayerPress(awards.bestBatter)}
                   >
                     <View style={styles.awardHeaderRow}>
-                      <Text style={styles.awardIcon}>🏏</Text>
+                      <Ionicons name="baseball-outline" size={26} color="#059669" />
                       <View style={[styles.gradeTag, { backgroundColor: getGradeColor(awards.bestBatter.grade) }]}>
                         <Text style={styles.gradeTagText}>{awards.bestBatter.grade}</Text>
                       </View>
@@ -254,7 +253,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     </Text>
                     {Boolean(prizeDetails.bestBatterPrize) && (
                       <View style={styles.prizeBox}>
-                        <Text style={styles.prizeText}>🎁 {prizeDetails.bestBatterPrize}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="gift-outline" size={12} color="#B45309" style={{ marginRight: 4 }} /><Text style={styles.prizeText}>{prizeDetails.bestBatterPrize}</Text></View>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -267,7 +266,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     onPress={() => handlePlayerPress(awards.bestBowler)}
                   >
                     <View style={styles.awardHeaderRow}>
-                      <Text style={styles.awardIcon}>🎯</Text>
+                      <Ionicons name="locate" size={26} color="#2563EB" />
                       <View style={[styles.gradeTag, { backgroundColor: getGradeColor(awards.bestBowler.grade) }]}>
                         <Text style={styles.gradeTagText}>{awards.bestBowler.grade}</Text>
                       </View>
@@ -286,7 +285,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     </Text>
                     {Boolean(prizeDetails.bestBowlerPrize) && (
                       <View style={styles.prizeBox}>
-                        <Text style={styles.prizeText}>🎁 {prizeDetails.bestBowlerPrize}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="gift-outline" size={12} color="#B45309" style={{ marginRight: 4 }} /><Text style={styles.prizeText}>{prizeDetails.bestBowlerPrize}</Text></View>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -299,7 +298,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     onPress={() => handlePlayerPress(awards.bestAllRounder)}
                   >
                     <View style={styles.awardHeaderRow}>
-                      <Text style={styles.awardIcon}>⚡</Text>
+                      <Ionicons name="flash" size={26} color="#7C3AED" />
                       <View style={[styles.gradeTag, { backgroundColor: getGradeColor(awards.bestAllRounder.grade) }]}>
                         <Text style={styles.gradeTagText}>{awards.bestAllRounder.grade}</Text>
                       </View>
@@ -318,7 +317,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     </Text>
                     {Boolean(prizeDetails.bestAllRounderPrize) && (
                       <View style={styles.prizeBox}>
-                        <Text style={styles.prizeText}>🎁 {prizeDetails.bestAllRounderPrize}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="gift-outline" size={12} color="#B45309" style={{ marginRight: 4 }} /><Text style={styles.prizeText}>{prizeDetails.bestAllRounderPrize}</Text></View>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -331,7 +330,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     onPress={() => handlePlayerPress(awards.bestFielder)}
                   >
                     <View style={styles.awardHeaderRow}>
-                      <Text style={styles.awardIcon}>🧤</Text>
+                      <Ionicons name="hand-left-outline" size={26} color="#0D9488" />
                       <View style={[styles.gradeTag, { backgroundColor: getGradeColor(awards.bestFielder.grade) }]}>
                         <Text style={styles.gradeTagText}>{awards.bestFielder.grade}</Text>
                       </View>
@@ -350,7 +349,7 @@ export default function TournamentAwardsLeaderboardsModal({
                     </Text>
                     {Boolean(prizeDetails.bestFielderPrize) && (
                       <View style={styles.prizeBox}>
-                        <Text style={styles.prizeText}>🎁 {prizeDetails.bestFielderPrize}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}><Ionicons name="gift-outline" size={12} color="#B45309" style={{ marginRight: 4 }} /><Text style={styles.prizeText}>{prizeDetails.bestFielderPrize}</Text></View>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -360,9 +359,7 @@ export default function TournamentAwardsLeaderboardsModal({
 
             {/* Category Leaderboards Tabs & List */}
             <View style={styles.sectionBlock}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                📊 Category Leaderboards
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}><Ionicons name="stats-chart" size={18} color="#0F766E" style={{ marginRight: 8 }} /><Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Category Leaderboards</Text></View>
 
               {/* Tabs Strip */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsStrip}>
@@ -379,9 +376,12 @@ export default function TournamentAwardsLeaderboardsModal({
                       ]}
                       onPress={() => setActiveTab(tab.key)}
                     >
-                      <Text style={[styles.tabBtnText, { color: isActive ? '#FFFFFF' : colors.text }]}>
-                        {tab.label}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {tab.icon && <Ionicons name={tab.icon} size={14} color={isActive ? '#FFFFFF' : colors.text} style={{ marginRight: 5 }} />}
+                        <Text style={[styles.tabBtnText, { color: isActive ? '#FFFFFF' : colors.text }]}>
+                          {tab.label}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   );
                 })}

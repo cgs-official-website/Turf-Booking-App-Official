@@ -11,6 +11,7 @@ import {
   TextInput,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
 
 export default function MatchSetupWizardModal({
@@ -123,7 +124,7 @@ export default function MatchSetupWizardModal({
           {/* Header */}
           <View style={[styles.headerRow, { borderBottomColor: colors.border }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: colors.text }]}>Match Scorer Setup 🏏</Text>
+              <Text style={[styles.title, { color: colors.text }]}>Match Scorer Setup</Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
                 {match.roundName || 'Knockout Fixture'} • {teamAName} vs {teamBName}
               </Text>
@@ -161,7 +162,7 @@ export default function MatchSetupWizardModal({
             {/* STEP 1: TOSS */}
             {step === 1 && (
               <View>
-                <Text style={[styles.sectionHeading, { color: colors.text }]}>Who won the coin toss? 🪙</Text>
+                <Text style={[styles.sectionHeading, { color: colors.text }]}>Who won the coin toss?</Text>
                 <View style={styles.choiceRow}>
                   <TouchableOpacity
                     style={[
@@ -219,7 +220,7 @@ export default function MatchSetupWizardModal({
                     onPress={() => setDecision('bat')}
                   >
                     <Text style={[styles.decisionBtnText, { color: decision === 'bat' ? '#FFFFFF' : colors.text }]}>
-                      🏏 BAT FIRST
+                      BAT FIRST
                     </Text>
                   </TouchableOpacity>
 
@@ -234,7 +235,7 @@ export default function MatchSetupWizardModal({
                     onPress={() => setDecision('bowl')}
                   >
                     <Text style={[styles.decisionBtnText, { color: decision === 'bowl' ? '#FFFFFF' : colors.text }]}>
-                      🎯 BOWL FIRST
+                      BOWL FIRST
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -315,7 +316,7 @@ export default function MatchSetupWizardModal({
               <View>
                 {/* 1. Striker */}
                 <Text style={[styles.sectionHeading, { color: colors.text }]}>
-                  1. Opening Striker 🏏 ({battingTeam?.name || battingTeam?.teamName})
+                  1. Opening Striker ({battingTeam?.name || battingTeam?.teamName})
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerPillsRow}>
                   {battingSquad.map((p) => {
@@ -345,7 +346,7 @@ export default function MatchSetupWizardModal({
 
                 {/* 2. Non-Striker */}
                 <Text style={[styles.sectionHeading, { color: colors.text, marginTop: 18 }]}>
-                  2. Opening Non-Striker 🏃 ({battingTeam?.name || battingTeam?.teamName})
+                  2. Opening Non-Striker ({battingTeam?.name || battingTeam?.teamName})
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerPillsRow}>
                   {battingSquad.map((p) => {
@@ -375,7 +376,7 @@ export default function MatchSetupWizardModal({
 
                 {/* 3. Opening Bowler */}
                 <Text style={[styles.sectionHeading, { color: colors.text, marginTop: 18 }]}>
-                  3. Opening Bowler 🎯 ({bowlingTeam?.name || bowlingTeam?.teamName})
+                  3. Opening Bowler ({bowlingTeam?.name || bowlingTeam?.teamName})
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pickerPillsRow}>
                   {bowlingSquad.map((p) => {
@@ -414,7 +415,7 @@ export default function MatchSetupWizardModal({
                     ) : (
                       <>
                         <Feather name="play" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
-                        <Text style={styles.startMatchText}>Start Live Match ⚡</Text>
+                        <Text style={styles.startMatchText}>Start Live Match</Text>
                       </>
                     )}
                   </TouchableOpacity>

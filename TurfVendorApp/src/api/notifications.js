@@ -25,6 +25,12 @@ export const notificationsApi = {
       method: 'PATCH',
     }),
 
+  // PATCH /api/v1/notifications/read-all
+  markAllRead: () =>
+    apiRequest('/notifications/read-all', {
+      method: 'PATCH',
+    }),
+
   // GET /api/v1/notifications/preferences
   getPreferences: () => apiRequest('/notifications/preferences', { method: 'GET' }),
 

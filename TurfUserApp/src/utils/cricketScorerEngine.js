@@ -102,10 +102,29 @@ export const ensureBowler = (inn, id, name) => {
   }
 };
 
+// Makes sure an innings object (possibly created by the server or an older app
+// version) has every field the scorer relies on. Prevents
+// "Cannot read property 'length' of undefined" crashes.
+export const normalizeInnings = (inn) => {
+  if (!inn || typeof inn !== 'object') return inn;
+  if (!inn.batters || typeof inn.batters !== 'object') inn.batters = {};
+  if (!inn.bowlers || typeof inn.bowlers !== 'object') inn.bowlers = {};
+  if (!inn.extras || typeof inn.extras !== 'object') inn.extras = { wides: 0, noBalls: 0, byes: 0, legByes: 0, total: 0 };
+  if (!Array.isArray(inn.currentOverBalls)) inn.currentOverBalls = [];
+  if (!Array.isArray(inn.ballHistory)) inn.ballHistory = Array.isArray(inn.deliveries) ? inn.deliveries.slice() : [];
+  if (!Array.isArray(inn.fallOfWickets)) inn.fallOfWickets = [];
+  if (!Array.isArray(inn.snapshots)) inn.snapshots = [];
+  if (typeof inn.isCompleted !== 'boolean') inn.isCompleted = Boolean(inn.completed);
+  inn.runs = Number(inn.runs) || 0;
+  inn.wickets = Number(inn.wickets) || 0;
+  inn.legalBalls = Number(inn.legalBalls) || 0;
+  return inn;
+};
+
 export const processBallEvent = (innings, event, target = null) => {
   if (!innings || innings.isCompleted) return { innings, overFinished: false, wicketFell: false, inningsCompleted: true };
 
-  const inn = JSON.parse(JSON.stringify(innings));
+  const inn = normalizeInnings(JSON.parse(JSON.stringify(innings)));
 
   // Snapshot before making changes (limit to 30 snapshots)
   inn.snapshots = Array.isArray(inn.snapshots) ? inn.snapshots : [];

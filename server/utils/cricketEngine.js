@@ -69,8 +69,11 @@ function createEmptyInnings(battingTeam, bowlingTeam, maxOvers = 10) {
     batters: {},
     bowlers: {},
     deliveries: [],
+    ballHistory: [],
+    snapshots: [],
     fallOfWickets: [],
     completed: false,
+    isCompleted: false,
   };
 }
 
