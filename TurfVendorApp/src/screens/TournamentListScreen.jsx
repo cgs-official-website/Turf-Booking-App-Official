@@ -459,37 +459,43 @@ const TournamentListScreen = ({ navigation }) => {
       </View>
 
       {/* Tabs Filter Bar */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar} style={{ flexGrow: 0 }}>
-        {[
-          { key: 'all', label: 'All' },
-          { key: 'ongoing', label: ongoingCount > 0 ? `Ongoing (${ongoingCount})` : 'Ongoing', icon: 'activity' },
-          { key: 'pending', label: pendingRequestsCount > 0 ? `Requests (${pendingRequestsCount})` : 'Requests' },
-          { key: 'turf_hosted', label: 'Turf Hosted' },
-          { key: 'user_created', label: 'User Created' },
-          { key: 'draft', label: 'Draft' },
-        ].map((tab) => {
-          const isActive = filter === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[
-                styles.filterTab,
-                isActive && [styles.filterTabActive, { backgroundColor: colors.primary }],
-                !isActive && { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
-              ]}
-              onPress={() => setFilter(tab.key)}
-              activeOpacity={0.8}
-            >
-              {tab.icon && (
-                <Feather name={tab.icon} size={13} color={isActive ? '#FFFFFF' : colors.textSecondary} style={{ marginRight: 5 }} />
-              )}
-              <Text style={[styles.filterTabText, { color: isActive ? '#FFFFFF' : colors.textSecondary }]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.filterContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterBar}
+        >
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'ongoing', label: ongoingCount > 0 ? `Ongoing (${ongoingCount})` : 'Ongoing', icon: 'activity' },
+            { key: 'pending', label: pendingRequestsCount > 0 ? `Requests (${pendingRequestsCount})` : 'Requests' },
+            { key: 'turf_hosted', label: 'Turf Hosted' },
+            { key: 'user_created', label: 'User Created' },
+            { key: 'draft', label: 'Draft' },
+          ].map((tab) => {
+            const isActive = filter === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.filterTab,
+                  isActive && [styles.filterTabActive, { backgroundColor: colors.primary, borderColor: colors.primary }],
+                  !isActive && { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border },
+                ]}
+                onPress={() => setFilter(tab.key)}
+                activeOpacity={0.8}
+              >
+                {tab.icon && (
+                  <Feather name={tab.icon} size={13} color={isActive ? '#FFFFFF' : colors.textSecondary} style={{ marginRight: 5 }} />
+                )}
+                <Text style={[styles.filterTabText, { color: isActive ? '#FFFFFF' : colors.textSecondary }]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -503,6 +509,7 @@ const TournamentListScreen = ({ navigation }) => {
           data={pagedTournaments}
           keyExtractor={(item) => item.id}
           renderItem={renderTournamentItem}
+          style={{ flex: 1 }}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -643,9 +650,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 14 },
+  filterContainer: {
+    flexShrink: 0,
+    paddingVertical: 10,
+  },
   filterBar: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   filterTab: {
@@ -655,10 +667,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
+    borderWidth: 1,
   },
   filterTabActive: {},
   filterTabText: {
-    fontSize: SIZES.xs + 1,
+    fontSize: 12.5,
     fontWeight: '700',
   },
   listContent: {

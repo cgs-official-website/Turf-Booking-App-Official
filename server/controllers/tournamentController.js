@@ -513,7 +513,7 @@ function extractCricketDetails(inputObj = {}, fallbackTeamAStr = '', fallbackTea
  * Fire-and-forget: never make the API response wait for push notifications.
  */
 function notifyInBackground(params) {
-  Promise.resolve()
+  return Promise.resolve()
     .then(() => notificationService.sendNotification(params))
     .catch((e) => console.warn('⚠️ Background notification failed:', e.message));
 }
@@ -2287,49 +2287,75 @@ const tournamentController = {
         };
       });
 
-      // Dispatch notifications in background
+      // Dispatch notifications
       try {
         const registration = outcome.registration;
+        const tournamentName = tournament.name || 'Tournament';
+        const vendorRecipientId = tournament.vendorId || tournament.turf?.vendorId || tournament.vendor?.id;
         const isUserCreated = tournament.creatorType === 'USER' || Boolean(tournament.userId);
-        const creatorId = isUserCreated ? tournament.userId : (tournament.vendorId || tournament.turf?.vendorId);
-        const creatorRole = isUserCreated ? 'user' : 'vendor';
+        const userOrganizerId = isUserCreated ? tournament.userId : null;
 
-        // 1. Send mobile push notification ONLY to the tournament creator (vendor or user)
-        if (creatorId) {
-          notifyInBackground({
-            recipientId: creatorId,
-            recipientRole: creatorRole,
-            title: 'New Team Registration',
-            body: `Team "${registration.teamName}" has registered for your tournament "${tournament.name}". Review the application.`,
+        const notifTitle = 'New Team Registration';
+        const notifBody = `Team "${registration.teamName}" has registered for your tournament "${tournamentName}". Review the application.`;
+
+        const vendorData = {
+          type: 'tournament',
+          screen: 'TournamentDetail',
+          tab: 'registrations',
+          action: 'tournament_registration',
+          tournamentId: tournament.id || tournamentId,
+          id: tournament.id || tournamentId,
+          turfId: tournament.turfId || tournament.turf?.id || '',
+          registrationId: registration.id,
+          teamName: registration.teamName,
+          captainName: registration.captainName,
+          title: notifTitle,
+          body: notifBody,
+          notificationText: notifBody,
+        };
+
+        // 1. Send mobile push and bell notification to the tournament vendor
+        if (vendorRecipientId) {
+          await notificationService.sendNotification({
+            recipientId: vendorRecipientId,
+            recipientRole: 'vendor',
+            title: notifTitle,
+            body: notifBody,
             type: 'tournament',
-            data: {
-              tournamentId: tournament.id || tournamentId,
-              id: tournament.id || tournamentId,
-              screen: 'TournamentDetail',
-              tab: 'registrations',
-              action: 'tournament_registration',
-              registrationId: registration.id,
-              teamName: registration.teamName,
-              captainName: registration.captainName,
-              turfId: tournament.turfId || tournament.turf?.id || '',
-            },
+            data: vendorData,
           });
         }
 
-        // 2. Send submission receipt notification to the registering user
-        notifyInBackground({
+        // 2. If tournament was created by a separate user organizer, also notify the user organizer
+        if (userOrganizerId && userOrganizerId !== vendorRecipientId && userOrganizerId !== userId) {
+          await notificationService.sendNotification({
+            recipientId: userOrganizerId,
+            recipientRole: 'user',
+            title: notifTitle,
+            body: notifBody,
+            type: 'tournament',
+            data: vendorData,
+          });
+        }
+
+        // 3. Send submission receipt notification to the registering user
+        await notificationService.sendNotification({
           recipientId: userId,
           recipientRole: 'user',
           title: 'Registration Submitted',
-          body: `Your team "${registration.teamName}" has been submitted for ${tournament.name} and is awaiting organizer approval.`,
+          body: `Your team "${registration.teamName}" has been submitted for ${tournamentName} and is awaiting organizer approval.`,
           type: 'tournament',
           data: {
+            type: 'tournament',
             tournamentId: tournament.id || tournamentId,
             id: tournament.id || tournamentId,
             screen: 'TournamentDetail',
             action: 'registration_pending',
             registrationId: registration.id,
             teamName: registration.teamName,
+            title: 'Registration Submitted',
+            body: `Your team "${registration.teamName}" has been submitted for ${tournamentName} and is awaiting organizer approval.`,
+            notificationText: `Your team "${registration.teamName}" has been submitted for ${tournamentName} and is awaiting organizer approval.`,
           },
         });
       } catch (notifErr) {

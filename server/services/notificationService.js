@@ -155,16 +155,26 @@ const notificationService = {
 
       // 2. Dispatch FCM Push Notification to registered devices
       try {
+        const cleanRecipientId = String(recipientId || '');
+        const idVariations = [cleanRecipientId];
+        if (cleanRecipientId.startsWith('vendor_')) {
+          idVariations.push(cleanRecipientId.replace(/^vendor_/, ''));
+        } else if (cleanRecipientId.startsWith('user_')) {
+          idVariations.push(cleanRecipientId.replace(/^user_/, ''));
+        } else {
+          idVariations.push(`${recipientRole}_${cleanRecipientId}`);
+        }
+
         const deviceTokens = await prisma.deviceToken.findMany({
           where: {
-            ownerId: String(recipientId),
+            ownerId: { in: idVariations },
             ownerType: recipientRole,
           },
           select: { token: true },
         });
 
         if (deviceTokens.length > 0) {
-          const tokens = deviceTokens.map((t) => t.token).filter(Boolean);
+          const tokens = [...new Set(deviceTokens.map((t) => t.token).filter(Boolean))];
           await this.sendFcmPush({
             tokens,
             title: finalTitle,
@@ -241,7 +251,8 @@ const notificationService = {
               const errorCode = resp.error?.code;
               if (
                 errorCode === 'messaging/invalid-registration-token' ||
-                errorCode === 'messaging/registration-token-not-registered'
+                errorCode === 'messaging/registration-token-not-registered' ||
+                errorCode === 'messaging/invalid-argument'
               ) {
                 tokensToDelete.push(tokens[idx]);
               }

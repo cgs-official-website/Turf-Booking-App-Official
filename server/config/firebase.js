@@ -48,13 +48,32 @@ try {
   }
   // 4. File path to service account key file
   else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-    const resolvedPath = path.resolve(process.cwd(), process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
-    if (fs.existsSync(resolvedPath)) {
+    const candidatePaths = [
+      path.resolve(process.cwd(), process.env.FIREBASE_SERVICE_ACCOUNT_PATH),
+      path.resolve(__dirname, '..', process.env.FIREBASE_SERVICE_ACCOUNT_PATH),
+      path.resolve(__dirname, path.basename(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)),
+      path.resolve(__dirname, 'serviceAccountKey.json'),
+    ];
+    const resolvedPath = candidatePaths.find((p) => fs.existsSync(p));
+    if (resolvedPath) {
       try {
         const fileContent = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
         credential = createCert(fileContent);
       } catch (err) {
         console.warn('⚠️ Could not parse Firebase service account file:', err.message);
+      }
+    }
+  }
+
+  // 5. Default local serviceAccountKey.json in config folder if not yet loaded
+  if (!credential) {
+    const defaultKeyPath = path.resolve(__dirname, 'serviceAccountKey.json');
+    if (fs.existsSync(defaultKeyPath)) {
+      try {
+        const fileContent = JSON.parse(fs.readFileSync(defaultKeyPath, 'utf8'));
+        credential = createCert(fileContent);
+      } catch (err) {
+        console.warn('⚠️ Could not parse default serviceAccountKey.json:', err.message);
       }
     }
   }

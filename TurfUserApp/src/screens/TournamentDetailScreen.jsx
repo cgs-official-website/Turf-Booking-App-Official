@@ -1907,11 +1907,11 @@ export default function TournamentDetailScreen({ route, navigation }) {
                     activeOpacity={0.85}
                   >
                     <View style={styles.mvpBadgeCircle}>
-                      <Ionicons name="trophy" size={22} color="#D97706" style={{ marginRight: 4 }} />
+                      <Ionicons name="trophy" size={20} color="#D97706" />
                     </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text style={styles.mvpCategoryLabel}>
+                    <View style={styles.mvpContentCol}>
+                      <View style={styles.mvpHeaderRow}>
+                        <Text style={styles.mvpCategoryLabel} numberOfLines={1}>
                           {tournamentLeaders.isFinalized ? 'PLAYER OF THE TOURNAMENT' : 'CURRENT TOURNAMENT MVP'}
                         </Text>
                         <View style={[styles.ratingPill, { backgroundColor: '#10B981' }]}>
@@ -4987,33 +4987,48 @@ const styles = StyleSheet.create({
   mvpHighlightCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 10,
     borderRadius: 12,
     borderWidth: 1.5,
     marginBottom: 10,
+    overflow: 'hidden',
   },
   mvpBadgeCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  mvpContentCol: {
+    flex: 1,
+    marginLeft: 10,
+    minWidth: 0,
+  },
+  mvpHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
   },
   mvpCategoryLabel: {
-    fontSize: 10,
+    flex: 1,
+    fontSize: 9.5,
     fontWeight: '900',
     color: '#D97706',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   ratingPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    flexShrink: 0,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 6,
   },
   ratingPillText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '800',
   },
   mvpPlayerName: {
