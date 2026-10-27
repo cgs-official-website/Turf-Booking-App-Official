@@ -205,7 +205,8 @@ const notificationService = {
    * Uses Firebase Admin SDK HTTP v1 Multicast with automatic invalid token cleanup
    */
   async sendFcmPush({ tokens = [], title, body, data = {} }) {
-    if (!tokens.length) return;
+    const result = { configured: false, attempted: tokens.length, sent: 0, failed: 0, errors: [] };
+    if (!tokens.length) return result;
 
     // Convert all data values to strings for FCM payload compliance
     const stringData = {};
@@ -218,65 +219,127 @@ const notificationService = {
     if (!stringData.body && body) stringData.body = String(body);
     if (!stringData.notificationText && body) stringData.notificationText = String(body);
 
-    const msgClient = messaging || (admin && typeof admin.messaging === 'function' ? admin.messaging() : null);
+    const msgClient = messaging || (admin && typeof admin.messaging === 'function' && firebaseApp ? admin.messaging() : null);
 
-    if (msgClient) {
-      try {
-        const message = {
-          tokens,
-          notification: {
-            title,
-            body,
-          },
-          data: stringData,
-          android: {
-            priority: 'high',
-            notification: {
-              channelId: 'turf_notifications',
-              sound: 'default',
-              icon: 'ic_notification',
-              color: '#00B761',
-              priority: 'high',
-              visibility: 'public',
-              defaultSound: true,
-              defaultVibrateTimings: true,
-            },
-          },
-        };
-
-        const response = await msgClient.sendEachForMulticast(message);
-        console.log(`📡 [FCM HTTP v1] Sent ${response.successCount}/${tokens.length} messages successfully.`);
-
-        // Handle invalid/unregistered tokens automatically
-        if (response.failureCount > 0) {
-          const tokensToDelete = [];
-          response.responses.forEach((resp, idx) => {
-            if (!resp.success) {
-              const errorCode = resp.error?.code;
-              if (
-                errorCode === 'messaging/invalid-registration-token' ||
-                errorCode === 'messaging/registration-token-not-registered' ||
-                errorCode === 'messaging/invalid-argument'
-              ) {
-                tokensToDelete.push(tokens[idx]);
-              }
-            }
-          });
-          if (tokensToDelete.length > 0) {
-            await prisma.deviceToken.deleteMany({
-              where: { token: { in: tokensToDelete } },
-            }).catch(() => {});
-            console.log(`🧹 Cleaned up ${tokensToDelete.length} unregistered/invalid FCM token(s).`);
-          }
-        }
-      } catch (fcmErr) {
-        console.warn('⚠️ FCM HTTP v1 multicast error:', fcmErr.message);
-      }
-    } else {
-      tokens.forEach((t) => {
-        console.log(`📱 [FCM Push Ready] Notification to token (${t.slice(0, 12)}...): "${title}"`);
-      });
+    if (!msgClient) {
+      // Without Firebase credentials NO push can ever reach a phone. The in-app bell still works
+      // (that is why notifications only appear while the app is open).
+      console.warn(
+        `🚫 [FCM NOT CONFIGURED] ${tokens.length} push(es) were NOT sent ("${title}"). ` +
+        'Set FIREBASE_SERVICE_ACCOUNT_BASE64 (or FIREBASE_SERVICE_ACCOUNT_JSON) on the server that handles the request.'
+      );
+      result.errors.push('FCM_NOT_CONFIGURED');
+      return result;
     }
+    result.configured = true;
+
+    const startedAt = Date.now();
+    try {
+      const message = {
+        tokens,
+        notification: { title, body },
+        data: stringData,
+        android: {
+          // "high" wakes the device immediately (like WhatsApp) instead of waiting for the next
+          // battery-optimised maintenance window.
+          priority: 'high',
+          ttl: 60 * 60 * 1000, // drop after 1 hour: a stale "match started" push is useless
+          notification: {
+            channelId: 'turf_notifications',
+            sound: 'default',
+            icon: 'ic_notification',
+            color: '#00B761',
+            priority: 'max',
+            visibility: 'public',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
+        },
+        apns: {
+          headers: { 'apns-priority': '10' },
+          payload: { aps: { sound: 'default' } },
+        },
+      };
+
+      const response = await msgClient.sendEachForMulticast(message);
+      result.sent = response.successCount;
+      result.failed = response.failureCount;
+      console.log(
+        `📡 [FCM HTTP v1] Sent ${response.successCount}/${tokens.length} in ${Date.now() - startedAt}ms ("${title}")`
+      );
+
+      if (response.failureCount > 0) {
+        const tokensToDelete = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const errorCode = resp.error?.code || 'unknown';
+            result.errors.push(errorCode);
+            console.warn(`⚠️ [FCM] token ${String(tokens[idx]).slice(0, 12)}... failed: ${errorCode}`);
+            if (
+              errorCode === 'messaging/invalid-registration-token' ||
+              errorCode === 'messaging/registration-token-not-registered' ||
+              errorCode === 'messaging/invalid-argument'
+            ) {
+              tokensToDelete.push(tokens[idx]);
+            }
+          }
+        });
+        if (tokensToDelete.length > 0) {
+          await prisma.deviceToken.deleteMany({ where: { token: { in: tokensToDelete } } }).catch(() => { });
+          console.log(`🧹 Cleaned up ${tokensToDelete.length} unregistered/invalid FCM token(s).`);
+        }
+      }
+    } catch (fcmErr) {
+      result.errors.push(fcmErr.code || fcmErr.message);
+      console.warn('⚠️ FCM HTTP v1 multicast error:', fcmErr.message);
+    }
+    return result;
+  },
+
+  /**
+   * Is server-side push configured, and how many devices does this account have registered?
+   */
+  async getPushStatus({ recipientId, recipientRole = 'user' }) {
+    const msgClient = messaging || (firebaseApp && admin && typeof admin.messaging === 'function' ? admin.messaging() : null);
+    const raw = String(recipientId || '');
+    const ids = [raw, raw.replace(/^(user_|vendor_)/, ''), `${recipientRole}_${raw.replace(/^(user_|vendor_)/, '')}`];
+    let tokenCount = 0;
+    try {
+      tokenCount = await prisma.deviceToken.count({
+        where: { ownerId: { in: ids }, ownerType: { in: [recipientRole, recipientRole.toLowerCase(), recipientRole.toUpperCase()] } },
+      });
+    } catch (_) { /* ignore */ }
+    return {
+      fcmConfigured: Boolean(msgClient),
+      projectId: firebaseApp?.options?.projectId || firebaseApp?.options?.credential?.projectId || null,
+      registeredDevices: tokenCount,
+      pushPreferenceEnabled: await this.getNotificationPreference(recipientId, recipientRole),
+    };
+  },
+
+  /**
+   * Send a real push to the caller's own devices and report exactly what FCM said.
+   */
+  async sendTestPush({ recipientId, recipientRole = 'user' }) {
+    const raw = String(recipientId || '');
+    const bare = raw.replace(/^(user_|vendor_)/, '');
+    const rows = await prisma.deviceToken.findMany({
+      where: {
+        ownerId: { in: [raw, bare, `${recipientRole}_${bare}`] },
+        ownerType: { in: [recipientRole, recipientRole.toLowerCase(), recipientRole.toUpperCase()] },
+      },
+      select: { token: true },
+    });
+    const tokens = [...new Set(rows.map((r) => r.token).filter(Boolean))];
+    if (!tokens.length) {
+      return { configured: Boolean(messaging), attempted: 0, sent: 0, failed: 0, errors: ['NO_DEVICE_TOKEN_REGISTERED'] };
+    }
+    return this.sendFcmPush({
+      tokens,
+      title: 'Test notification',
+      body: 'If you can read this with the app closed, push notifications are working.',
+      data: { type: 'general', action: 'test_push' },
+    });
   },
 
   /**
@@ -460,15 +523,13 @@ const notificationService = {
       console.log(`📡 [FCM Multicast] Broadcasting tournament "${tournamentName}" to ${uniqueTokens.length} device tokens...`);
 
       // 6. Send FCM HTTP v1 multicast in batches of 500 tokens
-      for (let i = 0; i < uniqueTokens.length; i += 500) {
-        const batch = uniqueTokens.slice(i, i + 500);
-        await this.sendFcmPush({
-          tokens: batch,
-          title: finalTitle,
-          body: finalBody,
-          data: notifData,
-        });
-      }
+      const batches = [];
+      for (let i = 0; i < uniqueTokens.length; i += 500) batches.push(uniqueTokens.slice(i, i + 500));
+      await Promise.all(
+        batches.map((batch) =>
+          this.sendFcmPush({ tokens: batch, title: finalTitle, body: finalBody, data: notifData })
+        )
+      );
 
       return {
         success: true,

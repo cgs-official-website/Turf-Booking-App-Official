@@ -31,6 +31,10 @@ export const notificationsApi = {
       method: 'PATCH',
     }),
 
+  // GET /api/v1/notifications/push-status  |  POST /api/v1/notifications/test-push
+  pushStatus: () => apiRequest('/notifications/push-status', { method: 'GET' }),
+  testPush: () => apiRequest('/notifications/test-push', { method: 'POST', body: JSON.stringify({}) }),
+
   // GET /api/v1/notifications/preferences
   getPreferences: () => apiRequest('/notifications/preferences', { method: 'GET' }),
 

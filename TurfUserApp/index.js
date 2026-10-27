@@ -1,13 +1,16 @@
 import 'react-native-gesture-handler';
-import {AppRegistry, NativeModules, LogBox} from 'react-native';
+import { AppRegistry, NativeModules, LogBox } from 'react-native';
 LogBox.ignoreAllLogs(true);
 import messaging from '@react-native-firebase/messaging';
 import App from './App';
-import {name as appName} from './app.json';
+import { name as appName } from './app.json';
 
 // Handle background & quit state push notifications for user
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   console.log('🌙 Background FCM user message handled:', remoteMessage?.notification?.title || remoteMessage?.data);
+  // FCM already shows 'notification' messages itself while the app is closed or in the background.
+  // Showing a second local notification here produced duplicates, so only handle data-only messages.
+  if (remoteMessage?.notification) return;
   try {
     const data = remoteMessage?.data || {};
     const isTournament = data.type === 'tournament' || data.screen === 'TournamentDetail' || Boolean(data.tournamentId);
@@ -18,12 +21,12 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
       data.notificationText ||
       (isTournament
         ? (data.action === 'team_accepted'
-            ? 'Team Accepted!'
-            : data.action === 'team_rejected'
+          ? 'Team Accepted!'
+          : data.action === 'team_rejected'
             ? 'Team Application Update'
             : data.action === 'tournament_created'
-            ? 'Tournament Published'
-            : 'Tournament Update')
+              ? 'Tournament Published'
+              : 'Tournament Update')
         : 'Booking Update');
 
     const body =
@@ -33,12 +36,12 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
       data.notificationText ||
       (isTournament
         ? (data.action === 'team_accepted'
-            ? (data.teamName ? `Your team "${data.teamName}" has been accepted!` : 'Your tournament team application has been accepted.')
-            : data.action === 'team_rejected'
+          ? (data.teamName ? `Your team "${data.teamName}" has been accepted!` : 'Your tournament team application has been accepted.')
+          : data.action === 'team_rejected'
             ? `Your tournament application was declined.${data.rejectionReason ? ` Reason: ${data.rejectionReason}` : ''}`
             : data.action === 'tournament_created'
-            ? `Registration is open for "${data.tournamentName || 'New Tournament'}". Tap to view details!`
-            : 'You have an update on your tournament.')
+              ? `Registration is open for "${data.tournamentName || 'New Tournament'}". Tap to view details!`
+              : 'You have an update on your tournament.')
         : 'Your turf booking status has been updated.');
 
     if (NativeModules.LocalNotificationModule) {

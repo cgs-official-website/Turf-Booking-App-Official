@@ -7,6 +7,8 @@ router.use(verifySessionToken);
 
 router.get('/preferences', notificationController.getPreferences);
 router.put('/preferences', notificationController.updatePreferences);
+router.get('/push-status', notificationController.pushStatus);
+router.post('/test-push', notificationController.testPush);
 router.post('/register-token', notificationController.registerToken);
 router.post('/remove-token', notificationController.removeToken);
 router.get('/', notificationController.getNotifications);

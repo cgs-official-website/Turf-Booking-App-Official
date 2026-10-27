@@ -88,7 +88,7 @@ const RootNavigator = () => {
   // Register vendor device token and listen for push notifications
   useEffect(() => {
     if (isAuthenticated) {
-      fcmHelper.registerDeviceToken();
+      fcmHelper.registerDeviceToken().then(() => fcmHelper.ensureBackgroundDelivery()).catch(() => { });
 
       const cleanupListeners = fcmHelper.setupNotificationListeners(navigationRef);
       return () => {

@@ -7,6 +7,53 @@ const VENDOR_FCM_TOKEN_KEY = '@vendor_fcm_token';
 
 export const fcmHelper = {
   /**
+   * Android phones (Xiaomi, Oppo, Vivo, Realme, OnePlus, Samsung...) delay or drop pushes for apps
+   * that are battery-optimised. Ask ONCE for the exemption so notifications arrive instantly,
+   * even when the app is closed (this is what WhatsApp does).
+   */
+  async ensureBackgroundDelivery() {
+    try {
+      if (Platform.OS !== 'android') return;
+      const FLAG = '@turf_battery_prompted_v1';
+      if (await AsyncStorage.getItem(FLAG)) return;
+      const mod = NativeModules.LocalNotificationModule;
+      if (!mod?.isIgnoringBatteryOptimizations) return;
+      const already = await mod.isIgnoringBatteryOptimizations();
+      if (already) {
+        await AsyncStorage.setItem(FLAG, '1');
+        return;
+      }
+      Alert.alert(
+        'Get notifications instantly',
+        'To receive booking and tournament alerts immediately, even when the app is closed, allow it to run in the background. Tap "Allow" on the next screen.',
+        [
+          { text: 'Later', style: 'cancel' },
+          {
+            text: 'Allow',
+            onPress: async () => {
+              await AsyncStorage.setItem(FLAG, '1');
+              mod.requestIgnoreBatteryOptimizations();
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    } catch (err) {
+      console.warn('⚠️ ensureBackgroundDelivery error:', err.message);
+    }
+  },
+
+  /** Is push configured on the server and is this device registered? */
+  async getPushStatus() {
+    return notificationsApi.pushStatus();
+  },
+
+  /** Sends a real push to this account's devices; returns what Firebase answered. */
+  async sendTestPush() {
+    return notificationsApi.testPush();
+  },
+
+  /**
    * Request notification permission on Android (including Android 13+ POST_NOTIFICATIONS)
    */
   async requestPermission() {
@@ -193,9 +240,9 @@ export const fcmHelper = {
     const cleanText = (str) =>
       str
         ? String(str)
-            .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{200D}\u{FE0F}]/gu, '')
-            .replace(/\s+/g, ' ')
-            .trim()
+          .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2300}-\u{23FF}\u{2B50}\u{200D}\u{FE0F}]/gu, '')
+          .replace(/\s+/g, ' ')
+          .trim()
         : '';
 
     const triggerSystemNotification = ({ title, body, data }) => {
@@ -307,9 +354,9 @@ export const fcmHelper = {
                 this.handleNotificationNavigation(navigationRef, localData);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         }
-      } catch {}
+      } catch { }
     };
 
     checkLocalNotificationLaunch();
@@ -368,7 +415,7 @@ export const fcmHelper = {
             }
           }
         }
-      } catch {}
+      } catch { }
     }, 10000);
 
     return () => {

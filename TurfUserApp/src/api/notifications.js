@@ -11,6 +11,10 @@ export const notificationsApi = {
     return client.get(`/notifications${qs ? `?${qs}` : ''}`);
   },
 
+  // GET /api/v1/notifications/push-status  |  POST /api/v1/notifications/test-push
+  pushStatus: () => client.get('/notifications/push-status'),
+  testPush: () => client.post('/notifications/test-push', {}),
+
   // POST /api/v1/notifications/register-token
   registerToken: (token) => client.post('/notifications/register-token', { token }),
 

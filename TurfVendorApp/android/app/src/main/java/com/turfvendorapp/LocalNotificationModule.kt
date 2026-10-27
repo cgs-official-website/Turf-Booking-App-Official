@@ -111,6 +111,55 @@ class LocalNotificationModule(private val reactContext: ReactApplicationContext)
     }
 
     @ReactMethod
+    fun isIgnoringBatteryOptimizations(promise: com.facebook.react.bridge.Promise) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = reactContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                promise.resolve(pm.isIgnoringBatteryOptimizations(reactContext.packageName))
+            } else {
+                promise.resolve(true)
+            }
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    /** Asks Android to exempt this app from battery optimisation so FCM pushes arrive instantly. */
+    @ReactMethod
+    fun requestIgnoreBatteryOptimizations() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = android.net.Uri.parse("package:" + reactContext.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                reactContext.startActivity(intent)
+            }
+        } catch (e: Exception) {
+            openBatterySettings()
+        }
+    }
+
+    @ReactMethod
+    fun openBatterySettings() {
+        try {
+            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            reactContext.startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.parse("package:" + reactContext.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                reactContext.startActivity(intent)
+            } catch (ignored: Exception) {
+            }
+        }
+    }
+
+    @ReactMethod
     fun getInitialNotification(promise: com.facebook.react.bridge.Promise) {
         try {
             val activity = currentActivity ?: reactContext.currentActivity

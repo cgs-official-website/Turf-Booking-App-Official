@@ -4,41 +4,41 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useSelector } from 'react-redux';
 import { Platform, Linking } from 'react-native';
 import { fcmHelper } from '../utils/fcmHelper';
-import MainTabs              from './MainTabs';
-import SplashScreen          from '../screens/SplashScreen';
-import OnboardingScreen      from '../screens/OnboardingScreen';
-import LoginScreen           from '../screens/LoginScreen';
-import Login2Screen          from '../screens/Login2Screen';
-import OTPScreen             from '../screens/OTPScreen';
-import RegisterScreen        from '../screens/RegisterScreen';
-import LocationScreen        from '../screens/LocationScreen';
-import TurfDetailScreen      from '../screens/TurfDetailScreen';
-import SlotPickerScreen      from '../screens/SlotPickerScreen';
-import BookingConfirmScreen  from '../screens/BookingConfirmScreen';
-import BookingDetailScreen   from '../screens/BookingDetailScreen';
-import RequestPendingScreen  from '../screens/RequestPendingScreen';
-import NotificationsScreen   from '../screens/NotificationsScreen';
-import ExploreScreen         from '../screens/ExploreScreen';
-import OffersScreen          from '../screens/OffersScreen';
-import PersonalInfoScreen    from '../screens/PersonalInfoScreen';
-import TournamentScreen      from '../screens/TournamentScreen';
+import MainTabs from './MainTabs';
+import SplashScreen from '../screens/SplashScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
+import LoginScreen from '../screens/LoginScreen';
+import Login2Screen from '../screens/Login2Screen';
+import OTPScreen from '../screens/OTPScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import LocationScreen from '../screens/LocationScreen';
+import TurfDetailScreen from '../screens/TurfDetailScreen';
+import SlotPickerScreen from '../screens/SlotPickerScreen';
+import BookingConfirmScreen from '../screens/BookingConfirmScreen';
+import BookingDetailScreen from '../screens/BookingDetailScreen';
+import RequestPendingScreen from '../screens/RequestPendingScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import ExploreScreen from '../screens/ExploreScreen';
+import OffersScreen from '../screens/OffersScreen';
+import PersonalInfoScreen from '../screens/PersonalInfoScreen';
+import TournamentScreen from '../screens/TournamentScreen';
 import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 import TournamentMatchesScreen from '../screens/TournamentMatchesScreen';
-import RegisterTeamScreen    from '../screens/RegisterTeamScreen';
-import CreateMatchScreen     from '../screens/CreateMatchScreen';
-import SelectPlayersScreen   from '../screens/SelectPlayersScreen';
-import BuildTeamsScreen      from '../screens/BuildTeamsScreen';
-import MatchScreen           from '../screens/MatchScreen';
-import TossScreen            from '../screens/TossScreen';
-import ScorecardScreen       from '../screens/ScorecardScreen';
+import RegisterTeamScreen from '../screens/RegisterTeamScreen';
+import CreateMatchScreen from '../screens/CreateMatchScreen';
+import SelectPlayersScreen from '../screens/SelectPlayersScreen';
+import BuildTeamsScreen from '../screens/BuildTeamsScreen';
+import MatchScreen from '../screens/MatchScreen';
+import TossScreen from '../screens/TossScreen';
+import ScorecardScreen from '../screens/ScorecardScreen';
 import FootballScorecardScreen from '../screens/FootballScorecardScreen';
 import BadmintonScorecardScreen from '../screens/BadmintonScorecardScreen';
 import VolleyballScorecardScreen from '../screens/VolleyballScorecardScreen';
 import BasketballScorecardScreen from '../screens/BasketballScorecardScreen';
-import TennisScorecardScreen   from '../screens/TennisScorecardScreen';
-import MatchHistoryScreen      from '../screens/MatchHistoryScreen';
-import PastMatchDetailsScreen  from '../screens/PastMatchDetailsScreen';
+import TennisScorecardScreen from '../screens/TennisScorecardScreen';
+import MatchHistoryScreen from '../screens/MatchHistoryScreen';
+import PastMatchDetailsScreen from '../screens/PastMatchDetailsScreen';
 
 import { createNavigationContainerRef } from '@react-navigation/native';
 
@@ -74,7 +74,7 @@ export default function RootNavigator() {
   useEffect(() => {
     if (token) {
       // Register device FCM token with backend
-      fcmHelper.registerDeviceToken();
+      fcmHelper.registerDeviceToken().then(() => fcmHelper.ensureBackgroundDelivery()).catch(() => { });
 
       // Listen for foreground notifications, background taps, quit state opens, and token refreshes
       const cleanupListeners = fcmHelper.setupNotificationListeners(navigationRef);
@@ -150,10 +150,10 @@ export default function RootNavigator() {
           // Get Started(phone/Google) → OTP  |  Get Started → Register → Login
           <>
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-            <Stack.Screen name="Login"      component={LoginScreen} />
-            <Stack.Screen name="Login2"     component={Login2Screen} />
-            <Stack.Screen name="OTP"        component={OTPScreen} />
-            <Stack.Screen name="Register"   component={RegisterScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Login2" component={Login2Screen} />
+            <Stack.Screen name="OTP" component={OTPScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
             <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="TournamentMatches" component={TournamentMatchesScreen} options={{ presentation: 'card' }} />
           </>
@@ -163,36 +163,36 @@ export default function RootNavigator() {
           <>
             {!locationSet && <Stack.Screen name="InitialLocation" component={LocationScreen} />}
             <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="Location"       component={LocationScreen} />
-            <Stack.Screen name="Explore"        component={ExploreScreen}        options={{ presentation: 'card' }} />
-            <Stack.Screen name="Offers"         component={OffersScreen}         options={{ presentation: 'card' }} />
-            <Stack.Screen name="TurfDetail"     component={TurfDetailScreen}     options={{ presentation: 'card' }} />
-            <Stack.Screen name="SlotPicker"     component={SlotPickerScreen}     options={{ presentation: 'card' }} />
+            <Stack.Screen name="Location" component={LocationScreen} />
+            <Stack.Screen name="Explore" component={ExploreScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="Offers" component={OffersScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="TurfDetail" component={TurfDetailScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="SlotPicker" component={SlotPickerScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="RequestPending" component={RequestPendingScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="BookingConfirm" component={BookingConfirmScreen} options={{ presentation: 'card' }} />
-            <Stack.Screen name="BookingDetail"  component={BookingDetailScreen}  options={{ presentation: 'modal' }} />
-            <Stack.Screen name="Notifications"  component={NotificationsScreen}  options={{ presentation: 'card' }} />
-            <Stack.Screen name="PersonalInfo"   component={PersonalInfoScreen} />
-            <Stack.Screen name="Tournament"     component={TournamentScreen}     options={{ presentation: 'card' }} />
+            <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ presentation: 'modal' }} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
+            <Stack.Screen name="Tournament" component={TournamentScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="CreateTournament" component={CreateTournamentScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="TournamentMatches" component={TournamentMatchesScreen} options={{ presentation: 'card' }} />
-            <Stack.Screen name="RegisterTeam"     component={RegisterTeamScreen}     options={{ presentation: 'card' }} />
+            <Stack.Screen name="RegisterTeam" component={RegisterTeamScreen} options={{ presentation: 'card' }} />
 
             {/* ── Match / Team / Toss / Live Scorecard ── */}
-            <Stack.Screen name="CreateMatch"    component={CreateMatchScreen}    options={{ presentation: 'card' }} />
-            <Stack.Screen name="SelectPlayers"  component={SelectPlayersScreen}  options={{ presentation: 'card' }} />
-            <Stack.Screen name="BuildTeams"     component={BuildTeamsScreen}     options={{ presentation: 'card' }} />
-            <Stack.Screen name="Match"          component={MatchScreen}          options={{ presentation: 'card' }} />
-            <Stack.Screen name="Toss"           component={TossScreen}           options={{ presentation: 'card' }} />
-            <Stack.Screen name="Scorecard"           component={ScorecardScreen}           options={{ presentation: 'card' }} />
-            <Stack.Screen name="FootballScorecard"   component={FootballScorecardScreen}   options={{ presentation: 'card' }} />
-            <Stack.Screen name="BadmintonScorecard"  component={BadmintonScorecardScreen}  options={{ presentation: 'card' }} />
+            <Stack.Screen name="CreateMatch" component={CreateMatchScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="SelectPlayers" component={SelectPlayersScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="BuildTeams" component={BuildTeamsScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="Match" component={MatchScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="Toss" component={TossScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="Scorecard" component={ScorecardScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="FootballScorecard" component={FootballScorecardScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="BadmintonScorecard" component={BadmintonScorecardScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="VolleyballScorecard" component={VolleyballScorecardScreen} options={{ presentation: 'card' }} />
             <Stack.Screen name="BasketballScorecard" component={BasketballScorecardScreen} options={{ presentation: 'card' }} />
-            <Stack.Screen name="TennisScorecard"     component={TennisScorecardScreen}     options={{ presentation: 'card' }} />
-            <Stack.Screen name="MatchHistory"        component={MatchHistoryScreen}        options={{ presentation: 'card' }} />
-            <Stack.Screen name="PastMatchDetails"    component={PastMatchDetailsScreen}    options={{ presentation: 'card' }} />
+            <Stack.Screen name="TennisScorecard" component={TennisScorecardScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} options={{ presentation: 'card' }} />
+            <Stack.Screen name="PastMatchDetails" component={PastMatchDetailsScreen} options={{ presentation: 'card' }} />
           </>
         )}
       </Stack.Navigator>

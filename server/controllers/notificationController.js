@@ -28,6 +28,26 @@ const notificationController = {
   },
 
   /**
+   * GET /api/v1/notifications/push-status
+   * Tells you whether the SERVER can send push at all, and how many devices this account has.
+   */
+  async pushStatus(req, res) {
+    const { uid, role } = req.user;
+    const status = await notificationService.getPushStatus({ recipientId: uid, recipientRole: role });
+    return sendSuccess(res, status);
+  },
+
+  /**
+   * POST /api/v1/notifications/test-push
+   * Sends a real push to the caller's own devices and returns FCM's answer.
+   */
+  async testPush(req, res) {
+    const { uid, role } = req.user;
+    const result = await notificationService.sendTestPush({ recipientId: uid, recipientRole: role });
+    return sendSuccess(res, result);
+  },
+
+  /**
    * POST /api/v1/notifications/remove-token
    * Detach device FCM token on logout
    */
