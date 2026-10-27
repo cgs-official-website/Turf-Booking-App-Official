@@ -207,6 +207,15 @@ export default function CricketScorerModal({
       const restored = JSON.parse(JSON.stringify(match.liveCricket));
       normalizeInnings(restored.innings1);
       normalizeInnings(restored.innings2);
+      if (restored.superOver) {
+        normalizeInnings(restored.superOver.innings1);
+        normalizeInnings(restored.superOver.innings2);
+        const t2First = restored.superOver.firstBatIsTeam2 !== false;
+        ensureInningsRoster(restored.superOver.innings1, t2First ? team2Squad : team1Squad, t2First ? team1Squad : team2Squad);
+        if (restored.superOver.innings2) {
+          ensureInningsRoster(restored.superOver.innings2, t2First ? team1Squad : team2Squad, t2First ? team2Squad : team1Squad);
+        }
+      }
       ensureInningsRoster(restored.innings1, team1Squad, team2Squad);
       if (restored.innings2) {
         ensureInningsRoster(restored.innings2, team2Squad, team1Squad);
@@ -227,25 +236,46 @@ export default function CricketScorerModal({
     }
   }, [visible, match?.id]);
 
+  // Undo snapshots stay on this device only; sending them made every ball upload
+  // hundreds of KB and caused sync to time out in later matches.
+  const leanLive = (live) => {
+    if (!live) return live;
+    const slim = (inn) => (inn ? { ...inn, snapshots: [] } : inn);
+    const lean = { ...live, innings1: slim(live.innings1), innings2: slim(live.innings2) };
+    if (live.superOver) {
+      lean.superOver = { ...live.superOver, innings1: slim(live.superOver.innings1), innings2: slim(live.superOver.innings2) };
+    }
+    return lean;
+  };
+
   const scheduleSync = (updatedLive) => {
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = setTimeout(() => {
       if (onSyncLiveCricket) {
-        onSyncLiveCricket(updatedLive);
+        onSyncLiveCricket(leanLive(updatedLive));
       }
     }, 150);
   };
 
   if (!match || !liveState) return null;
 
-  const currentInningsNum = liveState.currentInnings || 1;
+  // Super Over uses the very same scorer; its innings live in liveState.superOver
+  const isSuperOver = Boolean(liveState.superOver && liveState.superOver.active);
+  const inningsHolder = isSuperOver ? liveState.superOver : liveState;
+  const holderOf = (live) => (isSuperOver ? live.superOver : live);
+  const cloneLive = () => (isSuperOver ? { ...liveState, superOver: { ...liveState.superOver } } : { ...liveState });
+  const currentInningsNum = inningsHolder.currentInnings || 1;
   const curInnKey = currentInningsNum === 2 ? 'innings2' : 'innings1';
-  const innings = liveState[curInnKey];
+  const innings = inningsHolder[curInnKey];
 
   if (!innings) return null;
 
-  const battingSquad = currentInningsNum === 1 ? team1Squad : team2Squad;
-  const bowlingSquad = currentInningsNum === 1 ? team2Squad : team1Squad;
+  // In a Super Over the team that chased bats first (alternates on repeat tie)
+  const soFirstIsT2 = !isSuperOver || liveState.superOver.firstBatIsTeam2 !== false;
+  const firstBatSquad = isSuperOver ? (soFirstIsT2 ? team2Squad : team1Squad) : team1Squad;
+  const secondBatSquad = isSuperOver ? (soFirstIsT2 ? team1Squad : team2Squad) : team2Squad;
+  const battingSquad = currentInningsNum === 1 ? firstBatSquad : secondBatSquad;
+  const bowlingSquad = currentInningsNum === 1 ? secondBatSquad : firstBatSquad;
 
   const rawStriker = innings.batters?.[innings.currentStrikerId];
   const rawNonStriker = innings.batters?.[innings.currentNonStrikerId];
@@ -283,18 +313,32 @@ export default function CricketScorerModal({
   const nonStrikerSR = nonStriker.balls > 0 ? ((nonStriker.runs / nonStriker.balls) * 100).toFixed(1) : '0.0';
 
   const crr = crrString(innings.runs, innings.legalBalls);
-  const target = liveState.target;
+  const target = inningsHolder.target;
   const maxBalls = (innings.maxOvers || 10) * 6;
   const remBalls = Math.max(0, maxBalls - innings.legalBalls);
   const remRuns = target ? Math.max(0, target - innings.runs) : null;
   const rrr = target ? rrrString(target, innings.runs, remBalls) : null;
 
   const isOverLimitReached = innings.legalBalls >= maxBalls;
-  const isAllOut = innings.wickets >= 10 || (battingSquad.length > 0 && innings.wickets >= battingSquad.length - 1);
+  const isAllOut = innings.wickets >= 10 || (isSuperOver && innings.wickets >= 2) || (battingSquad.length > 0 && innings.wickets >= battingSquad.length - 1);
   const isTargetReached = Boolean(target && innings.runs >= target);
   const isInningsOver = Boolean(innings.isCompleted || isOverLimitReached || isAllOut || isTargetReached);
 
   const handleStartSecondInnings = () => {
+    if (isSuperOver) {
+      const so = liveState.superOver;
+      const soInn1 = so.innings1;
+      if (!soInn1) return;
+      const batTeam = soInn1.bowlingTeamId === match.teamA?.id ? match.teamA : match.teamB;
+      const bowlTeam = soInn1.battingTeamId === match.teamA?.id ? match.teamA : match.teamB;
+      const soInn2 = createEmptyInnings(batTeam, bowlTeam, 1);
+      ensureInningsRoster(soInn2, secondBatSquad, firstBatSquad);
+      const nextSo = { ...so, currentInnings: 2, target: soInn1.runs + 1, innings2: soInn2 };
+      const nextLive = { ...liveState, superOver: nextSo };
+      setLiveState(nextLive);
+      scheduleSync(nextLive);
+      return;
+    }
     const inn1 = liveState.innings1;
     if (!inn1) return;
     const secondBattingTeam = inn1.bowlingTeamId === match.teamA?.id ? match.teamA : match.teamB;
@@ -311,7 +355,85 @@ export default function CricketScorerModal({
     scheduleSync(nextLive);
   };
 
+  // Tie after the regular innings -> start a live Super Over (1 over each, max 2 wickets)
+  const handleStartSuperOver = () => {
+    const prev = liveState.superOver;
+    const round = (prev?.round || 0) + 1;
+    const history = prev && prev.innings1
+      ? [...(prev.history || []), { round: prev.round || 1, a: prev.innings1 && { team: prev.innings1.battingTeamName, runs: prev.innings1.runs, wickets: prev.innings1.wickets }, b: prev.innings2 && { team: prev.innings2.battingTeamName, runs: prev.innings2.runs, wickets: prev.innings2.wickets } }]
+      : [];
+    const firstBatIsTeam2 = round % 2 === 1; // 1st Super Over: chasing team bats first
+    const mainInn2 = liveState.innings2;
+    const chaseTeam = mainInn2?.battingTeamId === match.teamA?.id ? match.teamA : match.teamB;
+    const otherTeam = chaseTeam?.id === match.teamA?.id ? match.teamB : match.teamA;
+    const batFirstTeam = firstBatIsTeam2 ? chaseTeam : otherTeam;
+    const bowlFirstTeam = firstBatIsTeam2 ? otherTeam : chaseTeam;
+    const soInn1 = createEmptyInnings(batFirstTeam, bowlFirstTeam, 1);
+    ensureInningsRoster(soInn1, firstBatIsTeam2 ? team2Squad : team1Squad, firstBatIsTeam2 ? team1Squad : team2Squad);
+    const nextLive = {
+      ...liveState,
+      superOver: {
+        active: true,
+        round,
+        firstBatIsTeam2,
+        currentInnings: 1,
+        target: null,
+        maxOvers: 1,
+        innings1: soInn1,
+        innings2: null,
+        history,
+      },
+    };
+    setLiveState(nextLive);
+    scheduleSync(nextLive);
+  };
+
   const handleConfirmFinishMatch = () => {
+    // ---- Super Over result ----
+    if (isSuperOver) {
+      const so = liveState.superOver;
+      const s1 = so.innings1;
+      const s2 = so.innings2;
+      const r1 = s1?.runs || 0;
+      const r2 = s2?.runs || 0;
+      const line1 = `${s1?.battingTeamName}: ${r1}/${s1?.wickets || 0}`;
+      const line2 = s2 ? `${s2.battingTeamName}: ${r2}/${s2.wickets || 0}` : '';
+      if (s2 && r1 === r2) {
+        Alert.alert(
+          'Super Over Tied',
+          `${line1}\n${line2}\n\nThe Super Over is also tied.`,
+          [
+            { text: 'Another Super Over', onPress: handleStartSuperOver },
+            { text: 'Pick Winner Manually', onPress: () => onFinishMatch && onFinishMatch(leanLive(liveState)) },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+      const winnerInn = r2 > r1 ? s2 : s1;
+      const winnerName = winnerInn?.battingTeamName;
+      Alert.alert(
+        'Super Over Result',
+        `${line1}\n${line2}\n\n${winnerName} won the Super Over!\n\nMark match COMPLETED with ${winnerName} as the winner?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Confirm & Finish',
+            onPress: () => {
+              const done = { ...liveState, superOver: { ...so, completed: true } };
+              if (onFinishMatch) {
+                onFinishMatch(leanLive(done), {
+                  winnerTeamId: winnerInn?.battingTeamId,
+                  tiebreakNote: `Super Over: ${line1} vs ${line2}`.slice(0, 110),
+                });
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     const inn1 = liveState.innings1;
     const inn2 = liveState.innings2;
 
@@ -335,7 +457,16 @@ export default function CricketScorerModal({
       const rDiff = runs1 - runs2;
       resultText = `${team1Name} won by ${rDiff} run${rDiff === 1 ? '' : 's'}!`;
     } else {
-      resultText = `Scores are tied (${runs1} - ${runs2})! Super Over needed.`;
+      Alert.alert(
+        'Match Tied',
+        `${team1Name}: ${score1}\n${team2Name}: ${score2}\n\nScores are level (${runs1} - ${runs2}). Play a Super Over?`,
+        [
+          { text: 'Start Super Over', onPress: handleStartSuperOver },
+          { text: 'Pick Winner Manually', onPress: () => onFinishMatch && onFinishMatch(leanLive(liveState)) },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
     }
 
     Alert.alert(
@@ -348,7 +479,7 @@ export default function CricketScorerModal({
           style: 'default',
           onPress: () => {
             if (onFinishMatch) {
-              onFinishMatch(liveState);
+              onFinishMatch(leanLive(liveState));
             }
           },
         },
@@ -387,16 +518,19 @@ export default function CricketScorerModal({
       Alert.alert('Scoring Error', 'Could not record this ball. Please try again.');
       return;
     }
-    const updatedLive = { ...liveState };
-    updatedLive[curInnKey] = res.innings;
+    // Super Over: innings ends at 2 wickets (or 1 over / target)
+    const soAllOut = isSuperOver && res.innings.wickets >= 2;
+    if (soAllOut) res.innings.isCompleted = true;
+    const updatedLive = cloneLive();
+    holderOf(updatedLive)[curInnKey] = res.innings;
 
     setLiveState(updatedLive);
     scheduleSync(updatedLive);
 
-    if (res.inningsCompleted) {
+    if (res.inningsCompleted || soAllOut) {
       if (currentInningsNum === 1) {
         Alert.alert(
-          '1st Innings Completed!',
+          isSuperOver ? 'Super Over: 1st Innings Completed!' : '1st Innings Completed!',
           `${innings.battingTeamName} finished at ${res.innings.runs}/${res.innings.wickets} in ${res.innings.overs} overs.\n\nTarget for ${innings.bowlingTeamName}: ${res.innings.runs + 1} runs.`,
           [
             {
@@ -424,8 +558,8 @@ export default function CricketScorerModal({
       return;
     }
     const undone = undoLastBall(innings);
-    const updatedLive = { ...liveState };
-    updatedLive[curInnKey] = undone;
+    const updatedLive = cloneLive();
+    holderOf(updatedLive)[curInnKey] = undone;
     setLiveState(updatedLive);
     scheduleSync(updatedLive);
   };
@@ -461,8 +595,8 @@ export default function CricketScorerModal({
   };
 
   const handleSelectNextBowler = (player) => {
-    const updatedLive = { ...liveState };
-    const curInn = updatedLive[curInnKey];
+    const updatedLive = cloneLive();
+    const curInn = holderOf(updatedLive)[curInnKey];
     curInn.currentBowlerId = String(player.id);
     ensureBowler(curInn, player.id, player.name);
     setLiveState(updatedLive);
@@ -471,8 +605,8 @@ export default function CricketScorerModal({
   };
 
   const handleSelectNewBatter = (player) => {
-    const updatedLive = { ...liveState };
-    const curInn = updatedLive[curInnKey];
+    const updatedLive = cloneLive();
+    const curInn = holderOf(updatedLive)[curInnKey];
     const newBatterId = String(player.id);
     ensureBatter(curInn, newBatterId, player.name);
 
@@ -508,7 +642,7 @@ export default function CricketScorerModal({
                 </Text>
               </View>
               <Text style={[styles.battingTeamTitle, { color: colors.text }]} numberOfLines={1}>
-                {innings.battingTeamName} {currentInningsNum === 2 ? '(2nd Inn)' : '(1st Inn)'}
+                {innings.battingTeamName} {isSuperOver ? (currentInningsNum === 2 ? '(Super Over · 2nd)' : '(Super Over · 1st)') : (currentInningsNum === 2 ? '(2nd Inn)' : '(1st Inn)')}
               </Text>
             </View>
 
@@ -649,8 +783,8 @@ export default function CricketScorerModal({
                 </Text>
                 <Text style={{ fontSize: 12, color: colors.subtext || colors.textSecondary, textAlign: 'center', marginBottom: 10 }}>
                   {currentInningsNum === 1
-                    ? `1st Innings finished at ${innings.runs}/${innings.wickets}. Target for 2nd innings: ${innings.runs + 1}`
-                    : `2nd Innings finished at ${innings.runs}/${innings.wickets}. Match concluded.`}
+                    ? `${isSuperOver ? 'Super Over 1st innings' : '1st Innings'} finished at ${innings.runs}/${innings.wickets}. Target for 2nd innings: ${innings.runs + 1}`
+                    : `${isSuperOver ? 'Super Over 2nd innings' : '2nd Innings'} finished at ${innings.runs}/${innings.wickets}. ${isSuperOver ? 'Declare the Super Over result.' : 'Match concluded.'}`}
                 </Text>
                 {currentInningsNum === 1 ? (
                   <TouchableOpacity
@@ -664,7 +798,7 @@ export default function CricketScorerModal({
                     style={[styles.finishBtn, { backgroundColor: '#059669', paddingHorizontal: 20 }]}
                     onPress={handleConfirmFinishMatch}
                   >
-                    <Ionicons name="trophy" size={16} color="#FFFFFF" style={{ marginRight: 6 }} /><Text style={styles.finishBtnText}>Finish Match & Declare Winner</Text>
+                    <Ionicons name="trophy" size={16} color="#FFFFFF" style={{ marginRight: 6 }} /><Text style={styles.finishBtnText}>{isSuperOver ? 'Finish Super Over' : 'Finish Match & Declare Winner'}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -868,8 +1002,8 @@ export default function CricketScorerModal({
                           style={[styles.actionBtn, { backgroundColor: '#EF4444', borderColor: '#EF4444' }]}
                           onPress={() => {
                             setShowWicketModal(false);
-                            const updatedLive = { ...liveState };
-                            updatedLive[curInnKey].isCompleted = true;
+                            const updatedLive = cloneLive();
+                            holderOf(updatedLive)[curInnKey].isCompleted = true;
                             setLiveState(updatedLive);
                             scheduleSync(updatedLive);
                           }}

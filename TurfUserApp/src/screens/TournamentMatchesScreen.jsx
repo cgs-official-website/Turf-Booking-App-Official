@@ -302,13 +302,14 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
   };
 
   // Direct finish API executor
-  const executeFinishApi = async (m, finalLiveCricket = null) => {
+  const executeFinishApi = async (m, finalLiveCricket = null, extra = null) => {
     setBusy(true);
     const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
     try {
       const payload = {};
       if (finalLiveCricket) {
         payload.liveCricket = finalLiveCricket;
+        if (extra) Object.assign(payload, extra);
       } else if (m.liveCricket) {
         payload.liveCricket = m.liveCricket;
       }
@@ -332,10 +333,10 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
   };
 
   // Finish match & advance winner
-  const finishMatch = (m, finalLiveCricket = null) => {
+  const finishMatch = (m, finalLiveCricket = null, extra = null) => {
     // If called from inside the scorer modal, the user already confirmed in the modal!
     if (finalLiveCricket) {
-      executeFinishApi(m, finalLiveCricket);
+      executeFinishApi(m, finalLiveCricket, extra);
       return;
     }
 
@@ -889,7 +890,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         match={liveScorerMatch}
         tournament={tournament}
         onSyncLiveCricket={handleSyncLiveCricket}
-        onFinishMatch={(latestLive) => finishMatch(liveScorerMatch, latestLive)}
+        onFinishMatch={(latestLive, extra) => finishMatch(liveScorerMatch, latestLive, extra)}
         busy={busy}
       />
 

@@ -854,6 +854,40 @@ const TournamentDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+        {/* ── Prizes & Cups Card ── */}
+        {(() => {
+          const pd = tournament.prizeDetails || {};
+          const cups = Number(pd.cupsCount) || 0;
+          const prizes = Array.isArray(pd.cupPrizes) ? pd.cupPrizes.map((v) => Number(v) || 0) : [];
+          const total = Number(tournament.prizePool) || prizes.reduce((s, v) => s + v, 0);
+          if (!cups && !total) return null;
+          const LABELS = ['Champion', 'Runner-up', '3rd Place', '4th Place'];
+          const COLORS = ['#D97706', '#94A3B8', '#C2410C', '#2563EB'];
+          const rows = Array.from({ length: cups || prizes.length || 1 }, (_, i) => ({ label: LABELS[i], amount: prizes[i] || 0, color: COLORS[i] }));
+          return (
+            <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
+              <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Prizes & Cups</Text>
+              {rows.map((r, i) => (
+                <View key={`prize_${i}`} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.border }}>
+                  <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: r.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Ionicons name={i === 0 ? 'trophy' : 'medal'} size={18} color={r.color} />
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: colors.text }}>{r.label}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>
+                    {r.amount > 0 ? `₹${r.amount.toLocaleString('en-IN')}` : 'Cup / Trophy'}
+                  </Text>
+                </View>
+              ))}
+              {total > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, padding: 12, borderRadius: 12, backgroundColor: colors.inputBg }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary }}>Total Prize Pool</Text>
+                  <Text style={{ fontSize: 17, fontWeight: '900', color: '#0F766E' }}>₹{total.toLocaleString('en-IN')}</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
+
         {/* Tournament Structure & Rules Card */}
         <View style={[styles.detailCard, { backgroundColor: colors.card, borderColor: colors.border }, SHADOWS.sm]}>
           <Text style={[styles.cardSectionTitle, { color: colors.text }]}>Structure & Rules</Text>

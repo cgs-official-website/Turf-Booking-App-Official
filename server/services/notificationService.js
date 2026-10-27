@@ -168,7 +168,7 @@ const notificationService = {
         const deviceTokens = await prisma.deviceToken.findMany({
           where: {
             ownerId: { in: idVariations },
-            ownerType: recipientRole,
+            ownerType: { in: [recipientRole, recipientRole.toLowerCase(), recipientRole.toUpperCase()] },
           },
           select: { token: true },
         });
@@ -184,6 +184,7 @@ const notificationService = {
               notificationId: notifId,
               title: finalTitle,
               body: finalBody,
+              notificationText: finalBody,
               type: String(type || 'general'),
             },
           });
@@ -213,6 +214,9 @@ const notificationService = {
         stringData[key] = typeof val === 'object' ? JSON.stringify(val) : String(val);
       }
     }
+    if (!stringData.title && title) stringData.title = String(title);
+    if (!stringData.body && body) stringData.body = String(body);
+    if (!stringData.notificationText && body) stringData.notificationText = String(body);
 
     const msgClient = messaging || (admin && typeof admin.messaging === 'function' ? admin.messaging() : null);
 
@@ -231,7 +235,7 @@ const notificationService = {
               channelId: 'turf_notifications',
               sound: 'default',
               icon: 'ic_notification',
-              color: '#0F766E',
+              color: '#00B761',
               priority: 'high',
               visibility: 'public',
               defaultSound: true,
@@ -364,6 +368,9 @@ const notificationService = {
       action: 'tournament_created',
       tournamentName: tournament.name,
       venueName: venueLabel,
+      title: finalTitle,
+      body: finalBody,
+      notificationText: finalBody,
     };
 
     try {
@@ -373,10 +380,16 @@ const notificationService = {
         select: { id: true },
       });
 
-      const excludeUserId = tournament.userId ? String(tournament.userId) : null;
+      const excludeIds = new Set();
+      if (tournament.userId) {
+        const raw = String(tournament.userId);
+        excludeIds.add(raw);
+        if (raw.startsWith('user_')) excludeIds.add(raw.replace(/^user_/, ''));
+        else excludeIds.add(`user_${raw}`);
+      }
       const targetUserIds = allUsers
         .map((u) => String(u.id))
-        .filter((uid) => uid && uid !== excludeUserId);
+        .filter((uid) => uid && !excludeIds.has(uid));
 
       if (!targetUserIds.length) {
         return { success: true, count: 0 };
@@ -409,22 +422,36 @@ const notificationService = {
         where: { collection: 'pref_user' },
         select: { id: true, data: true },
       });
-      const disabledUserIds = new Set(
-        prefDocs
-          .filter((d) => d.data && d.data.pushNotifications === false)
-          .map((d) => String(d.id))
-      );
+      const disabledUserIds = new Set();
+      prefDocs.forEach((d) => {
+        if (d.data && d.data.pushNotifications === false) {
+          const raw = String(d.id);
+          disabledUserIds.add(raw);
+          if (raw.startsWith('user_')) disabledUserIds.add(raw.replace(/^user_/, ''));
+          else disabledUserIds.add(`user_${raw}`);
+        }
+      });
 
       const eligibleUserIds = targetUserIds.filter((uid) => !disabledUserIds.has(uid));
       if (!eligibleUserIds.length) {
         return { success: true, inAppCount: notifRows.length, pushCount: 0 };
       }
 
-      // 5. Gather registered device tokens for eligible users
+      // 5. Gather registered device tokens for eligible users (including ID prefix variations)
+      const eligibleIdVariations = new Set();
+      eligibleUserIds.forEach((uid) => {
+        eligibleIdVariations.add(uid);
+        if (uid.startsWith('user_')) {
+          eligibleIdVariations.add(uid.replace(/^user_/, ''));
+        } else {
+          eligibleIdVariations.add(`user_${uid}`);
+        }
+      });
+
       const deviceTokens = await prisma.deviceToken.findMany({
         where: {
-          ownerType: 'user',
-          ownerId: { in: eligibleUserIds },
+          ownerType: { in: ['user', 'USER'] },
+          ownerId: { in: Array.from(eligibleIdVariations) },
         },
         select: { token: true },
       });

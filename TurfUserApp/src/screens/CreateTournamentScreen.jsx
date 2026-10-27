@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Feather from 'react-native-vector-icons/Feather';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import { SPACING, RADIUS, SHADOW, FONT } from '../utils/theme';
@@ -22,13 +23,13 @@ import { createUserTournamentApi, updateTournamentApi } from '../api/tournaments
 import { turfsApi } from '../api/turfs';
 
 const SPORTS = [
-  { id: 'Cricket', label: 'Cricket', icon: 'activity' },
-  { id: 'Football', label: 'Football', icon: 'disc' },
-  { id: 'Badminton', label: 'Badminton', icon: 'zap' },
-  { id: 'Tennis', label: 'Tennis', icon: 'circle' },
-  { id: 'Basketball', label: 'Basketball', icon: 'target' },
-  { id: 'Volleyball', label: 'Volleyball', icon: 'sun' },
-  { id: 'Other', label: 'Other', icon: 'award' },
+  { id: 'Cricket', label: 'Cricket', icon: 'cricket' },
+  { id: 'Football', label: 'Football', icon: 'soccer' },
+  { id: 'Badminton', label: 'Badminton', icon: 'badminton' },
+  { id: 'Tennis', label: 'Tennis', icon: 'tennis' },
+  { id: 'Basketball', label: 'Basketball', icon: 'basketball' },
+  { id: 'Volleyball', label: 'Volleyball', icon: 'volleyball' },
+  { id: 'Other', label: 'Other', icon: 'trophy-outline' },
 ];
 
 const SAMPLE_BANNERS = [
@@ -936,7 +937,7 @@ export default function CreateTournamentScreen({ route, navigation }) {
                   onPress={() => setSelectedSport(sp.id)}
                   activeOpacity={0.8}
                 >
-                  <Feather
+                  <MaterialCommunityIcons
                     name={sp.icon}
                     size={14}
                     color={active ? '#FFFFFF' : C.subtext}

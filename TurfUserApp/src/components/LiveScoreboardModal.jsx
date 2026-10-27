@@ -26,10 +26,12 @@ export default function LiveScoreboardModal({
   const live = match?.liveCricket;
 
   useEffect(() => {
-    if (live?.currentInnings) {
+    if (live?.superOver?.active) {
+      setActiveTab(2 + (live.superOver.currentInnings || 1));
+    } else if (live?.currentInnings) {
       setActiveTab(live.currentInnings);
     }
-  }, [live?.currentInnings]);
+  }, [live?.currentInnings, live?.superOver?.active, live?.superOver?.currentInnings]);
 
   if (!match) return null;
 
@@ -37,7 +39,10 @@ export default function LiveScoreboardModal({
   const inn1 = live?.innings1;
   const inn2 = live?.innings2;
 
-  let activeInnings = activeTab === 2 ? (inn2 || inn1) : inn1;
+  const soState = live?.superOver;
+  let activeInnings = activeTab === 4
+    ? (soState?.innings2 || soState?.innings1)
+    : (activeTab === 3 ? soState?.innings1 : (activeTab === 2 ? (inn2 || inn1) : inn1));
 
   if (!activeInnings) {
     const score = match.score || {};
@@ -69,7 +74,8 @@ export default function LiveScoreboardModal({
   const bowler = activeInnings.bowlers?.[activeInnings.currentBowlerId];
 
   const crr = crrString(activeInnings.runs, activeInnings.legalBalls);
-  const target = live?.target;
+  const isChaseTab = activeTab === 2 || activeTab === 4;
+  const target = activeTab >= 3 ? soState?.target : live?.target;
   const maxBalls = (activeInnings.maxOvers || 10) * 6;
   const remBalls = Math.max(0, maxBalls - activeInnings.legalBalls);
   const remRuns = target ? Math.max(0, target - activeInnings.runs) : null;
@@ -128,7 +134,7 @@ export default function LiveScoreboardModal({
 
                 <View style={styles.runRateBlock}>
                   <Text style={[styles.crrLabel, { color: C.subtext }]}>CRR: {crr}</Text>
-                  {target && activeTab === 2 && (
+                  {target && isChaseTab && (
                     <Text style={[styles.rrrLabel, { color: '#D97706' }]}>
                       RRR: {rrr}
                     </Text>
@@ -137,7 +143,7 @@ export default function LiveScoreboardModal({
               </View>
 
               {/* Target Banner */}
-              {target && activeTab === 2 && (
+              {target && isChaseTab && (
                 <View style={[styles.chaseBanner, { backgroundColor: dark ? 'rgba(217, 119, 6, 0.15)' : '#FEF3C7' }]}>
                   <Feather name="target" size={13} color="#D97706" style={{ marginRight: 6 }} />
                   <Text style={[styles.chaseText, { color: dark ? '#FBBF24' : '#92400E' }]}>
@@ -235,6 +241,26 @@ export default function LiveScoreboardModal({
                 </Text>
               </TouchableOpacity>
 
+              {soState?.innings1 && (
+                <TouchableOpacity
+                  style={[styles.tabBtn, activeTab === 3 && styles.tabBtnOn]}
+                  onPress={() => setActiveTab(3)}
+                >
+                  <Text numberOfLines={1} style={[styles.tabBtnText, { color: activeTab === 3 ? C.primary : C.subtext }]}>
+                    SO · {soState.innings1.battingTeamName}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {soState?.innings2 && (
+                <TouchableOpacity
+                  style={[styles.tabBtn, activeTab === 4 && styles.tabBtnOn]}
+                  onPress={() => setActiveTab(4)}
+                >
+                  <Text numberOfLines={1} style={[styles.tabBtnText, { color: activeTab === 4 ? C.primary : C.subtext }]}>
+                    SO · {soState.innings2.battingTeamName}
+                  </Text>
+                </TouchableOpacity>
+              )}
               {inn2 && (
                 <TouchableOpacity
                   style={[styles.tabBtn, activeTab === 2 && styles.tabBtnOn]}

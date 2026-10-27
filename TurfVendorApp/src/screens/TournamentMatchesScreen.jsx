@@ -276,11 +276,11 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
         }
     };
 
-    const executeFinishApi = async (m, finalLiveCricket) => {
+    const executeFinishApi = async (m, finalLiveCricket, extra = null) => {
         setBusy(true);
         const isFinal = !m.nextMatchId && !m.isThirdPlaceMatch;
         try {
-            const payload = finalLiveCricket ? { liveCricket: finalLiveCricket } : {};
+            const payload = finalLiveCricket ? { liveCricket: finalLiveCricket, ...(extra || {}) } : {};
             const res = await confirmMatchWinnerApi(tournament.id, m.id, payload);
             applyResult(res);
             setLiveScorerMatch(null);
@@ -301,11 +301,11 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
     };
 
     // Finish match
-    const finishMatch = (m, finalLiveCricket) => {
+    const finishMatch = (m, finalLiveCricket, extra = null) => {
         // If caller passed finalLiveCricket (e.g. from CricketScorerModal confirmation dialog),
         // execute finish API directly to avoid double native confirmation dialogs
         if (finalLiveCricket) {
-            executeFinishApi(m, finalLiveCricket);
+            executeFinishApi(m, finalLiveCricket, extra);
             return;
         }
 
@@ -816,7 +816,7 @@ const TournamentMatchesScreen = ({ route, navigation }) => {
                 match={liveScorerMatch}
                 tournament={tournament}
                 onSyncLiveCricket={handleSyncLiveCricket}
-                onFinishMatch={(latestLive) => finishMatch(liveScorerMatch, latestLive)}
+                onFinishMatch={(latestLive, extra) => finishMatch(liveScorerMatch, latestLive, extra)}
                 busy={busy}
             />
 

@@ -11,19 +11,20 @@ import {
   Platform,
 } from 'react-native';
 import Feather from 'react-native-vector-icons/Feather';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import DatePickerModal from '../components/DatePickerModal';
 import { useTheme } from '../context/ThemeContext';
 import { SIZES, SHADOWS } from '../utils/theme';
 import { getTournamentByIdApi, updateTournamentApi } from '../api/tournaments';
 
 const SPORTS = [
-  { id: 'Cricket', label: 'Cricket', icon: 'activity' },
-  { id: 'Football', label: 'Football', icon: 'circle' },
-  { id: 'Badminton', label: 'Badminton', icon: 'zap' },
-  { id: 'Tennis', label: 'Tennis', icon: 'disc' },
-  { id: 'Basketball', label: 'Basketball', icon: 'target' },
-  { id: 'Volleyball', label: 'Volleyball', icon: 'sun' },
-  { id: 'Other', label: 'Other Sport', icon: 'award' },
+  { id: 'Cricket', label: 'Cricket', icon: 'cricket' },
+  { id: 'Football', label: 'Football', icon: 'soccer' },
+  { id: 'Badminton', label: 'Badminton', icon: 'badminton' },
+  { id: 'Tennis', label: 'Tennis', icon: 'tennis' },
+  { id: 'Basketball', label: 'Basketball', icon: 'basketball' },
+  { id: 'Volleyball', label: 'Volleyball', icon: 'volleyball' },
+  { id: 'Other', label: 'Other Sport', icon: 'trophy-outline' },
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -332,8 +333,8 @@ const EditTournamentScreen = ({ navigation, route }) => {
                       backgroundColor: isSelected
                         ? colors.primary
                         : isDark
-                        ? 'rgba(255,255,255,0.06)'
-                        : '#F1F5F9',
+                          ? 'rgba(255,255,255,0.06)'
+                          : '#F1F5F9',
                       borderColor: isSelected ? colors.primary : colors.border,
                     },
                   ]}
@@ -343,7 +344,7 @@ const EditTournamentScreen = ({ navigation, route }) => {
                   }}
                   activeOpacity={0.75}
                 >
-                  <Feather
+                  <MaterialCommunityIcons
                     name={sport.icon}
                     size={14}
                     color={isSelected ? '#FFFFFF' : colors.textSecondary}

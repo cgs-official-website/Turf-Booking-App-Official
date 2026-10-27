@@ -171,7 +171,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.actionIconBox, { backgroundColor: colors.primaryLight }]}>
               <Icon name="plus" size={18} color={colors.primary} />
             </View>
-            <Text style={styles.actionLabel}>Add Turf</Text>
+            <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Add Turf</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -182,7 +182,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.actionIconBox, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
               <Icon name="clock" size={18} color="#3B82F6" />
             </View>
-            <Text style={styles.actionLabel}>Slots</Text>
+            <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Slots</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -193,7 +193,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.actionIconBox, { backgroundColor: 'rgba(168, 85, 247, 0.12)' }]}>
               <Icon name="calendar" size={18} color="#A855F7" />
             </View>
-            <Text style={styles.actionLabel}>Bookings</Text>
+            <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Bookings</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -204,7 +204,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.actionIconBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
               <Icon name="star" size={18} color="#F59E0B" />
             </View>
-            <Text style={styles.actionLabel}>Reviews</Text>
+            <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Reviews</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -215,7 +215,7 @@ const DashboardScreen = ({ navigation }) => {
             <View style={[styles.actionIconBox, { backgroundColor: 'rgba(15, 118, 110, 0.12)' }]}>
               <Icon name="award" size={18} color={colors.primary} />
             </View>
-            <Text style={styles.actionLabel}>Tournaments</Text>
+            <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Tournaments</Text>
           </TouchableOpacity>
         </View>
 
@@ -463,6 +463,8 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     marginBottom: 5,
   },
   actionLabel: {
+    width: '100%',
+    paddingHorizontal: 2,
     fontSize: 10,
     fontWeight: '700',
     color: colors.text,

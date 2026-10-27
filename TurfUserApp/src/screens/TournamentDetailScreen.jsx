@@ -786,11 +786,11 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
   };
 
-  const executeFinishMatch = async (match, finalLiveCricket) => {
+  const executeFinishMatch = async (match, finalLiveCricket, extra = null) => {
     setBracketActionLoading(true);
     const isFinal = !match.nextMatchId;
     try {
-      const payload = finalLiveCricket ? { liveCricket: finalLiveCricket } : {};
+      const payload = finalLiveCricket ? { liveCricket: finalLiveCricket, ...(extra || {}) } : {};
       const res = await confirmMatchWinnerApi(tournament.id, match.id, payload);
       const updated = res?.tournament || res?.data?.tournament;
       if (updated) setTournament(updated);
@@ -815,10 +815,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
     }
   };
 
-  const handleFinishMatch = (match, finalLiveCricket) => {
+  const handleFinishMatch = (match, finalLiveCricket, extra = null) => {
     if (!isCreator) return;
     if (finalLiveCricket) {
-      executeFinishMatch(match, finalLiveCricket);
+      executeFinishMatch(match, finalLiveCricket, extra);
       return;
     }
     const isFinal = !match.nextMatchId;
@@ -1432,6 +1432,40 @@ export default function TournamentDetailScreen({ route, navigation }) {
             </View>
           )}
         </View>
+
+        {/* ── Prizes & Cups Card ── */}
+        {(() => {
+          const pd = tournament.prizeDetails || {};
+          const cups = Number(pd.cupsCount) || 0;
+          const prizes = Array.isArray(pd.cupPrizes) ? pd.cupPrizes.map((v) => Number(v) || 0) : [];
+          const total = Number(tournament.prizePool) || prizes.reduce((s, v) => s + v, 0);
+          if (!cups && !total) return null;
+          const LABELS = ['Champion', 'Runner-up', '3rd Place', '4th Place'];
+          const COLORS = ['#D97706', '#94A3B8', '#C2410C', '#2563EB'];
+          const rows = Array.from({ length: cups || prizes.length || 1 }, (_, i) => ({ label: LABELS[i], amount: prizes[i] || 0, color: COLORS[i] }));
+          return (
+            <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
+              <Text style={[styles.sectionHeading, { color: C.text }]}>Prizes & Cups</Text>
+              {rows.map((r, i) => (
+                <View key={`prize_${i}`} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: C.border }}>
+                  <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: r.color + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Ionicons name={i === 0 ? 'trophy' : 'medal'} size={18} color={r.color} />
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: C.text }}>{r.label}</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.text }}>
+                    {r.amount > 0 ? `₹${r.amount.toLocaleString('en-IN')}` : 'Cup / Trophy'}
+                  </Text>
+                </View>
+              ))}
+              {total > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, padding: 12, borderRadius: 12, backgroundColor: C.bgSoft }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: C.subtext }}>Total Prize Pool</Text>
+                  <Text style={{ fontSize: 17, fontWeight: '900', color: '#0F766E' }}>₹{total.toLocaleString('en-IN')}</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
 
         {/* ── Capacity & Slots Overview (Part 1 & 5) ── */}
         <View style={[styles.sectionCard, { backgroundColor: C.card, borderColor: C.border }, SHADOW.card]}>
@@ -3591,7 +3625,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         match={liveScorerMatch}
         tournament={tournament}
         onSyncLiveCricket={handleSyncLiveCricket}
-        onFinishMatch={(latestLive) => handleFinishMatch(liveScorerMatch, latestLive)}
+        onFinishMatch={(latestLive, extra) => handleFinishMatch(liveScorerMatch, latestLive, extra)}
         busy={bracketActionLoading}
       />
 

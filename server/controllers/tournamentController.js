@@ -528,6 +528,25 @@ function broadcastNewTournamentNotification(tournament) {
     .catch((err) => console.warn('⚠️ broadcastTournament error:', err.message));
 }
 
+// Undo-history snapshots are only needed on the scorer's device. Each snapshot is a
+// full copy of the innings, so keeping 30 of them made one innings ~250KB and the
+// bracket several MB (slow writes, slow polling, request timeouts). Strip them
+// before anything is stored in PostgreSQL or sent to other users.
+function stripLiveSnapshots(bracket) {
+  try {
+    for (const round of (bracket?.rounds || [])) {
+      for (const m of (round.matches || [])) {
+        const lc = m.liveCricket;
+        if (!lc) continue;
+        for (const k of ['innings1', 'innings2']) {
+          if (lc[k] && Array.isArray(lc[k].snapshots) && lc[k].snapshots.length) lc[k].snapshots = [];
+        }
+      }
+    }
+  } catch (_) { /* never block scoring */ }
+  return bracket;
+}
+
 const tournamentController = {
   formatTournament,
   formatTournamentSummary,
@@ -1363,7 +1382,7 @@ const tournamentController = {
         return sendError(res, Object.values(errors)[0], 400, 'VALIDATION_ERROR', errors);
       }
 
-      let resolvedVendorId = req.vendor?.id || req.user?.vendorId || null;
+      let resolvedVendorId = req.vendor?.id || req.user?.vendorId || (req.user?.role === 'vendor' ? req.user.id : null) || req.user?.id || null;
       let resolvedVenue = venueName ? venueName.trim() : null;
       let resolvedCity = city ? city.trim() : null;
 
@@ -1400,6 +1419,7 @@ const tournamentController = {
             data: { status: 'published' },
             include: { turf: { select: { id: true, name: true, city: true, images: true, logo: true, location: true } } },
           });
+          broadcastNewTournamentNotification(t);
         }
         return sendSuccess(res, { tournament: formatTournament(t, req.user), duplicate: true }, 200);
       };
@@ -1992,6 +2012,10 @@ const tournamentController = {
         },
       });
 
+      if (updated.status === 'published') {
+        broadcastNewTournamentNotification(updated);
+      }
+
       return sendSuccess(res, {
         tournament: formatTournament(updated, req.user),
         message: `Tournament status updated to ${status}`,
@@ -2291,7 +2315,7 @@ const tournamentController = {
       try {
         const registration = outcome.registration;
         const tournamentName = tournament.name || 'Tournament';
-        const vendorRecipientId = tournament.vendorId || tournament.turf?.vendorId || tournament.vendor?.id;
+        const vendorRecipientId = tournament.vendorId || tournament.turf?.vendorId || tournament.vendor?.id || tournament.createdBy;
         const isUserCreated = tournament.creatorType === 'USER' || Boolean(tournament.userId);
         const userOrganizerId = isUserCreated ? tournament.userId : null;
 
@@ -2309,6 +2333,7 @@ const tournamentController = {
           registrationId: registration.id,
           teamName: registration.teamName,
           captainName: registration.captainName,
+          tournamentName,
           title: notifTitle,
           body: notifBody,
           notificationText: notifBody,
@@ -2577,17 +2602,24 @@ const tournamentController = {
 
       // Dispatch acceptance notification to registering user
       try {
-        notifyInBackground({
+        const notifTitle = 'Team Accepted!';
+        const notifBody = `Your team "${outcome.registration.teamName}" has been accepted for "${tournament.name}".`;
+        await notificationService.sendNotification({
           recipientId: outcome.registration.userId,
           recipientRole: 'user',
-          title: '🎉 Team Accepted!',
-          body: `Your team "${outcome.registration.teamName}" has been accepted for "${tournament.name}".`,
+          title: notifTitle,
+          body: notifBody,
           type: 'tournament',
           data: {
             tournamentId,
             id: tournamentId,
             screen: 'TournamentDetail',
             action: 'team_accepted',
+            teamName: outcome.registration.teamName,
+            tournamentName: tournament.name,
+            title: notifTitle,
+            body: notifBody,
+            notificationText: notifBody,
           },
         });
       } catch (notifErr) {
@@ -2690,17 +2722,25 @@ const tournamentController = {
 
       // Dispatch rejection notification to registering user
       try {
-        notifyInBackground({
+        const notifTitle = 'Team Application Update';
+        const notifBody = `Your application for "${tournament.name}" was declined. Reason: ${effectiveReason}`;
+        await notificationService.sendNotification({
           recipientId: reg.userId,
           recipientRole: 'user',
-          title: 'Team Application Update',
-          body: `Your application for "${tournament.name}" was declined. Reason: ${effectiveReason}`,
+          title: notifTitle,
+          body: notifBody,
           type: 'tournament',
           data: {
             tournamentId,
             id: tournamentId,
             screen: 'TournamentDetail',
             action: 'team_rejected',
+            teamName: reg.teamName,
+            tournamentName: tournament.name,
+            rejectionReason: effectiveReason,
+            title: notifTitle,
+            body: notifBody,
+            notificationText: notifBody,
           },
         });
       } catch (notifErr) {
@@ -3426,7 +3466,7 @@ const tournamentController = {
 
       const { playingXI_A, playingXI_B, striker, nonStriker, bowler, maxOvers } = req.body;
       const isTeamABatting = (winnerTeamId === targetMatch.teamA.id && dec !== 'bowl') ||
-                             (winnerTeamId === targetMatch.teamB.id && dec === 'bowl');
+        (winnerTeamId === targetMatch.teamB.id && dec === 'bowl');
       const battingTeam = isTeamABatting ? targetMatch.teamA : targetMatch.teamB;
       const bowlingTeam = isTeamABatting ? targetMatch.teamB : targetMatch.teamA;
       const effectiveOvers = Number(maxOvers) || Number(tournament.oversPerTeam) || 10;
@@ -3694,6 +3734,15 @@ const tournamentController = {
         }
       }
 
+      // Live Super Over banner (regular innings stay tied; Super Over is shown separately)
+      const soLive = targetMatch.liveCricket?.superOver;
+      if (soLive && soLive.active && !soLive.completed) {
+        const so1 = soLive.innings1;
+        const so2 = soLive.innings2;
+        leadText = `Super Over: ${so1?.battingTeamName || ''} ${so1?.runs || 0}/${so1?.wickets || 0}` +
+          (so2 ? ` vs ${so2.battingTeamName || ''} ${so2.runs || 0}/${so2.wickets || 0}` : '');
+      }
+
       const userSummary = String(req.body?.summary !== undefined ? req.body.summary : (bodyScore.summary !== undefined ? bodyScore.summary : (targetMatch.score?.summary || ''))).trim();
       const matchSummary = userSummary || leadText;
 
@@ -3723,6 +3772,8 @@ const tournamentController = {
       } else if (!targetMatch.status || targetMatch.status === 'pending' || targetMatch.status === 'toss') {
         targetMatch.status = 'live';
       }
+
+      stripLiveSnapshots(bracket);
 
       // Compute tournament leaders across all matches so far
       try {
@@ -3927,8 +3978,8 @@ const tournamentController = {
         ? targetMatch.teamA
         : (
           (String(targetMatch.teamB?.id) === String(winnerTeamId) ||
-           String(targetMatch.teamB?.teamId) === String(winnerTeamId) ||
-           String(targetMatch.teamB?.name || '').trim().toLowerCase() === String(winnerTeamId || '').trim().toLowerCase())
+            String(targetMatch.teamB?.teamId) === String(winnerTeamId) ||
+            String(targetMatch.teamB?.name || '').trim().toLowerCase() === String(winnerTeamId || '').trim().toLowerCase())
             ? targetMatch.teamB
             : null
         );
@@ -4073,6 +4124,7 @@ const tournamentController = {
         updateData.status = 'completed';
       }
 
+      stripLiveSnapshots(bracket);
       const updated = await prisma.tournament.update({
         where: { id },
         data: updateData,
