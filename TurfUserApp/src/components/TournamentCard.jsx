@@ -63,7 +63,7 @@ export default function TournamentCard({ tournament, onPress, onShare }) {
   } else if (isDraft) {
     statusBadgeText = 'DRAFT';
     statusBadgeBg = 'rgba(245, 158, 11, 0.95)';
-  } else if (endStr && todayStr > endStr) {
+  } else if (tournament?.lifecycleStatus === 'completed' || (endStr && todayStr > endStr)) {
     statusBadgeText = 'TOURNAMENT COMPLETED';
     statusBadgeBg = 'rgba(100, 116, 139, 0.95)';
   } else if (startStr && todayStr >= startStr && (!endStr || todayStr <= endStr)) {

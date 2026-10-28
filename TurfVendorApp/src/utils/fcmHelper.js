@@ -260,6 +260,8 @@ export const fcmHelper = {
     };
 
     const showVendorPopup = ({ title, body, data }) => {
+      // Nothing meaningful to say -> show nothing (no generic "New Booking")
+      if (!cleanText(title) && !cleanText(body)) return;
       const isTournament = data?.type === 'tournament' || data?.screen === 'TournamentDetail';
       const isReg = data?.action === 'tournament_registration';
       const defaultTitle = isReg ? 'New Team Registration' : (isTournament ? 'Tournament Request' : 'New Notification');
@@ -307,13 +309,11 @@ export const fcmHelper = {
       if (data.notificationId) shownNotificationIds.add(data.notificationId);
       if (remoteMessage?.messageId) shownNotificationIds.add(remoteMessage.messageId);
 
-      const isReg = data?.action === 'tournament_registration';
-      const defaultTitle = isReg ? 'New Team Registration' : (data?.type === 'tournament' ? 'Tournament Request' : 'New Booking');
       const title =
         remoteMessage?.notification?.title ||
         data.notificationText ||
         data.title ||
-        defaultTitle;
+        '';
       const body =
         remoteMessage?.notification?.body ||
         data.notificationText ||

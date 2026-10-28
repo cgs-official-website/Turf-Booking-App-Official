@@ -6,6 +6,7 @@ const verifySessionToken = require('../middleware/verifySessionToken');
 
 // Public / User Tournament Endpoints
 router.get('/available', optionalAuth, tournamentController.getAvailableTournaments);
+router.get('/completed', optionalAuth, tournamentController.getCompletedTournaments);
 router.get('/my', verifySessionToken, tournamentController.getMyTournaments);
 router.post('/', verifySessionToken, tournamentController.createUserTournament);
 router.put('/:id', verifySessionToken, tournamentController.updateTournament);

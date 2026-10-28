@@ -143,7 +143,7 @@ function formatTournament(t, reqUser = null) {
   } else if (t.status === 'pending_approval' || t.approvalStatus === 'pending') {
     lifecycleStatus = 'pending_approval';
     lifecycleLabel = 'PENDING APPROVAL';
-  } else if (isTournamentCompleted) {
+  } else if (t.status === 'completed' || isTournamentCompleted) {
     lifecycleStatus = 'completed';
     lifecycleLabel = 'COMPLETED';
   } else if (isTournamentStarted) {
@@ -692,6 +692,45 @@ const tournamentController = {
     } catch (err) {
       console.error('getAvailableTournaments error:', err);
       return sendError(res, 'Failed to fetch available tournaments', 500, 'FETCH_FAILED');
+    }
+  },
+
+  /**
+   * GET /api/v1/tournaments/completed
+   * Public list of finished tournaments (final played, or end date passed) for UserApp "Completed" tab
+   */
+  async getCompletedTournaments(req, res) {
+    try {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const d = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${y}-${m}-${d}`;
+
+      const tournaments = await prisma.tournament.findMany({
+        where: {
+          OR: [
+            { status: 'completed' },
+            { status: 'published', endDate: { lt: todayStr } },
+          ],
+        },
+        omit: TOURNAMENT_LIST_OMIT,
+        include: {
+          turf: {
+            select: { id: true, name: true, city: true, location: true, images: true, logo: true, sports: true, pricePerHour: true },
+          },
+          registrations: { select: REGISTRATION_LIST_SELECT },
+          user: { select: { id: true, name: true, avatar: true } },
+        },
+        orderBy: [{ endDate: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
+      });
+
+      const formatted = tournaments.map((t) => formatTournamentSummary(t, req.user));
+      return sendSuccess(res, { tournaments: formatted, count: formatted.length });
+    } catch (err) {
+      console.error('getCompletedTournaments error:', err);
+      return sendError(res, 'Failed to fetch completed tournaments', 500, 'FETCH_FAILED');
     }
   },
 

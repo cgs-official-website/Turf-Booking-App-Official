@@ -15,6 +15,13 @@ export const getAvailableTournamentsApi = async () => {
 };
 
 /**
+ * Fetch finished tournaments (Completed Tab)
+ */
+export const getCompletedTournamentsApi = () => {
+  return client.get('/tournaments/completed');
+};
+
+/**
  * Fetch all tournaments created by the current authenticated user
  * (My Tournaments Tab)
  */

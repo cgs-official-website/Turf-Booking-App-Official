@@ -11,6 +11,8 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   if (remoteMessage?.notification) return;
   try {
     const data = remoteMessage?.data || {};
+    // No real content in the payload -> don't invent a generic "New Booking" notification
+    if (!data.title && !data.notificationText && !data.body && !data.message) return;
     const isReg = data.action === 'tournament_registration';
     const isTournament = data.type === 'tournament' || data.screen === 'TournamentDetail' || Boolean(data.tournamentId);
 

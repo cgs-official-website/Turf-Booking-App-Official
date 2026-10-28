@@ -10,6 +10,7 @@ import {
   StatusBar,
   Share,
   TextInput,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
@@ -18,14 +19,14 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import TournamentCard from '../components/TournamentCard';
 import Pagination from '../components/Pagination';
-import { getAvailableTournamentsApi, getMyTournamentsApi, getCachedAvailableTournaments } from '../api/tournaments';
+import { getAvailableTournamentsApi, getMyTournamentsApi, getCompletedTournamentsApi, getCachedAvailableTournaments } from '../api/tournaments';
 import { SPACING, RADIUS, SHADOW } from '../utils/theme';
 
 export default function TournamentScreen({ navigation }) {
   const { C, dark } = useTheme();
   const { token, user } = useSelector((s) => s.auth);
 
-  const [activeTab, setActiveTab] = useState('available'); // 'available' | 'open' | 'my'
+  const [activeTab, setActiveTab] = useState('available'); // 'available' | 'open' | 'completed' | 'my'
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
@@ -33,7 +34,9 @@ export default function TournamentScreen({ navigation }) {
   const [availableTournaments, setAvailableTournaments] = useState(cachedAvailable?.tournaments || []);
   const [myTournaments, setMyTournaments] = useState([]);
   const [loadingAvailable, setLoadingAvailable] = useState(!cachedAvailable);
+  const [completedTournaments, setCompletedTournaments] = useState([]);
   const [loadingMy, setLoadingMy] = useState(false);
+  const [loadingCompleted, setLoadingCompleted] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadAvailable = useCallback(async () => {
@@ -60,9 +63,22 @@ export default function TournamentScreen({ navigation }) {
     }
   }, [token]);
 
+  const loadCompleted = useCallback(async () => {
+    try {
+      setLoadingCompleted(true);
+      const res = await getCompletedTournamentsApi();
+      setCompletedTournaments(res?.tournaments || []);
+    } catch (err) {
+      console.warn('Error loading completed tournaments:', err.message);
+    } finally {
+      setLoadingCompleted(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadAvailable();
-  }, [loadAvailable]);
+    loadCompleted(); // so the Completed (n) count is right from the start
+  }, [loadAvailable, loadCompleted]);
 
   useEffect(() => {
     if (activeTab === 'my') {
@@ -80,7 +96,11 @@ export default function TournamentScreen({ navigation }) {
     return hay.includes(q);
   };
 
-  const baseList = activeTab === 'my' ? myTournaments : (activeTab === 'open' ? openTournaments : availableTournaments);
+  const baseList =
+    activeTab === 'my' ? myTournaments
+      : activeTab === 'completed' ? completedTournaments
+        : activeTab === 'open' ? openTournaments
+          : availableTournaments;
   const filteredList = baseList.filter(matchesSearch);
   const totalPages = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -92,10 +112,12 @@ export default function TournamentScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    if (activeTab !== 'my') {
-      await loadAvailable();
-    } else {
+    if (activeTab === 'my') {
       await loadMy();
+    } else if (activeTab === 'completed') {
+      await loadCompleted();
+    } else {
+      await Promise.all([loadAvailable(), loadCompleted()]);
     }
     setRefreshing(false);
   };
@@ -140,6 +162,28 @@ export default function TournamentScreen({ navigation }) {
           <Feather name="plus-circle" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
           <Text style={styles.createCtaText}>Create Community Tournament</Text>
         </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderCompletedEmpty = () => {
+    if (loadingCompleted) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#0F766E" />
+          <Text style={[styles.loadingText, { color: C.subtext }]}>Loading completed tournaments...</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.emptyContainer, { backgroundColor: C.card, borderColor: C.border }, SHADOW.subtle]}>
+        <View style={[styles.emptyIconCircle, { backgroundColor: '#CCFBF1' }]}>
+          <Feather name="check-circle" size={32} color="#0F766E" />
+        </View>
+        <Text style={[styles.emptyTitle, { color: C.text }]}>No Completed Tournaments Yet</Text>
+        <Text style={[styles.emptySubtitle, { color: C.subtext }]}>
+          Finished tournaments with their results will show up here.
+        </Text>
       </View>
     );
   };
@@ -246,10 +290,16 @@ export default function TournamentScreen({ navigation }) {
       </View>
 
       {/* ── Tab Selector ── */}
-      <View style={[styles.tabsWrap, { backgroundColor: C.bgSoft, borderColor: C.border }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsScroll}
+        contentContainerStyle={[styles.tabsWrap, { backgroundColor: C.bgSoft, borderColor: C.border }]}
+      >
         {[
           { key: 'available', icon: 'compass', label: `Available (${availableTournaments.length})` },
           { key: 'open', icon: 'unlock', label: `Open (${openTournaments.length})` },
+          { key: 'completed', icon: 'check-circle', label: `Completed (${completedTournaments.length})` },
           { key: 'my', icon: 'user', label: `Mine (${myTournaments.length})` },
         ].map((tab) => {
           const on = activeTab === tab.key;
@@ -273,7 +323,7 @@ export default function TournamentScreen({ navigation }) {
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* ── Tab Content List ── */}
       <FlatList
@@ -295,7 +345,7 @@ export default function TournamentScreen({ navigation }) {
                 <Text style={[styles.emptySubtitle, { color: C.subtext }]}>Try a different name, sport or turf.</Text>
               </View>
             )
-            : (activeTab === 'my' ? renderMyEmpty() : renderAvailableEmpty())
+            : (activeTab === 'my' ? renderMyEmpty() : (activeTab === 'completed' ? renderCompletedEmpty() : renderAvailableEmpty()))
         }
         ListFooterComponent={
           <Pagination
@@ -373,17 +423,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 3,
   },
-  tabsWrap: {
-    flexDirection: 'row',
+  tabsScroll: {
+    flexGrow: 0,
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.md,
     marginBottom: SPACING.sm,
+  },
+  tabsWrap: {
+    flexDirection: 'row',
     padding: 4,
     borderRadius: RADIUS.md,
     borderWidth: 1,
   },
   tabButton: {
-    flex: 1,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
