@@ -155,6 +155,13 @@ export const getTeamDisplayName = (team, placeholder = 'TBD') => {
   return placeholder || 'TBD';
 };
 
+// Privacy: never show a full phone number to other users (e.g. 65......76)
+const maskPhone = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length <= 4) return '••••';
+  return `${digits.slice(0, 2)}${'.'.repeat(Math.max(digits.length - 4, 4))}${digits.slice(-2)}`;
+};
+
 export default function TournamentDetailScreen({ route, navigation }) {
   const targetId =
     route.params?.tournamentId ||
@@ -2822,7 +2829,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
                           </View>
                           <Text style={[styles.rosterPlayerName, { color: C.text }]}>{p.name}</Text>
                           {Boolean(p.phone) && (
-                            <Text style={[styles.rosterPlayerPhone, { color: C.subtext }]}>{p.phone}</Text>
+                            <Text style={[styles.rosterPlayerPhone, { color: C.subtext }]}>{maskPhone(p.phone)}</Text>
                           )}
                         </View>
                       ))}

@@ -425,6 +425,8 @@ const styles = StyleSheet.create({
   },
   tabsScroll: {
     flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 52,
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.md,
     marginBottom: SPACING.sm,
