@@ -3106,7 +3106,7 @@ const tournamentController = {
       }
 
       // If 4 Cups is configured (1st, 2nd, 3rd, 4th), add a 3rd Place Playoff in final round
-      if (isFinalRound && cupsCount === 4 && totalRounds >= 2) {
+      if (isFinalRound && cupsCount === 4 && totalRounds >= 2 && !(totalRounds === 2 && byeCount > 0)) {
         matchesInRound.push({
           id: 'match_3rd_place',
           roundNumber: r,
@@ -3153,6 +3153,30 @@ const tournamentController = {
           }
         }
       });
+    }
+
+    // ── NO BYE CARDS ── The bye team is already placed in its Round 2 slot above,
+    // so drop the fake "Team vs BYE" matches. Only real matches remain.
+    if (r1) {
+      const oldCodes = r1.matches.filter((m) => !m.isBye);
+      const codeMap = {};
+      r1.matches = oldCodes;
+      r1.matches.forEach((m, idx) => {
+        const info = getMatchCodeAndLabel(1, idx, totalRounds);
+        codeMap[m.matchCode] = info.matchCode;
+        m.matchCode = info.matchCode;
+        m.matchLabel = info.matchLabel;
+      });
+      if (r2) {
+        r2.matches.forEach((m) => {
+          ['placeholderA', 'placeholderB'].forEach((k) => {
+            const mm = /^Winner (.+)$/.exec(m[k] || '');
+            if (mm && codeMap[mm[1]]) m[k] = `Winner ${codeMap[mm[1]]}`;
+          });
+        });
+      }
+      let n = 1;
+      rounds.forEach((rd) => rd.matches.forEach((m) => { m.matchNumber = n++; }));
     }
 
     return {
@@ -3261,7 +3285,24 @@ const tournamentController = {
           captainPhone: r.captainPhone,
           players: Array.isArray(r.players) ? r.players : [],
         })),
-      ].map((tm, idx) => ({ ...tm, seed: idx + 1 }));
+      ]
+        // Each accepted team may appear ONLY ONCE (dedupe by id and by name)
+        .filter((tm, idx, arr) => {
+          const nameKey = String(tm.name || '').trim().toLowerCase();
+          return arr.findIndex((o) =>
+            o.id === tm.id || (nameKey && String(o.name || '').trim().toLowerCase() === nameKey)
+          ) === idx;
+        })
+        .map((tm, idx) => ({ ...tm, seed: idx + 1 }));
+
+      if (teams.length < 2) {
+        return sendError(
+          res,
+          `At least 2 unique accepted teams are required. Currently: ${teams.length} team(s).`,
+          400,
+          'INSUFFICIENT_TEAMS'
+        );
+      }
 
       const isManual = req.body?.scheduleType === 'manual';
       const cupsCount = Number(req.body?.cupsCount || tournament.prizeDetails?.cupsCount || 1);
@@ -3297,6 +3338,23 @@ const tournamentController = {
           const teamBObj = teams.find((t) => t.id === teamBId);
           if (!teamAObj || !teamBObj) {
             return sendError(res, 'Selected team is not an accepted registered team', 400, 'INVALID_TEAM');
+          }
+
+          // ── Duplicate checks (manual scheduling) ──
+          const KNOCKOUT_ROUND = /final|semi|quarter|playoff|round of/i;
+          const sameRound = existingBracket.rounds.find((r) => r.name?.toLowerCase() === roundName.trim().toLowerCase());
+          for (const em of (sameRound?.matches || [])) {
+            const ids = [em.teamA?.id, em.teamB?.id];
+            if (ids.includes(teamAId) && ids.includes(teamBId)) {
+              return sendError(res, `${teamAObj.name} vs ${teamBObj.name} is already scheduled in "${roundName}"`, 409, 'DUPLICATE_FIXTURE');
+            }
+            if (KNOCKOUT_ROUND.test(roundName)) {
+              const busy = [teamAId, teamBId].find((tid) => ids.includes(tid));
+              if (busy) {
+                const nm = busy === teamAId ? teamAObj.name : teamBObj.name;
+                return sendError(res, `${nm} is already scheduled in "${roundName}". A team can play only once per knockout round.`, 409, 'DUPLICATE_TEAM_IN_ROUND');
+              }
+            }
           }
 
           let targetRound = existingBracket.rounds.find((r) => r.name?.toLowerCase() === roundName.trim().toLowerCase());
@@ -3335,6 +3393,24 @@ const tournamentController = {
           existingBracket.drawType = 'manual';
           bracket = existingBracket;
         } else if (Array.isArray(req.body?.rounds)) {
+          const validIds = new Set(teams.map((t) => t.id));
+          for (const rd of req.body.rounds) {
+            const used = new Set();
+            const isKO = /final|semi|quarter|playoff|round of/i.test(rd?.name || '');
+            for (const m of (rd?.matches || [])) {
+              const a = m.teamA?.id, b = m.teamB?.id;
+              if ((a && !validIds.has(a)) || (b && !validIds.has(b))) {
+                return sendError(res, 'Only accepted teams can be scheduled', 400, 'INVALID_TEAM');
+              }
+              if (a && a === b) return sendError(res, 'A team cannot play against itself', 400, 'SAME_TEAM_MATCH');
+              if (isKO) {
+                for (const tid of [a, b].filter(Boolean)) {
+                  if (used.has(tid)) return sendError(res, `A team appears twice in "${rd.name}"`, 409, 'DUPLICATE_TEAM_IN_ROUND');
+                  used.add(tid);
+                }
+              }
+            }
+          }
           existingBracket.rounds = req.body.rounds;
           existingBracket.drawType = 'manual';
           bracket = existingBracket;
