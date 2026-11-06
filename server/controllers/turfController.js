@@ -552,7 +552,10 @@ const turfController = {
         if (next > end) break;
 
         const startTime = `${pad(current.getHours())}:${pad(current.getMinutes())}`;
-        const endTime = `${pad(next.getHours())}:${pad(next.getMinutes())}`;
+        // Slot ending exactly at midnight must be "24:00" (not "00:00") so time comparisons work
+        const endTime = (next.getDate() !== current.getDate() && next.getHours() === 0 && next.getMinutes() === 0)
+          ? '24:00'
+          : `${pad(next.getHours())}:${pad(next.getMinutes())}`;
         const slotKey = `${startTime}-${endTime}`;
 
         const isBlocked = (slotOverrides.blockedSlots || []).includes(slotKey) || (slotOverrides.blockedSlots || []).includes(startTime);

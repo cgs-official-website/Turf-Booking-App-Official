@@ -89,7 +89,8 @@ function validateBookingInput({ date, startTime, endTime }) {
     throw new BookingError('Invalid start time. Must be HH:mm (24-hour) format.', 400, 'INVALID_TIME');
   }
 
-  if (!endTime || typeof endTime !== 'string' || !timeRegex.test(endTime)) {
+  // End time may be "24:00" (slot ending at midnight)
+  if (!endTime || typeof endTime !== 'string' || !(timeRegex.test(endTime) || endTime === '24:00')) {
     throw new BookingError('Invalid end time. Must be HH:mm (24-hour) format.', 400, 'INVALID_TIME');
   }
 

@@ -36,7 +36,8 @@ const fmtDisplay = (d) =>
 
 const to12h = (time24) => {
   if (!time24) return '';
-  const [h, m] = time24.split(':').map(Number);
+  const [h0, m] = time24.split(':').map(Number);
+  const h = h0 % 24; // "24:00" -> 12:00 AM
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
   return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
@@ -48,6 +49,7 @@ const timeToMins = (t) => {
 };
 
 const minsToTime = (mins) => {
+  if (mins === 1440) return '24:00'; // midnight end of day
   const h = Math.floor(mins / 60) % 24;
   const m = mins % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;

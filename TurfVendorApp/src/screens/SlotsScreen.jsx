@@ -17,6 +17,7 @@ import VendorOffersModal from '../components/VendorOffersModal';
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 const to12h = (t) => {
+  if (t === '24:00') return '12:00 AM'; // midnight closing
   if (!TIME_RE.test(t)) return t;
   const [h, m] = t.split(':').map(Number);
   const period = h >= 12 ? 'PM' : 'AM';
