@@ -272,6 +272,8 @@ export default function TournamentDetailScreen({ route, navigation }) {
   const [processingRegId, setProcessingRegId] = useState(null);
 
   const pollSeqRef = React.useRef(0);
+  // Number of requests currently in flight (used so polling never starves itself)
+  const inFlightRef = React.useRef(0);
 
   const loadDetails = useCallback(async () => {
     if (!targetId) {
@@ -280,6 +282,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
       return;
     }
     const currentSeq = ++pollSeqRef.current;
+    inFlightRef.current += 1;
     // Only show the full-screen spinner when we have nothing to show yet.
     // Re-fetches (focus / pull-to-refresh / live polling) update silently.
     setLoading((prev) => (tournamentRef.current ? false : true));
@@ -310,6 +313,7 @@ export default function TournamentDetailScreen({ route, navigation }) {
         setTournament(null);
       }
     } finally {
+      inFlightRef.current = Math.max(0, inFlightRef.current - 1);
       if (currentSeq === pollSeqRef.current) {
         setLoading(false);
         setRefreshing(false);
@@ -330,7 +334,10 @@ export default function TournamentDetailScreen({ route, navigation }) {
       const isEnded = tournamentRef.current?.status === 'completed' || tournamentRef.current?.bracket?.status === 'completed';
       const pollDelay = isEnded ? 15000 : 3000;
       const timer = setInterval(() => {
-        if (tournamentRef.current) {
+        // Skip this tick if the previous request is still running. Otherwise a slow
+        // response (big bracket) gets discarded as "stale" by the next tick and the
+        // screen never updates (e.g. Super Over result not showing).
+        if (tournamentRef.current && inFlightRef.current === 0) {
           loadDetails();
         }
       }, pollDelay);
