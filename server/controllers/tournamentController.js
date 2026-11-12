@@ -5,6 +5,8 @@ const { tournamentShareUrl } = require('../utils/shareUrl');
 const notificationService = require('../services/notificationService');
 const cricketEngine = require('../utils/cricketEngine');
 
+// Statuses any user may open in the detail screen (live + finished tournaments with scoreboard)
+const PUBLIC_VIEW_STATUSES = ['published', 'ongoing', 'completed'];
 const VALID_STATUSES = ['draft', 'pending_approval', 'published', 'rejected', 'ongoing', 'completed', 'cancelled'];
 const VALID_FORMATS = ['knockout', 'round_robin', 'group_knockout', 'double_elimination', 'league'];
 
@@ -941,8 +943,10 @@ const tournamentController = {
         return sendError(res, 'Tournament not found', 404, 'NOT_FOUND');
       }
 
-      // Gated access: If tournament is not published, only owner, turf vendor, or admin can access
-      if (tournament.status !== 'published') {
+      // Gated access: only publicly visible statuses are open to everyone.
+      // 'completed' / 'ongoing' tournaments MUST stay viewable (scoreboard, results) for all users.
+      // Draft / pending / rejected / cancelled -> only owner, turf vendor, or admin.
+      if (!PUBLIC_VIEW_STATUSES.includes(tournament.status)) {
         const currentUserId = req.user?.id || req.user?.uid;
         const currentVendorId = req.vendor?.id || req.user?.vendorId || req.user?.id;
         const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || req.vendor?.role === 'admin';
@@ -2143,7 +2147,7 @@ const tournamentController = {
         },
       });
 
-      if (!tournament || tournament.status !== 'published') {
+      if (!tournament || !PUBLIC_VIEW_STATUSES.includes(tournament.status)) {
         return sendError(res, 'Published tournament not found or link has expired', 404, 'NOT_FOUND');
       }
 

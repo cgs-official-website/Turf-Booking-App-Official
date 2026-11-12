@@ -774,27 +774,6 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
 
-          {/* ── Partner Venue Banner ── */}
-          <TouchableOpacity
-            style={[styles.partnerBanner, SHADOW.card]}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={require('../assets/background1.png')}
-              style={styles.partnerBg}
-              resizeMode="cover"
-            />
-            <View style={styles.partnerOverlay} />
-            <View style={styles.partnerContent}>
-              <Text style={styles.partnerTitle}>Are You a Turf Owner?</Text>
-              <Text style={styles.partnerDesc}>
-                Partner with us to get 10x more bookings and manage your facility seamlessly.
-              </Text>
-              <View style={[styles.joinBtn, { backgroundColor: C.primary }]}>
-                <Text style={styles.joinBtnText}>List Your Turf</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
 

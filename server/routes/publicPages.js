@@ -81,7 +81,7 @@ router.get(['/tournament/:shareId', '/tournaments/:shareId', '/t/:shareId'], asy
         return res.status(out.status).type('html').send(out.html);
     }
 
-    if (!t || t.status !== 'published') {
+    if (!t || !['published', 'ongoing', 'completed'].includes(t.status)) {
         const out = page({
             title: 'Tournament not available',
             description: 'This tournament link is no longer active or is unapproved.',
