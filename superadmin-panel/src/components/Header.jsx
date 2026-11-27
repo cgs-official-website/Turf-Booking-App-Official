@@ -10,9 +10,17 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import appLogoSm from '../assets/logosm.png';
 
-export const Header = ({ onRefresh, isRefreshing, pendingCount = 0, onToggleSidebar }) => {
+export const Header = ({
+  onRefresh,
+  isRefreshing,
+  pendingCount = 0,
+  zunaSupportCount = 0,
+  onOpenZunaSupport,
+  onToggleSidebar,
+}) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const { isDark, toggleTheme } = useTheme();
+  const totalCount = pendingCount + zunaSupportCount;
 
   return (
     <header className="h-14 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/80 dark:border-slate-800 sticky top-0 z-30 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between shadow-[0_1px_12px_rgba(0,0,0,0.02)] select-none transition-colors duration-200">
@@ -84,9 +92,9 @@ export const Header = ({ onRefresh, isRefreshing, pendingCount = 0, onToggleSide
             title="Notifications"
           >
             <Bell size={13} className="sm:w-3.5 sm:h-3.5" />
-            {pendingCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-amber-500 text-white rounded-full text-[8px] sm:text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
-                {pendingCount}
+            {totalCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 sm:min-w-4 sm:h-4 px-0.5 bg-amber-500 text-white rounded-full text-[8px] sm:text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                {totalCount > 9 ? '9+' : totalCount}
               </span>
             )}
           </button>
@@ -101,14 +109,30 @@ export const Header = ({ onRefresh, isRefreshing, pendingCount = 0, onToggleSide
                 </span>
               </div>
               <div className="space-y-2 text-xs">
-                {pendingCount > 0 ? (
+                {zunaSupportCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNotifications(false);
+                      if (onOpenZunaSupport) onOpenZunaSupport();
+                    }}
+                    className="w-full text-left p-2 bg-teal-50 dark:bg-teal-950/40 border border-teal-200/70 dark:border-teal-800/60 rounded-xl text-teal-900 dark:text-teal-200 hover:bg-teal-100/70 dark:hover:bg-teal-950/70 transition cursor-pointer"
+                  >
+                    <p className="font-bold text-[11px]">Zuna Support</p>
+                    <p className="text-[10px] text-teal-700 dark:text-teal-300 mt-0.5">
+                      {zunaSupportCount} ticket{zunaSupportCount > 1 ? 's have' : ' has'} a new reply or status update.
+                    </p>
+                  </button>
+                )}
+                {pendingCount > 0 && (
                   <div className="p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/60 rounded-xl text-amber-900 dark:text-amber-200">
                     <p className="font-bold text-[11px]">Pending Partner KYC</p>
                     <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5">
                       {pendingCount} partner application(s) awaiting review.
                     </p>
                   </div>
-                ) : (
+                )}
+                {totalCount === 0 && (
                   <div className="p-3 text-center text-slate-400 dark:text-slate-500 text-[11px]">
                     <CheckCircle2 size={18} className="mx-auto text-emerald-500 mb-1" />
                     All tasks up to date

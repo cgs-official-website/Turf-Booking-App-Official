@@ -50,7 +50,7 @@ const PRIORITY_CLS = {
     URGENT: 'text-rose-600',
 };
 
-export const ZunaSupportView = () => {
+export const ZunaSupportView = ({ unreadIds = new Set(), markTicketSeen, markAllSeen }) => {
     const [tab, setTab] = useState('raise'); // 'raise' | 'history'
 
     // Raise form
@@ -87,11 +87,13 @@ export const ZunaSupportView = () => {
             const res = await api.getZunaTicket(ticketId);
             if (res?.data) {
                 setSelected((current) => (current && current.id === ticketId ? res.data : current));
+                // The admin is looking at this conversation, so its new reply/status counts as seen
+                if (markTicketSeen) markTicketSeen(res.data);
             }
         } catch (err) {
             setReplyError(err.message || 'Could not load this conversation.');
         }
-    }, []);
+    }, [markTicketSeen]);
 
     // Keep ticket list fresh (picks up status changes made by Zuna)
     useEffect(() => {
@@ -140,6 +142,7 @@ export const ZunaSupportView = () => {
         setReplyError('');
         setReplyText('');
         setSelected({ ...ticket, messages: ticket.messages || [] });
+        if (markTicketSeen) markTicketSeen(ticket);
         loadThread(ticket.id);
     };
 
@@ -197,6 +200,9 @@ export const ZunaSupportView = () => {
                         <MessageSquare size={13} /> My Tickets ({tickets.length})
                         {openCount > 0 && (
                             <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-700">{openCount} open</span>
+                        )}
+                        {unreadIds.size > 0 && (
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-teal-600 text-white">{unreadIds.size} new</span>
                         )}
                     </button>
                 </div>
@@ -288,7 +294,15 @@ export const ZunaSupportView = () => {
             {/* MY TICKETS: LIST */}
             {tab === 'history' && !selected && (
                 <div className="space-y-3">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                        {unreadIds.size > 0 && markAllSeen && (
+                            <button
+                                onClick={markAllSeen}
+                                className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-xs font-semibold rounded-xl text-teal-700 transition flex items-center gap-1.5 border border-teal-200 cursor-pointer"
+                            >
+                                <CheckCircle2 size={12} /> Mark all as read
+                            </button>
+                        )}
                         <button
                             onClick={loadTickets}
                             className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-semibold rounded-xl text-slate-700 transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
@@ -319,12 +333,15 @@ export const ZunaSupportView = () => {
                             <button
                                 key={t.id}
                                 onClick={() => openTicket(t)}
-                                className="w-full text-left bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm hover:shadow hover:border-emerald-300 transition cursor-pointer"
+                                className={`w-full text-left bg-white border rounded-2xl p-4 shadow-sm hover:shadow hover:border-emerald-300 transition cursor-pointer ${unreadIds.has(t.id) ? 'border-teal-400 ring-1 ring-teal-200' : 'border-slate-200/80'}`}
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <span className="text-xs font-extrabold text-emerald-600">#{shortId(t.id)}</span>
-                                        <span className="text-sm font-bold text-slate-900 truncate">{t.subject}</span>
+                                        <span className={`text-sm text-slate-900 truncate ${unreadIds.has(t.id) ? 'font-extrabold' : 'font-bold'}`}>{t.subject}</span>
+                                        {unreadIds.has(t.id) && (
+                                            <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-teal-600 text-white text-[10px] font-extrabold">New update</span>
+                                        )}
                                     </div>
                                     <StatusBadge status={t.status} />
                                 </div>
@@ -376,8 +393,8 @@ export const ZunaSupportView = () => {
                                 <div key={m.id || i} className={`flex flex-col ${fromZuna ? 'items-start' : 'items-end'}`}>
                                     <div
                                         className={`max-w-[85%] px-3.5 py-2.5 text-xs whitespace-pre-wrap ${fromZuna
-                                                ? 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-md'
-                                                : 'bg-emerald-600 text-white rounded-2xl rounded-br-md'
+                                            ? 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-md'
+                                            : 'bg-emerald-600 text-white rounded-2xl rounded-br-md'
                                             }`}
                                     >
                                         {m.text}

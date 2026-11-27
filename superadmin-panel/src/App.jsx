@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ModalProvider } from './context/ModalContext';
 import { api } from './api/client';
+import { useZunaSupportUnread } from './hooks/useZunaSupportUnread';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { LoginView } from './views/LoginView';
@@ -90,6 +91,10 @@ function DashboardApp() {
     admin &&
     (admin.role === 'superadmin' || admin.role === 'admin');
 
+  // Zuna Support: tickets Zuna replied to / changed status on that the admin hasn't opened yet
+  // (hook must run before the early return below; it stays idle until an admin is signed in)
+  const zunaUnread = useZunaSupportUnread(isSuperAdmin ? admin.email : null);
+
   if (!isSuperAdmin) {
     return <NotFoundView onNavigateHome={() => navigate('/')} />;
   }
@@ -103,6 +108,7 @@ function DashboardApp() {
         pendingKycCount={statsData.stats?.pendingKycs || 0}
         openReportsCount={statsData.stats?.openReports || 0}
         pendingInquiriesCount={statsData.stats?.pendingEnquiries || 0}
+        zunaSupportCount={zunaUnread.unreadCount}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -113,6 +119,8 @@ function DashboardApp() {
           onRefresh={fetchStats}
           isRefreshing={isRefreshing}
           pendingCount={statsData.stats?.pendingKycs || 0}
+          zunaSupportCount={zunaUnread.unreadCount}
+          onOpenZunaSupport={() => handleSelectTab('zuna-support')}
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
         />
 
@@ -138,7 +146,11 @@ function DashboardApp() {
           {activeTab === 'reports' && <ReportsView onUpdateStats={fetchStats} />}
           {activeTab === 'subscriptions' && <SubscriptionsView />}
           {activeTab === 'integrations' && <IntegrationsView />}
-          {activeTab === 'zuna-support' && <ZunaSupportView />}
+          {activeTab === 'zuna-support' && <ZunaSupportView
+            unreadIds={zunaUnread.unreadIds}
+            markTicketSeen={zunaUnread.markTicketSeen}
+            markAllSeen={zunaUnread.markAllSeen}
+          />}
 
           {!['overview', 'kyc', 'turfs', 'tournaments', 'bookings', 'vendors', 'users', 'matches', 'reviews', 'inquiries', 'reports', 'subscriptions', 'integrations', 'zuna-support'].includes(activeTab) && (
             <NotFoundView onNavigateHome={() => setActiveTab('overview')} />
