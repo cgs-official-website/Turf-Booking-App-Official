@@ -4,6 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { DEFAULT_TURF_IMAGE } from '../constants/defaultImages';
 
 export const LOCAL_URL      = 'http://127.0.0.1:5000/api/v1';
 export const LOCAL_HOST_URL = 'http://localhost:5000/api/v1';
@@ -21,7 +22,7 @@ const CANDIDATE_URLS = [
 ].filter(Boolean);
 
 export const getImageUrl = (path) => {
-  if (!path) return 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
+  if (!path) return DEFAULT_TURF_IMAGE;
   if (/^(https?:|file:|content:|data:)/i.test(path)) return path;
   const cleanPath = String(path).replace(/^\/+/, '');
   return `${SERVER_ORIGIN}/${cleanPath}`;

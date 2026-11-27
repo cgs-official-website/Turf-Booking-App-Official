@@ -33,6 +33,12 @@ router.delete('/turfs/:turfId', adminController.deleteTurfAdmin);
 // Platform Bookings, Matches & Reviews Monitoring
 router.get('/bookings', adminController.getAllBookings);
 router.get('/matches', adminController.getAllMatches);
+<<<<<<< Updated upstream
+=======
+// Super Admin is VIEW-ONLY for community matches (only delete allowed for moderation).
+// Create / score override / status change are intentionally disabled.
+router.delete('/matches/:id', adminController.deleteAdminMatch);
+>>>>>>> Stashed changes
 router.get('/reviews', adminController.getAllReviews);
 
 // Issue Reports & Support

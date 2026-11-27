@@ -143,17 +143,20 @@ export const TurfsView = ({ onUpdateStats }) => {
                   </td>
                   <td className="p-3.5 font-extrabold text-emerald-600">₹{t.pricing?.baseRate || 0}/hr</td>
                   <td className="p-3.5 text-slate-700 font-medium">
-                    ⭐ {t.rating?.avg ? t.rating.avg.toFixed(1) : '5.0'} ({t.rating?.count || 0})
+                    {Number(t.rating?.count) > 0 && Number(t.rating?.avg) > 0 ? (
+                      <span>⭐ {Number(t.rating.avg).toFixed(1)} <span className="text-slate-400 font-normal">({t.rating.count})</span></span>
+                    ) : (
+                      <span className="text-slate-400" title="No ratings yet">-</span>
+                    )}
                   </td>
                   <td className="p-3.5">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        t.status === 'active'
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${t.status === 'active'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : t.status === 'pending'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}
                     >
                       {t.status}
                     </span>
@@ -161,11 +164,10 @@ export const TurfsView = ({ onUpdateStats }) => {
                   <td className="p-3.5 text-right">
                     <button
                       onClick={() => handleToggleStatus(t.id)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-sm ${
-                        t.status === 'active'
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-sm ${t.status === 'active'
                           ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
                           : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                      }`}
+                        }`}
                     >
                       {t.status === 'active' ? 'Suspend' : 'Activate'}
                     </button>

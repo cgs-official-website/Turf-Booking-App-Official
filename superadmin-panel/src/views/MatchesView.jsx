@@ -23,12 +23,28 @@ import {
   X,
 } from 'lucide-react';
 import { dedupe } from '../utils/dedupe';
+<<<<<<< Updated upstream
+=======
+import { useModal } from '../context/ModalContext';
+import { MatchDetailModal } from '../components/MatchDetailModal';
+>>>>>>> Stashed changes
 
 export const MatchesView = () => {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiedCode, setCopiedCode] = useState(null);
 
+<<<<<<< Updated upstream
+=======
+  // Command & Modal states
+  const [commandMatch, setCommandMatch] = useState(null);
+
+  // Auto-polling state (live feed every 10s)
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshCountdown, setRefreshCountdown] = useState(10);
+  const autoRefreshTimerRef = useRef(null);
+
+>>>>>>> Stashed changes
   // Filter & Search states
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, live, created, completed, cancelled
@@ -63,6 +79,50 @@ export const MatchesView = () => {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
+<<<<<<< Updated upstream
+=======
+  // Quick delete match
+  const handleQuickDelete = async (match, e) => {
+    if (e) e.stopPropagation();
+    const confirmed = await showConfirm({
+      title: 'Disband & Delete Match',
+      message: `Delete match fixture "${match.place || match.id}"?\nThis removes all community scorecard records.`,
+      type: 'danger',
+      confirmText: 'Delete Match',
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await api.deleteAdminMatch(match.id);
+      if (res.success) {
+        setMatches((prev) => prev.filter((m) => m.id !== match.id));
+        showAlert({
+          title: 'Match Removed',
+          message: 'Match fixture deleted successfully.',
+          type: 'success',
+        });
+      }
+    } catch (err) {
+      showAlert({
+        title: 'Delete Failed',
+        message: err.message || 'Could not delete match',
+        type: 'error',
+      });
+    }
+  };
+
+  // Callback when match updated or deleted from Command Modal
+  const handleMatchUpdatedFromModal = (updatedMatch, deletedId) => {
+    if (deletedId) {
+      setMatches((prev) => prev.filter((m) => m.id !== deletedId));
+    } else if (updatedMatch) {
+      setMatches((prev) =>
+        prev.map((m) => (m.id === updatedMatch.id ? updatedMatch : m))
+      );
+    }
+  };
+
+>>>>>>> Stashed changes
   // Distinct sports list for filter dropdown
   const sportsList = useMemo(() => {
     const list = new Set();
@@ -139,6 +199,7 @@ export const MatchesView = () => {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
+<<<<<<< Updated upstream
           <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
             <Trophy className="text-amber-500" size={20} />
             <span>Community Matches & Live Scorecards</span>
@@ -161,23 +222,185 @@ export const MatchesView = () => {
       {/* KPI Summary Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-sm">
+=======
+          <div className="flex items-center space-x-2">
+            <span className="px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[10px] uppercase tracking-wider inline-flex items-center gap-1">
+              <Flame size={12} className="text-emerald-600" />
+              <span>Super Admin Monitor</span>
+            </span>
+            {liveCount > 0 && (
+              <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-extrabold text-[10px] uppercase tracking-wider inline-flex items-center gap-1 animate-pulse">
+                <Radio size={12} className="text-rose-600" />
+                <span>{liveCount} Live Matches</span>
+              </span>
+            )}
+          </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 mt-1.5">
+            <Trophy className="text-amber-500" size={24} />
+            <span>Community Matches & Live Scorecards</span>
+          </h2>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl font-medium">
+            Monitor community matches and live scorecards in real time. Read-only view; only abusive or fake matches can be deleted.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* Auto Refresh Toggle */}
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className={`px-3 py-2 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 border shadow-sm ${autoRefresh
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            title="Auto-fetch live score updates every 10s"
+          >
+            <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+            <span>Live Sync: {autoRefresh ? `ON (${refreshCountdown}s)` : 'OFF'}</span>
+          </button>
+
+          {/* Manual Refresh */}
+          <button
+            onClick={() => loadMatches(false)}
+            disabled={loading}
+            className="p-2 bg-white hover:bg-slate-50 active:bg-slate-100 text-xs font-bold rounded-xl text-slate-700 transition flex items-center border border-slate-200 shadow-sm"
+            title="Refresh Match Data"
+          >
+            <RefreshCw size={14} className={`text-emerald-600 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Featured Live Match Ticker Ribbon (if live matches exist) */}
+      {liveMatches.length > 0 && (
+        <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 text-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-emerald-200/70 space-y-3">
+          <div className="flex items-center justify-between text-xs pb-2 border-b border-emerald-100">
+            <div className="flex items-center space-x-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+              <span className="text-[11px] font-black uppercase tracking-wider text-rose-600">
+                🔴 LIVE MATCH TICKER FEED
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-500 font-semibold">
+              Click any match to view its scorecard
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {liveMatches.map((lm) => {
+              const inn = lm.innings || lm.scorecard?.innings || [];
+              const tA = inn[0] || { runs: 0, wickets: 0, overs: '0.0' };
+              const tB = inn[1] || { runs: 0, wickets: 0, overs: '0.0' };
+              const tAName = lm.teams?.A?.name || 'Team A';
+              const tBName = lm.teams?.B?.name || 'Team B';
+
+              return (
+                <div
+                  key={`ticker-${lm.id}`}
+                  onClick={() => setCommandMatch(lm)}
+                  className="bg-white hover:bg-emerald-50/40 border border-slate-200 hover:border-emerald-400 rounded-2xl p-3.5 cursor-pointer transition shadow-sm hover:shadow-md flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span className="font-bold text-emerald-700 uppercase tracking-wide">{lm.sport || 'Cricket'}</span>
+                      <span className="font-mono text-slate-500">#{lm.joinCode || lm.id.slice(-6)}</span>
+                    </div>
+                    <div className="font-black text-sm text-slate-900 mt-1 truncate">
+                      {lm.place || 'Turf Arena'}
+                    </div>
+
+                    {/* Head-to-head score comparison */}
+                    <div className="mt-2.5 bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-800 truncate max-w-[120px] flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded bg-emerald-100 text-[9px] font-black flex items-center justify-center text-emerald-700 shrink-0">A</span>
+                          <span className="truncate">{tAName}</span>
+                        </span>
+                        <span className="font-mono text-xs font-black text-slate-900 flex items-center gap-1">
+                          <span>{tA.runs || 0}/{tA.wickets || 0}</span>
+                          <span className="text-[10px] text-slate-500 font-normal">({tA.overs || '0.0'} ov)</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-800 truncate max-w-[120px] flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded bg-emerald-100 text-[9px] font-black flex items-center justify-center text-emerald-700 shrink-0">B</span>
+                          <span className="truncate">{tBName}</span>
+                        </span>
+                        <span className="font-mono text-xs font-black text-slate-900 flex items-center gap-1">
+                          <span>{tB.runs || 0}/{tB.wickets || 0}</span>
+                          <span className="text-[10px] text-slate-500 font-normal">({tB.overs || '0.0'} ov)</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-500 font-medium">Host: <strong className="text-slate-900">{lm.creatorName || 'Player'}</strong></span>
+                    <span className="text-emerald-700 font-extrabold flex items-center gap-1 hover:underline">
+                      <span>View Scorecard</span>
+                      <ChevronRight size={11} />
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* KPI Summary Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div
+          onClick={() => setStatusFilter('all')}
+          className={`bg-white border rounded-2xl p-3.5 shadow-sm cursor-pointer transition hover:border-slate-300 ${statusFilter === 'all' ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200/80'
+            }`}
+        >
+>>>>>>> Stashed changes
           <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Matches</div>
           <div className="text-xl font-black text-slate-900 mt-0.5">{matches.length}</div>
         </div>
+<<<<<<< Updated upstream
         <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-sm">
+=======
+
+        <div
+          onClick={() => setStatusFilter('live')}
+          className={`bg-white border rounded-2xl p-3.5 shadow-sm cursor-pointer transition hover:border-emerald-400 ${statusFilter === 'live' ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200/80'
+            }`}
+        >
+>>>>>>> Stashed changes
           <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Live Matches</span>
           </div>
           <div className="text-xl font-black text-emerald-600 mt-0.5">{liveCount}</div>
         </div>
+<<<<<<< Updated upstream
         <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-sm">
+=======
+
+        <div
+          onClick={() => setStatusFilter('created')}
+          className={`bg-white border rounded-2xl p-3.5 shadow-sm cursor-pointer transition hover:border-blue-400 ${statusFilter === 'created' ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200/80'
+            }`}
+        >
+>>>>>>> Stashed changes
           <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Scheduled</div>
           <div className="text-xl font-black text-slate-800 mt-0.5">{createdCount}</div>
         </div>
+<<<<<<< Updated upstream
         <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-sm">
           <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Completed</div>
           <div className="text-xl font-black text-slate-700 mt-0.5">{completedCount}</div>
+=======
+
+        <div
+          onClick={() => setStatusFilter('completed')}
+          className={`bg-white border rounded-2xl p-3.5 shadow-sm cursor-pointer transition hover:border-purple-400 ${statusFilter === 'completed' ? 'border-purple-500 ring-2 ring-purple-500/20' : 'border-slate-200/80'
+            }`}
+        >
+          <div className="text-[11px] font-bold text-purple-600 uppercase tracking-wider">Completed</div>
+          <div className="text-2xl font-black text-slate-700 mt-0.5">{completedCount}</div>
+>>>>>>> Stashed changes
         </div>
       </div>
 
@@ -309,6 +532,7 @@ export const MatchesView = () => {
           </h3>
           <p className="text-slate-500 text-xs mt-1 max-w-sm mx-auto">
             {matches.length === 0
+<<<<<<< Updated upstream
               ? 'Community cricket and turf matches created by registered players will show up here.'
               : 'Try clearing your search terms or filters to view all available matches.'}
           </p>
@@ -324,6 +548,25 @@ export const MatchesView = () => {
               Clear All Filters
             </button>
           )}
+=======
+              ? 'Community matches created by registered players will show up here.'
+              : 'Try clearing your search terms or filters to view all available matches.'}
+          </p>
+          <div className="flex justify-center gap-2 mt-4">
+            {(statusFilter !== 'all' || sportFilter !== 'all' || search) && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter('all');
+                  setSportFilter('all');
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition shadow-sm"
+              >
+                Clear All Filters
+              </button>
+            )}
+          </div>
+>>>>>>> Stashed changes
         </div>
       ) : (
         <>
@@ -331,36 +574,107 @@ export const MatchesView = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {currentMatches.map((m) => {
               const status = (m.status || 'created').toLowerCase();
+<<<<<<< Updated upstream
               return (
                 <div
                   key={m.id}
                   className="bg-white border border-slate-200/80 rounded-2xl p-4 space-y-3.5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    {/* Header info */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-800 text-[10px] font-extrabold rounded-md uppercase tracking-wide">
-                            {m.sport || 'Cricket'}
-                          </span>
-                          {(m.matchDate || m.matchTime) && (
-                            <span className="inline-flex items-center text-[10px] text-slate-500 font-medium">
-                              <Calendar size={11} className="mr-1 text-slate-400" />
-                              {m.matchDate} {m.matchTime ? `• ${m.matchTime}` : ''}
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="font-black text-slate-900 text-sm mt-1.5 leading-snug line-clamp-1">
-                          {m.place || m.turf?.name || 'Turf Venue'}
-                        </h3>
-                        <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
-                          Organized by: <strong className="text-emerald-700 font-bold">{m.creatorName || 'Player'}</strong>
-                        </p>
-                      </div>
+=======
+              const inn = m.innings || m.scorecard?.innings || [];
+              const tA = inn[0] || { runs: 0, wickets: 0, overs: '0.0' };
+              const tB = inn[1] || { runs: 0, wickets: 0, overs: '0.0' };
+              const tAName = m.teams?.A?.name || 'Team A';
+              const tBName = m.teams?.B?.name || 'Team B';
 
-                      {/* Status Badge */}
+              const resText = (m.resultText || m.result || '').trim();
+              const resLower = resText.toLowerCase();
+              const isCompleted = status === 'completed';
+              const isLive = status === 'live';
+
+              const isAWinner = isCompleted && (
+                resLower.includes((tAName || '').toLowerCase()) ||
+                resLower.includes('team a won') ||
+                (Number(tA.runs || 0) > Number(tB.runs || 0) && !resLower.includes('team b won'))
+              );
+              const isBWinner = isCompleted && (
+                resLower.includes((tBName || '').toLowerCase()) ||
+                resLower.includes('team b won') ||
+                (Number(tB.runs || 0) > Number(tA.runs || 0) && !resLower.includes('team a won'))
+              );
+
+              const isABatting = isLive && (m.currentInningsIndex === 0 || !m.currentInningsIndex);
+              const isBBatting = isLive && m.currentInningsIndex === 1;
+
+              const accent = isLive ? 'bg-emerald-500' : isCompleted ? 'bg-blue-500' : 'bg-amber-400';
+              const statusPill = isLive
+                ? 'text-emerald-700 bg-emerald-50 ring-emerald-600/20'
+                : isCompleted
+                  ? 'text-blue-700 bg-blue-50 ring-blue-600/20'
+                  : 'text-amber-700 bg-amber-50 ring-amber-600/20';
+              const dotColor = isLive ? 'bg-emerald-500' : isCompleted ? 'bg-blue-500' : 'bg-amber-500';
+
+              const TeamRow = ({ letter, name, score, isWinner, isBatting }) => (
+                <div className="flex items-center justify-between gap-3 py-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${isWinner
+                          ? 'bg-emerald-600 text-white'
+                          : isBatting
+                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/30'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}
+                    >
+                      {letter}
+                    </span>
+                    <span
+                      className={`truncate text-[13px] ${isWinner ? 'font-bold text-slate-900' : isCompleted ? 'font-medium text-slate-500' : 'font-semibold text-slate-800'
+                        }`}
+                    >
+                      {name}
+                    </span>
+                    {isBatting && <span className="text-[11px] shrink-0" title="Batting">🏏</span>}
+                    {isWinner && (
+                      <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">
+                        Won
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-1.5 shrink-0 tabular-nums">
+                    <span
+                      className={`text-lg leading-none font-black tracking-tight ${isWinner || isBatting ? 'text-slate-900' : isCompleted ? 'text-slate-400' : 'text-slate-800'
+                        }`}
+                    >
+                      {score.runs ?? 0}
+                      <span className="text-slate-300 font-medium">/</span>
+                      {score.wickets ?? 0}
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-400 w-14 text-right">{score.overs || '0.0'} ov</span>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div
+                  key={m.id}
+                  className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.12)] hover:border-slate-300 transition-all duration-200 overflow-hidden flex flex-col"
+>>>>>>> Stashed changes
+                >
+                  {/* Status accent line */}
+                  <div className={`h-[3px] w-full ${accent}`} />
+
+                  <div className="p-4 sm:p-5 flex flex-col flex-1">
+                    {/* Top row: sport / schedule + status */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0 text-[11px] font-semibold text-slate-500">
+                        <span className="uppercase tracking-wider text-slate-700 font-extrabold">{m.sport || 'Cricket'}</span>
+                        <span className="text-slate-300">•</span>
+                        <span className="flex items-center gap-1 truncate">
+                          <Calendar size={11} className="text-slate-400 shrink-0" />
+                          <span className="truncate">{[m.matchDate, m.matchTime].filter(Boolean).join(' · ') || 'Date not set'}</span>
+                        </span>
+                      </div>
                       <span
+<<<<<<< Updated upstream
                         className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center gap-1 ${
                           status === 'live'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse'
@@ -370,12 +684,19 @@ export const MatchesView = () => {
                             ? 'bg-rose-50 text-rose-700 border border-rose-200'
                             : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}
+=======
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ring-1 ring-inset ${statusPill}`}
+>>>>>>> Stashed changes
                       >
-                        {status === 'live' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>}
+                        <span className="relative flex h-1.5 w-1.5">
+                          {isLive && <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${dotColor} opacity-70`} />}
+                          <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${dotColor}`} />
+                        </span>
                         {status}
                       </span>
                     </div>
 
+<<<<<<< Updated upstream
                     {/* Match Details Panel */}
                     <div className="bg-slate-50/80 rounded-xl p-3 text-xs space-y-2 border border-slate-100">
                       {/* Join Code */}
@@ -440,6 +761,102 @@ export const MatchesView = () => {
                         <span className="text-slate-500 font-semibold">Private</span>
                       )}
                     </span>
+=======
+                    {/* Title */}
+                    <div className="mt-3">
+                      <h3 className="text-[15px] font-extrabold text-slate-900 leading-snug line-clamp-1">
+                        {m.place || m.turf?.name || 'Turf Venue'}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Hosted by <span className="font-semibold text-slate-700">{m.creatorName || 'Player'}</span>
+                        <span className="text-slate-300 mx-1.5">•</span>
+                        <span className="font-mono">{m.overs ? `${m.overs} ov` : '6 ov'}</span>
+                      </p>
+                    </div>
+
+                    {/* Scoreboard (borderless, divided by hairline) */}
+                    <div className="mt-3 divide-y divide-slate-100 border-y border-slate-100">
+                      <TeamRow letter="A" name={tAName} score={tA} isWinner={isAWinner} isBatting={isABatting} />
+                      <TeamRow letter="B" name={tBName} score={tB} isWinner={isBWinner} isBatting={isBBatting} />
+                    </div>
+
+                    {/* Result / state line */}
+                    <div className="mt-2.5 min-h-[20px] flex items-center gap-1.5 text-[12px]">
+                      {isCompleted ? (
+                        <>
+                          <Trophy size={13} className="text-emerald-600 shrink-0" />
+                          <span className="font-semibold text-slate-700 truncate">
+                            {resText || `${isAWinner ? tAName : isBWinner ? tBName : 'Match'} completed`}
+                          </span>
+                        </>
+                      ) : isLive ? (
+                        <>
+                          <Radio size={13} className="text-emerald-600 shrink-0 animate-pulse" />
+                          <span className="font-semibold text-emerald-700 truncate">
+                            Inning {Number(m.currentInningsIndex || 0) + 1} in progress
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={13} className="text-slate-400 shrink-0" />
+                          <span className="font-medium text-slate-500 truncate">
+                            {m.toss?.decision
+                              ? `Toss: ${m.toss.winner ? `${m.toss.winner} ` : ''}(${m.toss.decision})`
+                              : 'Awaiting match start & toss'}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Meta: join code · roster · toss (inline, no boxes) */}
+                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-500">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Key size={12} className="text-amber-500" />
+                        <span className="font-mono font-bold text-slate-800 tracking-wider">{m.joinCode || 'N/A'}</span>
+                        {m.joinCode && (
+                          <button
+                            onClick={(e) => handleCopyCode(m.joinCode, e)}
+                            title="Copy join code"
+                            className="p-0.5 text-slate-400 hover:text-emerald-600 transition"
+                          >
+                            {copiedCode === m.joinCode ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                          </button>
+                        )}
+                      </span>
+                      <span className="text-slate-200">|</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Users size={12} className="text-slate-400" />
+                        <span className="font-semibold text-slate-700">{m.players?.length || 1}</span> players
+                      </span>
+                      <span className="text-slate-200">|</span>
+                      <span className="inline-flex items-center gap-1.5 min-w-0">
+                        <Coins size={12} className="text-slate-400 shrink-0" />
+                        <span className="truncate max-w-[130px] font-medium text-slate-600">
+                          {m.toss?.decision ? `${m.toss.winner ? `${m.toss.winner} ` : ''}(${m.toss.decision})` : 'Toss pending'}
+                        </span>
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="mt-auto pt-4"><div className="pt-3 border-t border-slate-100 flex items-center gap-2">
+                      <button
+                        onClick={() => setCommandMatch(m)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                      >
+                        <Activity size={13} />
+                        <span>View Scorecard</span>
+                        <ChevronRight size={13} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+                      <button
+                        onClick={(e) => handleQuickDelete(m, e)}
+                        title="Delete match"
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/30"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    </div>
+>>>>>>> Stashed changes
                   </div>
                 </div>
               );
@@ -492,11 +909,10 @@ export const MatchesView = () => {
                     <button
                       key={num}
                       onClick={() => setCurrentPage(num)}
-                      className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center ${
-                        isActive
+                      className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center ${isActive
                           ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 font-extrabold'
                           : 'border border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       {num}
                     </button>
@@ -527,6 +943,17 @@ export const MatchesView = () => {
           </div>
         </>
       )}
+<<<<<<< Updated upstream
+=======
+
+      {commandMatch && (
+        <MatchDetailModal
+          match={commandMatch}
+          onClose={() => setCommandMatch(null)}
+          onUpdated={handleMatchUpdatedFromModal}
+        />
+      )}
+>>>>>>> Stashed changes
     </div>
   );
 };

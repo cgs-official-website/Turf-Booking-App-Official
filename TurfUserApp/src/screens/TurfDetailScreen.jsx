@@ -13,10 +13,11 @@ import useTheme from '../hooks/useTheme';
 import { RatingBadge } from '../components/RatingBadge';
 import { getSportIconComponent } from '../components/SportChip';
 import { getImageUrl } from '../api/client';
+import { getTurfGalleryImages } from '../utils/turfImages';
+import SafeImage from '../components/SafeImage';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const { width, height } = Dimensions.get('window');
-const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
 const AMENITY_CONFIG = {
   'FIFA Approved Turf': { icon: 'award', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
@@ -101,6 +102,7 @@ export default function TurfDetailScreen({ route, navigation }) {
   }
 
   const isWishlisted = wishlist.some((t) => (t._id || t.id) === (turf._id || turf.id));
+<<<<<<< Updated upstream
   const rawImages    = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
   const images       = rawImages.map(getImageUrl);
   const lat          = turf.location?.lat  || turf.location?.latitude  || null;
@@ -109,6 +111,16 @@ export default function TurfDetailScreen({ route, navigation }) {
   const address      = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
   const sports       = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
   const amenities    = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
+=======
+  // Vendor's gallery photos (swipeable). Default image when none uploaded.
+  const images = getTurfGalleryImages(turf);
+  const lat = turf.location?.lat || turf.location?.latitude || null;
+  const lng = turf.location?.lng || turf.location?.longitude || null;
+  const city = turf.city || turf.location?.city || '';
+  const address = turf.address || turf.location?.address || city;
+  const sports = Array.isArray(turf.sportTypes) ? turf.sportTypes : (Array.isArray(turf.sports) ? turf.sports : []);
+  const amenities = Array.isArray(turf.amenities) ? turf.amenities : [];
+>>>>>>> Stashed changes
   const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
   const reviewCount  = typeof turf.rating === 'object' ? (turf.rating.count ?? reviews.length ?? 0) : (turf.reviewsCount ?? reviews.length ?? 0);
   const ratingAvg    = reviewCount === 0 ? 0 : (typeof turf.rating === 'object' ? (turf.rating.avg ?? 0) : (Number(turf.rating) || 0));
@@ -165,7 +177,7 @@ export default function TurfDetailScreen({ route, navigation }) {
                   onPress={() => openFullscreenGallery(index)}
                   style={styles.heroImageTouchable}
                 >
-                  <Image source={{ uri: item }} style={styles.heroImage} resizeMode="cover" />
+                  <SafeImage uri={item} style={styles.heroImage} />
                 </TouchableOpacity>
               )}
             />
@@ -338,6 +350,7 @@ export default function TurfDetailScreen({ route, navigation }) {
           {/* ── Sports Supported ── */}
           <Text style={[styles.sectionTitle, { color: C.text }]}>Sports & Pitch Formats</Text>
           <View style={styles.sportsRow}>
+<<<<<<< Updated upstream
             {sports.map((s, idx) => (
               <View
                 key={idx}
@@ -349,6 +362,102 @@ export default function TurfDetailScreen({ route, navigation }) {
               >
                 {getSportIconComponent(s, 16, C.primary)}
                 <Text style={[styles.sportChipText, { color: C.text }]}>{s}</Text>
+=======
+            {sports.map((s, idx) => {
+              const isSelected = selectedSport === s;
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    styles.sportChip,
+                    {
+                      backgroundColor: isSelected ? C.primary : C.card,
+                      borderColor: isSelected ? C.primary : C.border,
+                    },
+                    SHADOW.subtle,
+                  ]}
+                  onPress={() => setSelectedSport(s)}
+                  activeOpacity={0.8}
+                >
+                  {getSportIconComponent(s, 16, isSelected ? '#FFFFFF' : C.primary)}
+                  <Text
+                    style={[
+                      styles.sportChipText,
+                      {
+                        color: isSelected ? '#FFFFFF' : C.text,
+                        fontWeight: isSelected ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {s}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* ── Active Special Deals & Offers Card ── */}
+          {activeOffer && (
+            <View style={[styles.offerCard, { borderColor: '#10B981', backgroundColor: dark ? '#064E3B20' : '#ECFDF5' }, SHADOW.card]}>
+              {(activeOffer.bannerUrl || activeOffer.bannerImage) ? (
+                <Image
+                  source={{ uri: getImageUrl(activeOffer.bannerUrl || activeOffer.bannerImage) }}
+                  style={styles.offerBannerImg}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.offerContent}>
+                <View style={styles.offerTopRow}>
+                  <View style={styles.offerBadge}>
+                    <Ionicons name="pricetag" size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.offerBadgeText}>
+                      {activeOffer.discountType === 'percentage'
+                        ? `${Math.round(activeOffer.discountValue)}% OFF`
+                        : `FLAT ₹${Math.round(activeOffer.discountValue)} OFF`}
+                    </Text>
+                  </View>
+                  <Text style={[styles.offerExpiry, { color: C.subtext }]}>
+                    {activeOffer.endDate ? `Valid till ${activeOffer.endDate}` : 'Limited Time Deal'}
+                  </Text>
+                </View>
+
+                <Text style={[styles.offerTitle, { color: C.text }]}>{activeOffer.title}</Text>
+                {!!activeOffer.description && (
+                  <Text style={[styles.offerDesc, { color: C.subtext }]} numberOfLines={2}>
+                    {activeOffer.description}
+                  </Text>
+                )}
+
+                {/* Offer Scope / Eligibility Details */}
+                <View style={styles.offerScopeRow}>
+                  <Feather name="info" size={13} color="#059669" style={{ marginRight: 5 }} />
+                  <Text style={[styles.offerScopeText, { color: dark ? '#34D399' : '#065F46' }]}>
+                    {(activeOffer.scope === 'weekdays' || activeOffer.scopeType === 'weekdays')
+                      ? `Valid on: ${(Array.isArray(activeOffer.weekdays) ? activeOffer.weekdays : (activeOffer.selectedDays || []))
+                        .map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d] || d).join(', ')}`
+                      : (activeOffer.scope === 'slot' || activeOffer.scopeType === 'specific_slot')
+                        ? `Valid for slots: ${(Array.isArray(activeOffer.applicableSlots) ? activeOffer.applicableSlots : (activeOffer.timeSlots || []))
+                          .slice(0, 3).join(', ')}${(activeOffer.applicableSlots?.length > 3 || activeOffer.timeSlots?.length > 3) ? '...' : ''}`
+                        : (activeOffer.scope === 'day' || activeOffer.scopeType === 'day')
+                          ? `Valid on date: ${activeOffer.startDate}`
+                          : 'Applicable to booking dates within range'}
+                  </Text>
+                </View>
+
+                {offerPrice && (
+                  <View style={styles.offerPricingPill}>
+                    <Text style={[styles.offerPriceNow, { color: '#059669' }]}>
+                      ₹{offerPrice}/hr
+                    </Text>
+                    <Text style={[styles.offerPriceOld, { color: C.subtext }]}>
+                      ₹{pricePerHour}/hr
+                    </Text>
+                    <Text style={styles.offerPriceSave}>
+                      Save ₹{offerSavings}
+                    </Text>
+                  </View>
+                )}
+>>>>>>> Stashed changes
               </View>
             ))}
           </View>
@@ -543,11 +652,7 @@ export default function TurfDetailScreen({ route, navigation }) {
               keyExtractor={(_, i) => `modal_${i}`}
               renderItem={({ item }) => (
                 <View style={styles.modalImageContainer}>
-                  <Image
-                    source={{ uri: item }}
-                    style={styles.modalFullImage}
-                    resizeMode="contain"
-                  />
+                  <SafeImage uri={item} style={styles.modalFullImage} resizeMode="contain" />
                 </View>
               )}
             />
@@ -569,7 +674,7 @@ export default function TurfDetailScreen({ route, navigation }) {
                     i === modalIndex && styles.thumbBoxActive,
                   ]}
                 >
-                  <Image source={{ uri: img }} style={styles.thumbImage} resizeMode="cover" />
+                  <SafeImage uri={img} style={styles.thumbImage} />
                 </TouchableOpacity>
               ))}
             </ScrollView>

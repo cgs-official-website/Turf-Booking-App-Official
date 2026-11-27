@@ -19,6 +19,17 @@ import { useModal } from '../context/ModalContext';
 import { ExportMenu } from '../components/ExportMenu';
 import { exportToCSV, exportToExcel, formatVendorRecord } from '../utils/exportUtils';
 
+/** All turf names owned by a partner (a partner can own many turfs). */
+const getTurfNames = (v) => {
+  const names = [];
+  if (Array.isArray(v?.turfs)) v.turfs.forEach((t) => t?.name && names.push(t.name));
+  if (names.length === 0) {
+    const single = v?.turfName || v?.turf?.name;
+    if (single) names.push(single);
+  }
+  return [...new Set(names)];
+};
+
 export const VendorsView = () => {
   const { showAlert, showConfirm } = useModal();
   const [vendors, setVendors] = useState([]);
@@ -116,7 +127,7 @@ export const VendorsView = () => {
           (v.businessName || '').toLowerCase().includes(q) ||
           (v.email || '').toLowerCase().includes(q) ||
           (v.phone || '').toLowerCase().includes(q) ||
-          (v.turfName || v.turf?.name || '').toLowerCase().includes(q) ||
+          getTurfNames(v).some((n) => n.toLowerCase().includes(q)) ||
           (v.uid || v.id || '').toLowerCase().includes(q);
         if (!matchesQuery) return false;
       }
@@ -262,7 +273,7 @@ export const VendorsView = () => {
               <th className="p-3.5">Partner Name</th>
               <th className="p-3.5">Business Entity</th>
               <th className="p-3.5">Contact (Phone/Email)</th>
-              <th className="p-3.5">Linked Turf</th>
+              <th className="p-3.5">Turfs</th>
               <th className="p-3.5">KYC Status</th>
               <th className="p-3.5">Subscription</th>
               <th className="p-3.5 text-right">Actions</th>
@@ -293,7 +304,23 @@ export const VendorsView = () => {
                       </span>
                     )}
                   </td>
-                  <td className="p-3.5 text-slate-700 font-semibold">{v.businessName || 'N/A'}</td>
+                  <td className="p-3.5 text-slate-700 font-semibold">
+                    {(() => {
+                      if (v.businessName) return v.businessName;
+                      const names = getTurfNames(v);
+                      if (names.length === 0) return <span className="text-slate-400 font-medium">N/A</span>;
+                      return (
+                        <div className="space-y-0.5" title={names.join(', ')}>
+                          {names.slice(0, 3).map((n) => (
+                            <p key={n} className="truncate max-w-[200px]">{n}</p>
+                          ))}
+                          {names.length > 3 && (
+                            <p className="text-[10px] text-slate-400 font-medium">+{names.length - 3} more</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="p-3.5 text-slate-600">
                     <p className="flex items-center">
                       <Phone size={11} className="mr-1 text-slate-400" />
@@ -305,17 +332,21 @@ export const VendorsView = () => {
                     </p>
                   </td>
                   <td className="p-3.5 text-emerald-700 font-semibold">
-                    {v.turfName || v.turf?.name || 'No Turf Linked'}
+                    {(() => {
+                      const n = getTurfNames(v).length;
+                      return n === 0
+                        ? <span className="text-slate-400 font-medium">No Turf Linked</span>
+                        : `${n} ${n === 1 ? 'Turf' : 'Turfs'}`;
+                    })()}
                   </td>
                   <td className="p-3.5">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        v.kycStatus === 'approved'
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${v.kycStatus === 'approved'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : v.kycStatus === 'rejected'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}
                     >
                       {v.kycStatus || 'pending'}
                     </span>

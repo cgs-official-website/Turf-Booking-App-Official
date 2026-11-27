@@ -27,6 +27,8 @@ try {
 import useTheme from '../hooks/useTheme';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 import { nearbyTurfsApi } from '../api/nearbyTurfsApi';
+import SafeImage from './SafeImage';
+import { getTurfCardImage } from '../utils/turfImages';
 
 const { width } = Dimensions.get('window');
 
@@ -167,6 +169,7 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
         onPress={() => handleCardPress(item)}
         activeOpacity={0.8}
       >
+<<<<<<< Updated upstream
         <Image
           source={{
             uri:
@@ -176,6 +179,9 @@ export default function NearbyTurfsModal({ visible, onClose, navigation }) {
           style={styles.cardImage}
           resizeMode="cover"
         />
+=======
+        <SafeImage uri={getTurfCardImage(item)} style={styles.cardImage} />
+>>>>>>> Stashed changes
 
         <View style={styles.cardBody}>
           {/* Top Row: Name & Distance */}
