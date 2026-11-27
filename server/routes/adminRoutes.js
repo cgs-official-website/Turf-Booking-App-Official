@@ -67,6 +67,13 @@ router.delete('/tournaments/:id', async (req, res, next) => {
 router.get('/reports', adminController.getAllReports);
 router.patch('/reports/:id', adminController.updateReportStatus);
 
+// Zuna Central Support Desk (Super Admin raises software/technical tickets to Zuna)
+const zunaSupportController = require('../controllers/zunaSupportController');
+router.get('/zuna-support/tickets', zunaSupportController.listTickets);
+router.post('/zuna-support/tickets', zunaSupportController.createTicket);
+router.get('/zuna-support/tickets/:id', zunaSupportController.getTicket);
+router.post('/zuna-support/tickets/:id/messages', zunaSupportController.addMessage);
+
 // Notification Testing & Custom Alerts
 router.post('/notifications/send-test', adminController.sendTestNotification);
 

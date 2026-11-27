@@ -182,6 +182,34 @@ class AdminApiClient {
     });
   }
 
+  // Zuna Central Support Desk (raise software/technical tickets to Zuna)
+  getZunaTickets(params = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    });
+    const q = qs.toString();
+    return this.request(`/admin/zuna-support/tickets${q ? `?${q}` : ''}`);
+  }
+
+  createZunaTicket(data) {
+    return this.request('/admin/zuna-support/tickets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getZunaTicket(ticketId) {
+    return this.request(`/admin/zuna-support/tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  replyZunaTicket(ticketId, text) {
+    return this.request(`/admin/zuna-support/tickets/${encodeURIComponent(ticketId)}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  }
+
   // Subscription Plans Management
   getSubscriptionPlans() {
     return this.request('/subscription/plans');
