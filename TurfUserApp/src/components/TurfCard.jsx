@@ -7,11 +7,11 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import useTheme from '../hooks/useTheme';
 import { useSelector } from 'react-redux';
 import { RatingBadge } from './RatingBadge';
-import { getImageUrl } from '../api/client';
+import { getTurfCardImage } from '../utils/turfImages';
+import SafeImage from './SafeImage';
 import { RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const { width } = Dimensions.get('window');
-const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
 function isValidCoordinate(lat, lng) {
   if (lat == null || lng == null) return false;
@@ -139,10 +139,10 @@ export default function TurfCard({
 
   const turfId = turf.id || turf._id;
   const name = turf.name || 'Turf Arena';
-  const rawImage = turf.logo || turf.images?.[0] || turf.image || turf.photo;
-  const imageUri = rawImage ? getImageUrl(rawImage) : PLACEHOLDER_IMG;
-  const price = turf.pricePerHour || turf.pricing?.baseRate || turf.price || 800;
-  const locationText = turf.location?.city || turf.location?.address || turf.address || 'Local Venue';
+  // Card photo = vendor's single card photo (logo) only; default image otherwise
+  const imageUri = getTurfCardImage(turf);
+  const price = turf.pricePerHour || turf.pricing?.baseRate || turf.price || 0;
+  const locationText = turf.location?.city || turf.location?.address || turf.address || '';
   const rating = turf.rating?.avg ?? turf.ratingAvg ?? (typeof turf.rating === 'number' ? turf.rating : 0);
   const count = turf.rating?.count ?? turf.reviewsCount ?? 0;
   const sports = turf.sportTypes || turf.sports || [];
@@ -186,7 +186,7 @@ export default function TurfCard({
         ]}
       >
         <View style={styles.featuredImageWrap}>
-          <Image source={{ uri: imageUri }} style={styles.featuredImage} resizeMode="cover" />
+          <SafeImage uri={imageUri} style={styles.featuredImage} />
           <View style={styles.imageOverlay} />
 
           {/* Top floating badges */}
@@ -295,7 +295,7 @@ export default function TurfCard({
       ]}
     >
       <View style={styles.verticalImageWrap}>
-        <Image source={{ uri: imageUri }} style={styles.verticalImage} resizeMode="cover" />
+        <SafeImage uri={imageUri} style={styles.verticalImage} />
 
         {hasOffer && (
           <View style={styles.offerBadgeVertical}>

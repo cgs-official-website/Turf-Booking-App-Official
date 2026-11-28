@@ -294,11 +294,10 @@ export const TournamentsView = () => {
               <button
                 key={chip.id}
                 onClick={() => setStatusFilter(chip.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent-ring)] ${
-                  isActive
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent-ring)] ${isActive
                     ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary-text)] border border-[var(--theme-primary-border)] shadow-xs'
                     : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
+                  }`}
               >
                 {chip.isLive && (
                   <span className="relative flex h-2 w-2">
@@ -308,11 +307,10 @@ export const TournamentsView = () => {
                 )}
                 <span>{chip.label}</span>
                 <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
-                    isActive
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${isActive
                       ? 'bg-emerald-600 text-white'
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}
+                    }`}
                 >
                   {chip.count}
                 </span>
@@ -371,17 +369,21 @@ export const TournamentsView = () => {
           /* Live Cards Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {liveTournaments.map((tournament) => {
+              // REAL data only: a match is shown only if the scorer has actually started it (status === 'live')
               const liveFixture = (tournament.fixtures || []).find(
                 (f) => f.status === 'live' || f.matchData?.status === 'live'
-              ) || (tournament.fixtures && tournament.fixtures[0]);
+              ) || null;
 
-              const matchData = liveFixture?.matchData || tournament.currentLiveMatch || {};
-              const sc = matchData.scorecard || {};
-              const teamAName = liveFixture?.teamA?.name || matchData.teams?.teamA?.name || 'Team Alpha';
-              const teamBName = liveFixture?.teamB?.name || matchData.teams?.teamB?.name || 'Team Beta';
+              const matchData = liveFixture?.matchData || tournament.currentLiveMatch || null;
+              const sc = matchData?.scorecard || {};
+              const teamAName = liveFixture?.teamA?.name || '—';
+              const teamBName = liveFixture?.teamB?.name || '—';
+              const scoreA = matchData?.scoreA || null;
+              const scoreB = matchData?.scoreB || null;
+              const fmtScore = (x, empty) =>
+                x ? (x.wickets !== undefined && x.wickets !== null && isCricket ? `${x.runs} / ${x.wickets}` : `${x.runs}`) : empty;
 
               const isCricket = (tournament.sport || '').toLowerCase().includes('cricket');
-              const isFootball = (tournament.sport || '').toLowerCase().includes('football');
 
               return (
                 <div
@@ -413,7 +415,7 @@ export const TournamentsView = () => {
                     <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span className="truncate">
-                        {tournament.turf?.name || tournament.venueName || 'Turf Stadium'} • {tournament.turf?.city || tournament.city || 'Chennai'}
+                        {tournament.turf?.name || tournament.venueName || '—'} • {tournament.turf?.city || tournament.city || '—'}
                       </span>
                     </div>
 
@@ -425,7 +427,7 @@ export const TournamentsView = () => {
                           Match in Progress
                         </span>
                         <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                          {isFootball ? (sc.football?.half || 'In Play') : `Inning ${sc.currentInning || 1}`}
+                          {isCricket && sc.currentInning ? `Inning ${sc.currentInning}` : 'In Play'}
                         </span>
                       </div>
 
@@ -437,11 +439,7 @@ export const TournamentsView = () => {
                             {teamAName}
                           </span>
                           <span className="text-sm font-black font-mono text-slate-900 dark:text-white">
-                            {isCricket
-                              ? `${sc.runs || 0} / ${sc.wickets || 0}`
-                              : isFootball
-                              ? (sc.football?.scoreA ?? sc.runs ?? 0)
-                              : `${sc.runs || 0}`}
+                            {fmtScore(scoreA, isCricket ? 'Yet to bat' : '0')}
                           </span>
                         </div>
 
@@ -451,11 +449,7 @@ export const TournamentsView = () => {
                             {teamBName}
                           </span>
                           <span className="text-sm font-black font-mono text-slate-600 dark:text-slate-300">
-                            {isFootball
-                              ? (sc.football?.scoreB ?? sc.wickets ?? 0)
-                              : isCricket && sc.innings && sc.innings[1]
-                              ? `${sc.innings[1].runs}/${sc.innings[1].wickets}`
-                              : 'Yet to bat'}
+                            {fmtScore(scoreB, isCricket ? 'Yet to bat' : '0')}
                           </span>
                         </div>
                       </div>
@@ -464,32 +458,20 @@ export const TournamentsView = () => {
                       {isCricket && (
                         <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                           <span>
-                            Overs: <strong className="text-slate-900 dark:text-white font-mono">{sc.overs || 0}</strong>
+                            Overs: <strong className="text-slate-900 dark:text-white font-mono">{sc.overs ?? '—'}</strong>
                           </span>
                           {sc.striker && (
                             <span className="truncate max-w-[180px] text-emerald-600 dark:text-emerald-400 font-medium">
-                              ★ {sc.striker.split('(')[0]}
+                              ★ {String(sc.striker).split('(')[0]}
                             </span>
                           )}
                         </div>
                       )}
 
-                      {/* Football Minute & Scorers */}
-                      {isFootball && sc.football?.minute && (
-                        <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                          <span>
-                            Match Minute: <strong className="text-slate-900 dark:text-white font-mono">{sc.football.minute}'</strong>
-                          </span>
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                            {sc.football.scorers?.[0] || 'Active Play'}
-                          </span>
-                        </div>
-                      )}
-
                       {/* Toss Result info */}
-                      {matchData.toss?.wonBy && (
+                      {matchData?.toss?.wonBy && (
                         <div className="text-[10px] text-slate-400 italic">
-                          Toss: {matchData.toss.wonBy} ({matchData.toss.decision || 'batted first'})
+                          Toss: {matchData.toss.wonBy}{matchData.toss.decision ? ` (elected to ${matchData.toss.decision})` : ''}
                         </div>
                       )}
                     </div>
@@ -580,14 +562,14 @@ export const TournamentsView = () => {
                   </span>
                   <div className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <Building2 className="w-4 h-4 text-[var(--theme-primary)] shrink-0" />
-                    <span>{participantDetail.turf?.name || participantDetail.venueName || 'Turf Arena'}</span>
+                    <span>{participantDetail.turf?.name || participantDetail.venueName || '—'}</span>
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 flex items-start gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                     <span>
                       {typeof participantDetail.turf?.location === 'object'
-                        ? participantDetail.turf.location?.address || participantDetail.turf.city || 'Chennai'
-                        : participantDetail.turf?.location || participantDetail.venueLocation || participantDetail.turf?.city || 'Chennai'}
+                        ? participantDetail.turf.location?.address || participantDetail.turf.city || '—'
+                        : participantDetail.turf?.location || participantDetail.venueLocation || participantDetail.turf?.city || '—'}
                     </span>
                   </div>
                 </div>
@@ -599,7 +581,7 @@ export const TournamentsView = () => {
                   </span>
                   <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <User className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{participantDetail.vendor?.name || participantDetail.vendorName || 'Partner Host'}</span>
+                    <span>{participantDetail.vendor?.name || participantDetail.vendorName || '—'}</span>
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 space-y-0.5">
                     {participantDetail.vendor?.phone && (
@@ -633,13 +615,12 @@ export const TournamentsView = () => {
                     <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                       {participantDetail.sport}
                     </span>
-                    <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded-md ${
-                      participantDetail.status === 'live'
+                    <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded-md ${participantDetail.status === 'live'
                         ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                         : participantDetail.status === 'completed'
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                        : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                    }`}>
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                      }`}>
                       {participantDetail.status}
                     </span>
                     <span className="text-[11px] font-semibold text-slate-500">
@@ -917,7 +898,7 @@ export const TournamentsView = () => {
                   <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      {drawerTournament.turf?.name || drawerTournament.venueName || 'Turf Venue'}
+                      {drawerTournament.turf?.name || drawerTournament.venueName || '—'}
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">

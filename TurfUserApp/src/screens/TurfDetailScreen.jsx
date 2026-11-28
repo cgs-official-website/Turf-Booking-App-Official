@@ -14,10 +14,11 @@ import useTheme from '../hooks/useTheme';
 import { RatingBadge } from '../components/RatingBadge';
 import { getSportIconComponent } from '../components/SportChip';
 import { getImageUrl } from '../api/client';
+import { getTurfGalleryImages } from '../utils/turfImages';
+import SafeImage from '../components/SafeImage';
 import { SPACING, RADIUS, FONT, SHADOW } from '../utils/theme';
 
 const { width, height } = Dimensions.get('window');
-const PLACEHOLDER_IMG = 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
 
 const AMENITY_CONFIG = {
   'FIFA Approved Turf': { icon: 'award', color: '#0F766E', bg: 'rgba(15, 118, 110, 0.12)' },
@@ -200,14 +201,14 @@ export default function TurfDetailScreen({ route, navigation }) {
   };
 
   const isWishlisted = wishlist.some((t) => (t._id || t.id) === (turf._id || turf.id));
-  const rawImages = (Array.isArray(turf.images) && turf.images.length > 0) ? turf.images : (turf.image ? [turf.image] : [PLACEHOLDER_IMG]);
-  const images = rawImages.map(getImageUrl);
+  // Vendor's gallery photos (swipeable). Default image when none uploaded.
+  const images = getTurfGalleryImages(turf);
   const lat = turf.location?.lat || turf.location?.latitude || null;
   const lng = turf.location?.lng || turf.location?.longitude || null;
-  const city = turf.city || turf.location?.city || 'Chennai';
-  const address = turf.address || turf.location?.address || `${city}, Tamil Nadu`;
-  const sports = turf.sportTypes || turf.sports || ['Football', 'Cricket'];
-  const amenities = turf.amenities || ['FIFA Approved Turf', 'Floodlights', 'Parking', 'Mineral Water'];
+  const city = turf.city || turf.location?.city || '';
+  const address = turf.address || turf.location?.address || city;
+  const sports = Array.isArray(turf.sportTypes) ? turf.sportTypes : (Array.isArray(turf.sports) ? turf.sports : []);
+  const amenities = Array.isArray(turf.amenities) ? turf.amenities : [];
   const pricePerHour = Number(turf.pricePerHour ?? turf.price ?? turf.pricing?.baseRate ?? 500);
 
   const rawActiveOffer = turf?.activeOffer || (offers.length > 0 ? offers[0] : null);
@@ -281,7 +282,7 @@ export default function TurfDetailScreen({ route, navigation }) {
                   onPress={() => openFullscreenGallery(index)}
                   style={styles.heroImageTouchable}
                 >
-                  <Image source={{ uri: item }} style={styles.heroImage} resizeMode="cover" />
+                  <SafeImage uri={item} style={styles.heroImage} />
                 </TouchableOpacity>
               )}
             />
@@ -594,13 +595,13 @@ export default function TurfDetailScreen({ route, navigation }) {
                   <Text style={[styles.offerScopeText, { color: dark ? '#34D399' : '#065F46' }]}>
                     {(activeOffer.scope === 'weekdays' || activeOffer.scopeType === 'weekdays')
                       ? `Valid on: ${(Array.isArray(activeOffer.weekdays) ? activeOffer.weekdays : (activeOffer.selectedDays || []))
-                          .map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d] || d).join(', ')}`
+                        .map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d] || d).join(', ')}`
                       : (activeOffer.scope === 'slot' || activeOffer.scopeType === 'specific_slot')
-                      ? `Valid for slots: ${(Array.isArray(activeOffer.applicableSlots) ? activeOffer.applicableSlots : (activeOffer.timeSlots || []))
+                        ? `Valid for slots: ${(Array.isArray(activeOffer.applicableSlots) ? activeOffer.applicableSlots : (activeOffer.timeSlots || []))
                           .slice(0, 3).join(', ')}${(activeOffer.applicableSlots?.length > 3 || activeOffer.timeSlots?.length > 3) ? '...' : ''}`
-                      : (activeOffer.scope === 'day' || activeOffer.scopeType === 'day')
-                      ? `Valid on date: ${activeOffer.startDate}`
-                      : 'Applicable to booking dates within range'}
+                        : (activeOffer.scope === 'day' || activeOffer.scopeType === 'day')
+                          ? `Valid on date: ${activeOffer.startDate}`
+                          : 'Applicable to booking dates within range'}
                   </Text>
                 </View>
 
@@ -897,11 +898,7 @@ export default function TurfDetailScreen({ route, navigation }) {
               keyExtractor={(_, i) => `modal_${i}`}
               renderItem={({ item }) => (
                 <View style={styles.modalImageContainer}>
-                  <Image
-                    source={{ uri: item }}
-                    style={styles.modalFullImage}
-                    resizeMode="contain"
-                  />
+                  <SafeImage uri={item} style={styles.modalFullImage} resizeMode="contain" />
                 </View>
               )}
             />
@@ -923,7 +920,7 @@ export default function TurfDetailScreen({ route, navigation }) {
                     i === modalIndex && styles.thumbBoxActive,
                   ]}
                 >
-                  <Image source={{ uri: img }} style={styles.thumbImage} resizeMode="cover" />
+                  <SafeImage uri={img} style={styles.thumbImage} />
                 </TouchableOpacity>
               ))}
             </ScrollView>

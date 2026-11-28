@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api/client';
 import {
   Search, MapPin, Phone, Mail, Loader2, RotateCw,
-  Edit2, Trash2, X, Check, User, Shield, AlertCircle
+  Edit2, Trash2, X, Check, User, Shield, AlertCircle,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { dedupe } from '../utils/dedupe';
 
@@ -11,7 +12,9 @@ export const UsersView = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+
   // Edit Player Modal State
   const [editingUser, setEditingUser] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -88,7 +91,7 @@ export const UsersView = () => {
 
       await api.updateUser(uid, payload);
       setSaveMessage({ type: 'success', text: 'Player updated successfully!' });
-      
+
       // Update local state immediately
       setUsers((prev) =>
         prev.map((item) => ((item.uid || item.id) === uid ? { ...item, ...payload } : item))
@@ -130,6 +133,21 @@ export const UsersView = () => {
     );
   });
 
+  // Pagination: search runs on ALL players first, then results are split into pages of 10
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pagedUsers = filteredUsers.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageNumbers = useMemo(() => {
+    const out = [];
+    const from = Math.max(1, Math.min(safePage - 2, totalPages - 4));
+    const to = Math.min(totalPages, from + 4);
+    for (let i = from; i <= to; i += 1) out.push(i);
+    return out;
+  }, [safePage, totalPages]);
+
+  useEffect(() => { setPage(1); }, [search]);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -162,8 +180,13 @@ export const UsersView = () => {
               placeholder="Search by name, email, phone, city..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 w-64 transition shadow-sm"
+              className="bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 w-64 transition shadow-sm"
             />
+            {search && (
+              <button onClick={() => setSearch('')} title="Clear search" className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600">
+                <X size={14} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -198,7 +221,7 @@ export const UsersView = () => {
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((u) => {
+              pagedUsers.map((u) => {
                 const uid = u.uid || u.id;
                 const locText = getLocationText(u);
                 const isLocationSet = locText !== 'Location unset';
@@ -248,11 +271,10 @@ export const UsersView = () => {
                       </span>
                     </td>
                     <td className="p-3.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
-                        u.role === 'admin'
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase ${u.role === 'admin'
                           ? 'bg-purple-100 text-purple-700 border-purple-200'
                           : 'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}>
+                        }`}>
                         {u.role || 'user'}
                       </span>
                     </td>
@@ -284,6 +306,35 @@ export const UsersView = () => {
             )}
           </tbody>
         </table>
+
+        {/* Pagination footer */}
+        {!loading && filteredUsers.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-500">
+            <span>
+              Showing <strong className="text-slate-900">{pageStart + 1}</strong> to{' '}
+              <strong className="text-slate-900">{Math.min(pageStart + PAGE_SIZE, filteredUsers.length)}</strong> of{' '}
+              <strong className="text-slate-900">{filteredUsers.length}</strong> players
+              {search && <span className="text-slate-400"> (filtered from {users.length})</span>}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage(1)} disabled={safePage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronsLeft size={13} /></button>
+                <button onClick={() => setPage(safePage - 1)} disabled={safePage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft size={13} /></button>
+                {pageNumbers.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold border transition ${n === safePage ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button onClick={() => setPage(safePage + 1)} disabled={safePage === totalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight size={13} /></button>
+                <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronsRight size={13} /></button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit Player Modal */}
@@ -311,11 +362,10 @@ export const UsersView = () => {
             <form onSubmit={handleSaveEdit} className="p-5 space-y-3.5">
               {saveMessage && (
                 <div
-                  className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
-                    saveMessage.type === 'success'
+                  className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${saveMessage.type === 'success'
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : 'bg-red-50 text-red-700 border border-red-200'
-                  }`}
+                    }`}
                 >
                   {saveMessage.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}
                   <span>{saveMessage.text}</span>

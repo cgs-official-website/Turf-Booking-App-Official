@@ -49,7 +49,9 @@ function formatTurf(t) {
   const sports = Array.isArray(t.sports) ? t.sports : (Array.isArray(t.sportTypes) ? t.sportTypes : []);
   const reviewsCount = typeof t.reviewsCount === 'number' ? t.reviewsCount : (Number(t.rating?.count) || 0);
   const ratingAvg = reviewsCount === 0 ? 0 : (typeof t.ratingAvg === 'number' ? t.ratingAvg : (Number(t.rating?.avg) || 0));
-  const images = Array.isArray(t.images) ? t.images : [];
+  // Only keep real, loadable image paths (drop empty strings and device-local file://, content:// paths)
+  const usableImg = (v) => typeof v === 'string' && v.trim() !== '' && !/^(file:|content:)/i.test(v.trim());
+  const images = (Array.isArray(t.images) ? t.images : []).filter(usableImg);
   const lat = t.latitude ?? t.lat ?? (t.location?.geo?.lat || t.location?.lat || null);
   const lng = t.longitude ?? t.lng ?? (t.location?.geo?.lng || t.location?.lng || null);
   const cfg = (t.slotConfig && typeof t.slotConfig === 'object') ? t.slotConfig : {};
@@ -170,7 +172,7 @@ function formatTurf(t) {
     status: t.status,
     images,
     image: images[0] || '',
-    logo: t.logo || '',
+    logo: usableImg(t.logo) ? t.logo : '',
     pinCode: pincode,
     openingTime: to12h(cfg.openTime || '06:00'),
     closingTime: to12h(cfg.closeTime || '23:00'),

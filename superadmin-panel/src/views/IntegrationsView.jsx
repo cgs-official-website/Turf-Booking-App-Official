@@ -508,14 +508,14 @@ export const IntegrationsView = () => {
 
             <div className="flex items-center gap-3 self-end sm:self-auto">
               <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <span>{formState.msg91?.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                <span className={formState.msg91?.isEnabled ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>{formState.msg91?.isEnabled ? 'Enabled' : 'Disabled'}</span>
                 <input
                   type="checkbox"
                   checked={Boolean(formState.msg91?.isEnabled)}
                   onChange={() => handleToggleEnabled('msg91')}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
+                <div className="relative w-11 h-6 bg-slate-300 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/40 rounded-full transition-colors dark:bg-slate-600 peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:shadow after:transition-transform peer-checked:after:translate-x-5"></div>
               </label>
             </div>
           </div>
@@ -523,11 +523,10 @@ export const IntegrationsView = () => {
           {/* Test connection alert message */}
           {testResults.msg91 && (
             <div
-              className={`mt-4 p-3.5 rounded-2xl flex items-center gap-3 text-xs ${
-                testResults.msg91.success
+              className={`mt-4 p-3.5 rounded-2xl flex items-center gap-3 text-xs ${testResults.msg91.success
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
                   : 'bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-              }`}
+                }`}
             >
               {testResults.msg91.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <span className="font-medium">{testResults.msg91.message}</span>
@@ -708,25 +707,24 @@ export const IntegrationsView = () => {
 
             <div className="flex items-center gap-3 self-end sm:self-auto">
               <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <span>{formState.cloudinary?.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                <span className={formState.cloudinary?.isEnabled ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>{formState.cloudinary?.isEnabled ? 'Enabled' : 'Disabled'}</span>
                 <input
                   type="checkbox"
                   checked={Boolean(formState.cloudinary?.isEnabled)}
                   onChange={() => handleToggleEnabled('cloudinary')}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
+                <div className="relative w-11 h-6 bg-slate-300 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/40 rounded-full transition-colors dark:bg-slate-600 peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:shadow after:transition-transform peer-checked:after:translate-x-5"></div>
               </label>
             </div>
           </div>
 
           {testResults.cloudinary && (
             <div
-              className={`mt-4 p-3.5 rounded-2xl flex items-center gap-3 text-xs ${
-                testResults.cloudinary.success
+              className={`mt-4 p-3.5 rounded-2xl flex items-center gap-3 text-xs ${testResults.cloudinary.success
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
                   : 'bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-              }`}
+                }`}
             >
               {testResults.cloudinary.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <span className="font-medium">{testResults.cloudinary.message}</span>
@@ -867,47 +865,44 @@ export const IntegrationsView = () => {
                 <button
                   type="button"
                   onClick={() => handleInputChange('razorpay', 'mode', 'test')}
-                  className={`px-3 py-1 rounded-lg transition ${
-                    formState.razorpay?.mode === 'test'
+                  className={`px-3 py-1 rounded-lg transition ${formState.razorpay?.mode === 'test'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
                       : 'text-slate-500'
-                  }`}
+                    }`}
                 >
                   Test Mode
                 </button>
                 <button
                   type="button"
                   onClick={() => handleInputChange('razorpay', 'mode', 'live')}
-                  className={`px-3 py-1 rounded-lg transition ${
-                    formState.razorpay?.mode === 'live'
+                  className={`px-3 py-1 rounded-lg transition ${formState.razorpay?.mode === 'live'
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'text-slate-500'
-                  }`}
+                    }`}
                 >
                   Live Mode
                 </button>
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <span>{formState.razorpay?.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                <span className={formState.razorpay?.isEnabled ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>{formState.razorpay?.isEnabled ? 'Enabled' : 'Disabled'}</span>
                 <input
                   type="checkbox"
                   checked={Boolean(formState.razorpay?.isEnabled)}
                   onChange={() => handleToggleEnabled('razorpay')}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-600"></div>
+                <div className="relative w-11 h-6 bg-slate-300 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/40 rounded-full transition-colors dark:bg-slate-600 peer-checked:bg-emerald-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:shadow after:transition-transform peer-checked:after:translate-x-5"></div>
               </label>
             </div>
           </div>
 
           {testResults.razorpay && (
             <div
-              className={`mt-4 p-3.5 rounded-2xl flex items-center gap-3 text-xs ${
-                testResults.razorpay.success
+              className={`mt-4 p-3.5 rounded-2xl flex items-center gap-3 text-xs ${testResults.razorpay.success
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
                   : 'bg-rose-50 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
-              }`}
+                }`}
             >
               {testResults.razorpay.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <span className="font-medium">{testResults.razorpay.message}</span>

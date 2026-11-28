@@ -5,6 +5,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getDefaultTurfImageUri } from '../constants/defaultImages';
 
 export const RAILWAY_PROD_URL = 'https://turf-booking-app-official-production.up.railway.app/api/v1';
 export const LOCAL_URL = 'http://127.0.0.1:5000/api/v1';
@@ -35,7 +36,7 @@ export const getOrigin = () => {
 };
 
 export const getImageUrl = (path) => {
-  if (!path) return 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800';
+  if (!path) return getDefaultTurfImageUri();
   if (/^(https?:|file:|content:|data:)/i.test(path)) return path;
   const cleanPath = String(path).replace(/^\/+/, '');
   return `${getOrigin()}/${cleanPath}`;
